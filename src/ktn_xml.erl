@@ -16,7 +16,8 @@ parse(_File) ->
     io:format(user, "~p~n", [Prolog]),
     io:format(user, "~p~n", [Tags]),
     io:format(user, "------------------------------------~n", []),
-    ok.
+    Parsed = Tags,
+    {ok, Parsed}.
 
 parse_tags(Binary) ->
     parse_tags(Binary, []).
