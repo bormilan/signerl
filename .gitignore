@@ -1,0 +1,46 @@
+# BEAM files (compiled Erlang modules)
+*.beam
+
+# Erlang crash dumps
+erl_crash.dump
+
+# Common build directories
+.eunit/
+_*.eunit/
+rebar3.crashdump
+_build/
+deps/
+logs/
+ebin/
+
+# rebar3 specific
+.rebar/
+.rebar3/
+rebar.lock
+
+# Erlang.mk specific
+.config.mk
+start_clean.rel
+*.boot
+*.rel
+*.script
+*.tar.gz
+
+# Dialyzer PLT files
+*.plt
+*.plt.*
+
+# IDE/editor stuff
+*.swp
+*~
+*.bak
+.DS_Store
+.vscode/
+.idea/
+
+# Mac system files
+.DS_Store
+
+# Optional: Elixir build artifacts (if you mix Erlang/Elixir)
+_elixir_ls/
+
