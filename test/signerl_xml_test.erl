@@ -1,4 +1,4 @@
--module(test).
+-module(signerl_xml_test).
 
 -include_lib("eunit/include/eunit.hrl").
 
@@ -30,6 +30,7 @@ export_test() ->
     Prolog = ["<?xml version=\"1.0\" encoding=\"UTF-8\"?>"],
     Binary = signerl_xml:export(Prolog, Root),
 
+    % TODO: make it to a temp file or delete it after
     ok = signerl_xml:to_file(PathTo, Binary),
     ?assertEqual(
       Root,
