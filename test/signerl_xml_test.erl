@@ -41,6 +41,6 @@ export_test() ->
 
 new_test_element() ->
     NewTag = book,
-    NewAttrs = [{id, "3"}],
+    NewAttrs = [{id, "4"}],
     NewContent = [{title, [], ["My new book"]}],
     {NewTag, NewAttrs, NewContent}.

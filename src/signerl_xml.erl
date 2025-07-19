@@ -20,4 +20,4 @@ to_file(FileName, XmlBinary) ->
     file:write_file(FileName, XmlBinary).
 
 add_new_element(NewElement, {Tag, Attrs, Content}) ->
-    {Tag, Attrs, [NewElement | Content]}.
+    {Tag, Attrs, Content ++ [NewElement]}.
