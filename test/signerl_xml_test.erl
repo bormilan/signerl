@@ -3,14 +3,14 @@
 -include_lib("eunit/include/eunit.hrl").
 
 parse_test() ->
-    Path = "examples/books.xml",
+    Path = "test/examples/books.xml",
     {library,
      [{id, "112233"}],
      [{book, _, _}, {book, _, _}, {book, _, _}]} = signerl_xml:parse_file(Path).
 
 add_new_test() ->
-    Path = "examples/books.xml",
-    ExpectedPath = "examples/books_with_new.xml",
+    Path = "test/examples/books.xml",
+    ExpectedPath = "test/examples/books_with_new.xml",
 
     Root = signerl_xml:parse_file(Path),
     Expected = signerl_xml:parse_file(ExpectedPath),
@@ -24,8 +24,8 @@ add_new_test() ->
       ).
 
 export_test() ->
-    Path = "examples/books.xml",
-    PathTo = "examples/books_export_test.xml",
+    Path = "test/examples/books.xml",
+    PathTo = "test/examples/books_export_test.xml",
     Root = signerl_xml:parse_file(Path),
     Prolog = ["<?xml version=\"1.0\" encoding=\"UTF-8\"?>"],
     Binary = signerl_xml:export(Prolog, Root),
