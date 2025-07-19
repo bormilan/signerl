@@ -41,4 +41,4 @@ jobs:
                 -rebar3-${{steps.setup-beam.outputs.rebar3-version}}\
                 -hash-${{hashFiles('rebar.lock')}}"
       - name: Run test
-        run: rebar3 eunit
+        run: rebar3 test

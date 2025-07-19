@@ -4,9 +4,9 @@
 
 parse_test() ->
     Path = "test/examples/books.xml",
-    {library,
-     [{id, "112233"}],
-     [{book, _, _}, {book, _, _}, {book, _, _}]} = signerl_xml:parse_file(Path).
+    {library, [{id, "112233"}], [{book, _, _}, {book, _, _}, {book, _, _}]} = signerl_xml:parse_file(
+        Path
+    ).
 
 add_new_test() ->
     Path = "test/examples/books.xml",
@@ -19,9 +19,9 @@ add_new_test() ->
         signerl_xml:add_new_element(new_test_element(), Root),
 
     ?assertEqual(
-       Expected,
-       New
-      ).
+        Expected,
+        New
+    ).
 
 export_test() ->
     Path = "test/examples/books.xml",
@@ -33,9 +33,9 @@ export_test() ->
     % TODO: make it to a temp file or delete it after
     ok = signerl_xml:to_file(PathTo, Binary),
     ?assertEqual(
-      Root,
-      signerl_xml:parse_file(PathTo)
-     ).
+        Root,
+        signerl_xml:parse_file(PathTo)
+    ).
 
 %% Utils
 
