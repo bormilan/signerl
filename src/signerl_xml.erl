@@ -8,6 +8,7 @@
 ]).
 
 -type simplified_xml() :: {atom(), [{atom(), string() | number()}], [simplified_xml()]}.
+-export_type([simplified_xml/0]).
 
 -spec parse_file(FileName) -> SimplifiedXml when
     FileName :: string(),
