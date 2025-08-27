@@ -54,8 +54,13 @@ sign_success(_Config) ->
     % TODO: fix file read
     Path = "/Users/milanbor/projects/signerl/test/examples/books.xml",
     Message = signerl_xml:parse_file(Path),
-    SignedMessage = signerl:sign(Message),
+    SignedMessage = signerl:add_signature_element(Message),
     ?assertEqual(
         true,
         signerl:validate(SignedMessage)
-    ).
+    ),
+
+    Prolog = ["<?xml version=\"1.0\" encoding=\"UTF-8\"?>"],
+    SignableMessage = signerl_xml:export(Prolog, Message),
+    Digest = signerl:sign(SignableMessage),
+    true = signerl:verify(SignableMessage, Digest).

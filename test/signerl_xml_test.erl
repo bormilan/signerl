@@ -4,7 +4,11 @@
 
 parse_test() ->
     Path = "test/examples/books.xml",
-    {library, [{id, "112233"}], [{book, _, _}, {book, _, _}, {book, _, _}]} = signerl_xml:parse_file(
+    {library, [{id, "112233"}], [
+        {book, _, _},
+        {book, _, _},
+        {book, _, _}
+    ]} = signerl_xml:parse_file(
         Path
     ).
 
