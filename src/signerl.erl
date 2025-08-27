@@ -21,14 +21,13 @@ validate({_, _, Content}) ->
     lists:member({'ds:Signature', [], []}, Content).
 
 sign(Message) ->
-    % TODO: need to convert the message to binary
-    {ok, KeyRaw} = file:read_file("/Users/milanbor/projects/signerl/key.pem"),
+    {ok, KeyRaw} = file:read_file(signerl_utils:file_path("key.pem")),
     [KeyDer] = public_key:pem_decode(KeyRaw),
     Key = public_key:pem_entry_decode(KeyDer),
     public_key:sign(Message, sha256, Key).
 
 verify(Message, Digest) ->
-    {ok, KeyRaw} = file:read_file("/Users/milanbor/projects/signerl/key.pem"),
+    {ok, KeyRaw} = file:read_file(signerl_utils:file_path("key.pem")),
     [KeyDer] = public_key:pem_decode(KeyRaw),
     Key = public_key:pem_entry_decode(KeyDer),
     public_key:verify(Message, sha256, Digest, Key).
