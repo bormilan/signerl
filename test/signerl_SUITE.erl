@@ -81,8 +81,8 @@ sign(_Config) ->
     [KeyDer] = public_key:pem_decode(KeyRaw),
     Key = public_key:pem_entry_decode(KeyDer),
 
-    Path = "/Users/milanbor/projects/signerl/test/examples/books.xml",
-    Message = signerl_xml:parse_file(Path),
+    Path = "test/examples/books.xml",
+    {ok, RawMessage} = file:read_file(signerl_utils:file_path(Path)),
 
-    Digest = signerl:sign(Message, sha256, Key),
-    ?assertEqual(true, signerl:verify(Message, sha256, Digest, Key)).
+    Digest = signerl:sign(RawMessage, sha256, Key),
+    ?assertEqual(true, signerl:verify(RawMessage, sha256, Digest, Key)).

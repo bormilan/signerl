@@ -2,6 +2,7 @@
 
 -export([
     parse_file/1,
+    parse_binary/1,
     add_new_element/2,
     export/2,
     to_file/2
@@ -15,7 +16,21 @@
     SimplifiedXml :: simplified_xml().
 parse_file(FileName) ->
     {Element, _} = xmerl_scan:file(FileName, [{space, normalize}]),
-    [Clean] = xmerl_lib:remove_whitespace([Element]),
+    simplifie_xml_element(Element).
+
+-spec parse_binary(Message) -> SimplifiedXml when
+    Message :: binary(),
+    SimplifiedXml :: simplified_xml().
+parse_binary(Message) ->
+    {Element, _} = xmerl_scan:string(binary_to_list(Message)),
+    simplifie_xml_element(Element).
+
+% private
+-spec simplifie_xml_element(XmlElement) -> SimplifiedXml when
+    XmlElement :: term(),
+    SimplifiedXml :: simplified_xml().
+simplifie_xml_element(XmlElement) ->
+    [Clean] = xmerl_lib:remove_whitespace([XmlElement]),
     xmerl_lib:simplify_element(Clean).
 
 -spec export(Prolog, XmlTerm) -> Result when
