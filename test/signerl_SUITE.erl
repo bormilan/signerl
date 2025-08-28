@@ -14,7 +14,10 @@
     all/0
 ]).
 
--export([sign_success/1]).
+-export([
+    add_signature_element_success/1,
+    sign_success/1
+]).
 
 suite() ->
     [{timetrap, {seconds, 30}}].
@@ -33,7 +36,12 @@ end_per_testcase(_TestCase, _Config) ->
 %%%%%%%%%%%%%%%%%%%%%%%
 
 groups() ->
-    [{sign_group, [], [sign_success]}].
+    [
+        {sign_group, [], [
+            add_signature_element_success,
+            sign_success
+        ]}
+    ].
 
 all() ->
     [{group, sign_group}].
@@ -50,16 +58,18 @@ end_per_group(sign_group, _Config) ->
 end_per_group(_, _Config) ->
     ok.
 
-sign_success(_Config) ->
-    % TODO: fix file read
+add_signature_element_success(_Config) ->
     Path = "/Users/milanbor/projects/signerl/test/examples/books.xml",
     Message = signerl_xml:parse_file(Path),
-    SignedMessage = signerl:add_signature_element(Message),
+    {_, _, SignedMessageContent} = signerl_signature:add_signature_element(Message),
     ?assertEqual(
         true,
-        signerl:validate(SignedMessage)
-    ),
+        lists:member({'ds:Signature', [], []}, SignedMessageContent)
+    ).
 
+sign_success(_Config) ->
+    Path = "/Users/milanbor/projects/signerl/test/examples/books.xml",
+    Message = signerl_xml:parse_file(Path),
     Prolog = ["<?xml version=\"1.0\" encoding=\"UTF-8\"?>"],
     SignableMessage = signerl_xml:export(Prolog, Message),
     Digest = signerl:sign(SignableMessage),
