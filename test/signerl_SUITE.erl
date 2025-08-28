@@ -15,8 +15,9 @@
 ]).
 
 -export([
-    add_signature_element_success/1,
-    sign_success/1
+    add_signature_element/1,
+    sign/1,
+    sign_from_file/1
 ]).
 
 suite() ->
@@ -38,8 +39,9 @@ end_per_testcase(_TestCase, _Config) ->
 groups() ->
     [
         {sign_group, [], [
-            add_signature_element_success,
-            sign_success
+            add_signature_element,
+            sign,
+            sign_from_file
         ]}
     ].
 
@@ -58,8 +60,8 @@ end_per_group(sign_group, _Config) ->
 end_per_group(_, _Config) ->
     ok.
 
-add_signature_element_success(_Config) ->
-    Path = "/Users/milanbor/projects/signerl/test/examples/books.xml",
+add_signature_element(_Config) ->
+    Path = "test/examples/books.xml",
     Message = signerl_xml:parse_file(Path),
     {_, _, SignedMessageContent} = signerl_signature:add_signature_element(Message),
     ?assertEqual(
@@ -67,10 +69,20 @@ add_signature_element_success(_Config) ->
         lists:member({'ds:Signature', [], []}, SignedMessageContent)
     ).
 
-sign_success(_Config) ->
+sign_from_file(_) ->
+    KeyPath = signerl_utils:file_path("priv/key.pem"),
+    MessagePath = signerl_utils:file_path("test/examples/books.xml"),
+
+    Digest = signerl:sign(MessagePath, sha256, KeyPath),
+    ?assertEqual(true, signerl:verify(MessagePath, sha256, Digest, KeyPath)).
+
+sign(_Config) ->
+    {ok, KeyRaw} = file:read_file(signerl_utils:file_path("priv/key.pem")),
+    [KeyDer] = public_key:pem_decode(KeyRaw),
+    Key = public_key:pem_entry_decode(KeyDer),
+
     Path = "/Users/milanbor/projects/signerl/test/examples/books.xml",
     Message = signerl_xml:parse_file(Path),
-    Prolog = ["<?xml version=\"1.0\" encoding=\"UTF-8\"?>"],
-    SignableMessage = signerl_xml:export(Prolog, Message),
-    Digest = signerl:sign(SignableMessage),
-    true = signerl:verify(SignableMessage, Digest).
+
+    Digest = signerl:sign(Message, sha256, Key),
+    ?assertEqual(true, signerl:verify(Message, sha256, Digest, Key)).
