@@ -24,15 +24,40 @@
 ]).
 
 path(RelPath) ->
-    case code:priv_dir(signerl) of
-        {error, _} ->
-            case file:get_cwd() of
-                {ok, Cwd} -> filename:join([Cwd, "priv", "certs", RelPath]);
-                _ -> "priv/certs/" ++ RelPath
-            end;
-        PrivDir ->
-            filename:join([PrivDir, "certs", RelPath])
+    Candidates = [
+        cwd_path(RelPath),
+        priv_dir_path(RelPath),
+        lib_dir_path(RelPath)
+    ],
+    pick_existing(Candidates, RelPath).
+
+cwd_path(RelPath) ->
+    case file:get_cwd() of
+        {ok, Cwd} -> filename:join([Cwd, "priv", "certs", RelPath]);
+        _ -> "priv/certs/" ++ RelPath
     end.
+
+priv_dir_path(RelPath) ->
+    case code:priv_dir(signerl) of
+        {error, _} -> undefined;
+        PrivDir -> filename:join([PrivDir, "certs", RelPath])
+    end.
+
+lib_dir_path(RelPath) ->
+    case code:lib_dir(signerl) of
+        {error, _} -> undefined;
+        LibDir -> filename:join([LibDir, "priv", "certs", RelPath])
+    end.
+
+pick_existing([undefined | Rest], RelPath) ->
+    pick_existing(Rest, RelPath);
+pick_existing([Path | Rest], RelPath) ->
+    case filelib:is_file(Path) of
+        true -> Path;
+        false -> pick_existing(Rest, RelPath)
+    end;
+pick_existing([], RelPath) ->
+    "priv/certs/" ++ RelPath.
 
 root_ca_key_path() -> path("root_ca.key.pem").
 root_ca_cert_path() -> path("root_ca.cert.pem").
