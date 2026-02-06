@@ -25,6 +25,7 @@
 
 path(RelPath) ->
     Candidates = [
+        search_upwards_path(RelPath),
         cwd_path(RelPath),
         priv_dir_path(RelPath),
         lib_dir_path(RelPath)
@@ -36,6 +37,26 @@ cwd_path(RelPath) ->
         {ok, Cwd} -> filename:join([Cwd, "priv", "certs", RelPath]);
         _ -> "priv/certs/" ++ RelPath
     end.
+
+search_upwards_path(RelPath) ->
+    case file:get_cwd() of
+        {ok, Cwd} -> find_upwards(Cwd, RelPath, 5);
+        _ -> undefined
+    end.
+
+find_upwards(Dir, RelPath, Depth) when Depth >= 0 ->
+    CandidateDir = filename:join([Dir, "priv", "certs"]),
+    case filelib:is_dir(CandidateDir) of
+        true -> filename:join([CandidateDir, RelPath]);
+        false ->
+            Parent = filename:dirname(Dir),
+            case Parent =:= Dir of
+                true -> undefined;
+                false -> find_upwards(Parent, RelPath, Depth - 1)
+            end
+    end;
+find_upwards(_, _, _) ->
+    undefined.
 
 priv_dir_path(RelPath) ->
     case code:priv_dir(signerl) of
