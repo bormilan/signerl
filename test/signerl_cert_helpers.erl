@@ -24,7 +24,15 @@
 ]).
 
 path(RelPath) ->
-    signerl_utils:file_path("priv/certs/" ++ RelPath).
+    case code:priv_dir(signerl) of
+        {error, _} ->
+            case file:get_cwd() of
+                {ok, Cwd} -> filename:join([Cwd, "priv", "certs", RelPath]);
+                _ -> "priv/certs/" ++ RelPath
+            end;
+        PrivDir ->
+            filename:join([PrivDir, "certs", RelPath])
+    end.
 
 root_ca_key_path() -> path("root_ca.key.pem").
 root_ca_cert_path() -> path("root_ca.cert.pem").
