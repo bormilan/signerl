@@ -44,3 +44,5 @@ start_clean.rel
 # Optional: Elixir build artifacts (if you mix Erlang/Elixir)
 _elixir_ls/
 
+# Test-generated certs/keys
+priv/
