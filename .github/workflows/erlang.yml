@@ -14,9 +14,12 @@ jobs:
       matrix:
         otp_vsn: ['26', '27']
         rebar3_vsn: ['3.25']
-        os: [ubuntu-24.04, windows-2022]
+        os: [ubuntu-24.04, windows-2022, macos-13]
     steps:
       - uses: actions/checkout@v4
+      - name: Install OpenSSL (Windows)
+        if: runner.os == 'Windows'
+        run: choco install openssl -y
       - uses: erlef/setup-beam@v1
         id: setup-beam
         with:
@@ -40,5 +43,8 @@ jobs:
                 -otp-${{steps.setup-beam.outputs.otp-version}}\
                 -rebar3-${{steps.setup-beam.outputs.rebar3-version}}\
                 -hash-${{hashFiles('rebar.lock')}}"
+      - name: Generate test certificates
+        shell: bash
+        run: scripts/gen_certs.sh
       - name: Run test
         run: rebar3 test
