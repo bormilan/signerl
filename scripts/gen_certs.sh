@@ -10,6 +10,11 @@ OUT_DIR="$ROOT_DIR/priv/certs"
 mkdir -p "$OUT_DIR"
 cd "$OUT_DIR"
 
+# On Windows (Git Bash/MSYS), prevent path conversion of /C=... in -subj values.
+if [[ "${OS:-}" == "Windows_NT" ]] || [[ "${MSYSTEM:-}" == MINGW* ]]; then
+  export MSYS2_ARG_CONV_EXCL="*"
+fi
+
 # 1) OpenSSL config with extensions used below.
 cat > openssl.cnf <<'CONF'
 [ req ]
