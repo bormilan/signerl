@@ -47,7 +47,8 @@ search_upwards_path(RelPath) ->
 find_upwards(Dir, RelPath, Depth) when Depth >= 0 ->
     CandidateDir = filename:join([Dir, "priv", "certs"]),
     case filelib:is_dir(CandidateDir) of
-        true -> filename:join([CandidateDir, RelPath]);
+        true ->
+            filename:join([CandidateDir, RelPath]);
         false ->
             Parent = filename:dirname(Dir),
             case Parent =:= Dir of
