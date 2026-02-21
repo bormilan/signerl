@@ -29,7 +29,10 @@
     verify_missing_prolog_binary_returns_error/1,
     verify_invalid_prolog_file_returns_error/1,
     verify_returns_error_without_signature_element/1,
-    verify_returns_error_on_missing_or_empty_signature_value/1,
+    verify_returns_error_without_signature_value/1,
+    verify_returns_error_with_empty_signature_value/1,
+    verify_returns_error_with_invalid_base64_signature_value/1,
+    verify_returns_error_with_self_closing_signature_value/1,
     verify_returns_false_with_wrong_signature_value/1,
     verify_fails_on_modified_message/1,
     verify_fails_with_wrong_keys/1
@@ -68,7 +71,10 @@ groups() ->
             verify_missing_prolog_binary_returns_error,
             verify_invalid_prolog_file_returns_error,
             verify_returns_error_without_signature_element,
-            verify_returns_error_on_missing_or_empty_signature_value,
+            verify_returns_error_without_signature_value,
+            verify_returns_error_with_empty_signature_value,
+            verify_returns_error_with_invalid_base64_signature_value,
+            verify_returns_error_with_self_closing_signature_value,
             verify_returns_false_with_wrong_signature_value,
             verify_fails_on_modified_message,
             verify_fails_with_wrong_keys
@@ -251,10 +257,31 @@ verify_returns_error_without_signature_element(_Config) ->
         {error, invalid_signature}, signerl:verify(DoubleSignedMessage, sha256, PublicKey)
     ).
 
-verify_returns_error_on_missing_or_empty_signature_value(_Config) ->
+verify_returns_error_without_signature_value(_Config) ->
     SignedPath = signerl_utils:file_path("test/examples/books_signature_no_value.xml"),
+
+    CertPath = signerl_cert_helpers:signer_rsa_cert_path(),
+    PublicKey = test_helpers:rsa_public_key_from_cert(CertPath),
+
+    ?assertEqual({error, invalid_signature}, signerl:verify(SignedPath, sha256, PublicKey)).
+
+verify_returns_error_with_empty_signature_value(_Config) ->
     EmptyValuePath = signerl_utils:file_path("test/examples/books_signature_empty_value.xml"),
+
+    CertPath = signerl_cert_helpers:signer_rsa_cert_path(),
+    PublicKey = test_helpers:rsa_public_key_from_cert(CertPath),
+
+    ?assertEqual({error, invalid_signature}, signerl:verify(EmptyValuePath, sha256, PublicKey)).
+
+verify_returns_error_with_invalid_base64_signature_value(_Config) ->
     InvalidBase64Path = signerl_utils:file_path("test/examples/books_signature_invalid_base64.xml"),
+
+    CertPath = signerl_cert_helpers:signer_rsa_cert_path(),
+    PublicKey = test_helpers:rsa_public_key_from_cert(CertPath),
+
+    ?assertEqual({error, invalid_signature}, signerl:verify(InvalidBase64Path, sha256, PublicKey)).
+
+verify_returns_error_with_self_closing_signature_value(_Config) ->
     SelfClosingValuePath = signerl_utils:file_path(
         "test/examples/books_signature_self_closing_value.xml"
     ),
@@ -262,9 +289,6 @@ verify_returns_error_on_missing_or_empty_signature_value(_Config) ->
     CertPath = signerl_cert_helpers:signer_rsa_cert_path(),
     PublicKey = test_helpers:rsa_public_key_from_cert(CertPath),
 
-    ?assertEqual({error, invalid_signature}, signerl:verify(SignedPath, sha256, PublicKey)),
-    ?assertEqual({error, invalid_signature}, signerl:verify(EmptyValuePath, sha256, PublicKey)),
-    ?assertEqual({error, invalid_signature}, signerl:verify(InvalidBase64Path, sha256, PublicKey)),
     ?assertEqual(
         {error, invalid_signature}, signerl:verify(SelfClosingValuePath, sha256, PublicKey)
     ).

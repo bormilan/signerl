@@ -44,9 +44,21 @@ from each one.
   Why: Verify should reject invalid signature structure.
   Learn: Missing and duplicated `ds:Signature` are mapped to `{error, invalid_signature}`.
 
-- `verify_returns_error_on_missing_or_empty_signature_value/1`
-  Why: Verify should reject malformed `ds:SignatureValue` forms.
-  Learn: Missing, empty, invalid-base64, and self-closing values map to `{error, invalid_signature}`.
+- `verify_returns_error_without_signature_value/1`
+  Why: Verify should reject signatures without `ds:SignatureValue`.
+  Learn: Missing signature value maps to `{error, invalid_signature}`.
+
+- `verify_returns_error_with_empty_signature_value/1`
+  Why: Verify should reject empty signature values.
+  Learn: Empty signature value maps to `{error, invalid_signature}`.
+
+- `verify_returns_error_with_invalid_base64_signature_value/1`
+  Why: Verify should reject non-base64 signature values.
+  Learn: Invalid base64 maps to `{error, invalid_signature}`.
+
+- `verify_returns_error_with_self_closing_signature_value/1`
+  Why: Verify should reject self-closing `ds:SignatureValue`.
+  Learn: Self-closing value maps to `{error, invalid_signature}`.
 
 - `verify_returns_false_with_wrong_signature_value/1`
   Why: Verify should return `false` for present-but-wrong signature bytes.
