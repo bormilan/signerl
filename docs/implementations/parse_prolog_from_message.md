@@ -139,3 +139,8 @@
   - [x] Module docs under `docs/` updated if relevant (`docs/tasks/...` and `docs/implementations/...`)
   - [x] If no docs changed, explicit reason recorded
 - Remaining risks: parser intentionally rejects BOM-prefixed XML for now by task decision; broaden if needed in follow-up.
+
+## Post-Review Adjustments
+- Renamed local variables in `test/signerl_SUITE.erl` from `Digest` to `Signature` (including `ExpectedSignature`, `Signature1`, `Signature2`) to better reflect `signerl:sign/3` output semantics and improve readability.
+- Validation:
+  - `rebar3 ct --suite test/signerl_SUITE` passed (all 16 tests).
