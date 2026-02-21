@@ -41,6 +41,38 @@ export_test() ->
         signerl_xml:parse_file(PathTo)
     ).
 
+parse_prolog_valid_test() ->
+    Message = <<"<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?><root/>">>,
+    ?assertEqual(
+        {ok, ["<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>"]},
+        signerl_xml:parse_prolog(Message)
+    ).
+
+parse_prolog_missing_test() ->
+    Message = <<"<root/>">>,
+    ?assertEqual({error, invalid_prolog}, signerl_xml:parse_prolog(Message)).
+
+parse_prolog_invalid_typo_test() ->
+    Message = <<"<?xml versoin=\"1.0\" encoding=\"UTF-8\"?><root/>">>,
+    ?assertEqual({error, invalid_prolog}, signerl_xml:parse_prolog(Message)).
+
+parse_prolog_invalid_attribute_test() ->
+    Message = <<"<?xml version=\"1.0\" foo=\"bar\"?><root/>">>,
+    ?assertEqual({error, invalid_prolog}, signerl_xml:parse_prolog(Message)).
+
+parse_prolog_invalid_malformed_declaration_test() ->
+    Message = <<"<?xml version=\"1.0\" encoding=\"UTF-8\"<root/>">>,
+    ?assertEqual({error, invalid_prolog}, signerl_xml:parse_prolog(Message)).
+
+parse_prolog_rejects_bom_test() ->
+    Message = <<16#EF, 16#BB, 16#BF, "<?xml version=\"1.0\" encoding=\"UTF-8\"?><root/>">>,
+    ?assertEqual({error, invalid_prolog}, signerl_xml:parse_prolog(Message)).
+
+parse_prolog_only_extracts_declaration_test() ->
+    Message = <<"<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<root><child>1</child></root>">>,
+    {ok, [Prolog]} = signerl_xml:parse_prolog(Message),
+    ?assertEqual("<?xml version=\"1.0\" encoding=\"UTF-8\"?>", Prolog).
+
 %% Utils
 
 new_test_element() ->

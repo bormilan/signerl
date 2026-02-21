@@ -17,11 +17,17 @@ Early development. APIs may change and XML-DSig compliance is not complete yet.
 
 ```erlang
 % Sign from a binary message and a loaded key:
-Digest = signerl:sign(RawMessage, sha256, PrivateKey).
+{ok, Digest} = case signerl:sign(RawMessage, sha256, PrivateKey) of
+    {error, invalid_prolog} -> {error, invalid_prolog};
+    SignedDigest -> {ok, SignedDigest}
+end.
 
 % Verify:
 true = signerl:verify(RawMessage, sha256, Digest, PublicKey).
 ```
+
+`sign/3` and `verify/4` require a valid XML prolog at the beginning of the input
+message. If the prolog is missing or invalid, they return `{error, invalid_prolog}`.
 
 ## Tests
 

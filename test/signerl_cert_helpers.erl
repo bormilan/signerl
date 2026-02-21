@@ -33,10 +33,7 @@ path(RelPath) ->
     pick_existing(Candidates, RelPath).
 
 cwd_path(RelPath) ->
-    case file:get_cwd() of
-        {ok, Cwd} -> filename:join([Cwd, "priv", "certs", RelPath]);
-        _ -> "priv/certs/" ++ RelPath
-    end.
+    base_dir_path(RelPath, file:get_cwd(), ["priv", "certs"], "priv/certs/").
 
 search_upwards_path(RelPath) ->
     case file:get_cwd() of
@@ -66,9 +63,18 @@ priv_dir_path(RelPath) ->
     end.
 
 lib_dir_path(RelPath) ->
-    case code:lib_dir(signerl) of
-        {error, _} -> undefined;
-        LibDir -> filename:join([LibDir, "priv", "certs", RelPath])
+    base_dir_path(RelPath, code:lib_dir(signerl), ["priv", "certs"], undefined).
+
+base_dir_path(RelPath, BaseDirResult, SuffixParts, Fallback) ->
+    case BaseDirResult of
+        {ok, BaseDir} ->
+            filename:join([BaseDir | SuffixParts] ++ [RelPath]);
+        {error, _} ->
+            Fallback;
+        BaseDir when is_list(BaseDir) ->
+            filename:join([BaseDir | SuffixParts] ++ [RelPath]);
+        _ ->
+            Fallback
     end.
 
 pick_existing([undefined | Rest], RelPath) ->
@@ -94,19 +100,20 @@ signer_ecdsa_key_path() -> path("signer_ecdsa.key.pem").
 signer_ecdsa_cert_path() -> path("signer_ecdsa.cert.pem").
 
 load_private_key(Path) ->
-    {ok, KeyRaw} = file:read_file(Path),
-    [KeyDer] = public_key:pem_decode(KeyRaw),
-    public_key:pem_entry_decode(KeyDer).
+    decode_single_pem_entry(Path).
 
 load_cert(Path) ->
-    {ok, CertRaw} = file:read_file(Path),
-    [CertDer] = public_key:pem_decode(CertRaw),
-    public_key:pem_entry_decode(CertDer).
+    decode_single_pem_entry(Path).
 
 load_cert_chain() ->
     {ok, CertRaw} = file:read_file(chain_full_cert_path()),
     CertDers = public_key:pem_decode(CertRaw),
     [public_key:pem_entry_decode(CertDer) || CertDer <- CertDers].
+
+decode_single_pem_entry(Path) ->
+    {ok, PemRaw} = file:read_file(Path),
+    [PemDer] = public_key:pem_decode(PemRaw),
+    public_key:pem_entry_decode(PemDer).
 
 root_ca_key() -> load_private_key(root_ca_key_path()).
 intermediate_ca_key() -> load_private_key(intermediate_ca_key_path()).

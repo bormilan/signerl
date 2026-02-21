@@ -1,4 +1,5 @@
 -module(signerl).
+-feature(maybe_expr, enable).
 
 -export([sign/3, verify/4]).
 
@@ -16,15 +17,13 @@ sign(FilePath, Hash, Key) when is_list(FilePath) ->
         Key
     );
 sign(Message, Hash, Key) ->
-    ParsedMessage = signerl_xml:parse_binary(Message),
-    %TODO: adding the signature element to it
-    % SignedMessage = signerl_signature:add_signature_element(Message)
-
-    % HACK: should take from the message
-    Prolog = ["<?xml version=\"1.0\" encoding=\"UTF-8\"?>"],
-
-    SignableMessage = signerl_xml:export(Prolog, ParsedMessage),
-    public_key:sign(SignableMessage, Hash, Key).
+    maybe
+        {ok, SignableMessage} ?= signerl_utils:signable_message(Message),
+        public_key:sign(SignableMessage, Hash, Key)
+    else
+        {error, Reason} ->
+            {error, Reason}
+    end.
 
 verify(Message, Hash, Digest, FilePath) when is_list(FilePath) ->
     {ok, KeyRaw} = file:read_file(FilePath),
@@ -40,9 +39,10 @@ verify(FilePath, Hash, Digest, Key) when is_list(FilePath) ->
         Key
     );
 verify(Message, Hash, Digest, Key) ->
-    ParsedMessage = signerl_xml:parse_binary(Message),
-    % HACK: should take from the message
-    Prolog = ["<?xml version=\"1.0\" encoding=\"UTF-8\"?>"],
-
-    SignableMessage = signerl_xml:export(Prolog, ParsedMessage),
-    public_key:verify(SignableMessage, Hash, Digest, Key).
+    maybe
+        {ok, SignableMessage} ?= signerl_utils:signable_message(Message),
+        public_key:verify(SignableMessage, Hash, Digest, Key)
+    else
+        {error, Reason} ->
+            {error, Reason}
+    end.

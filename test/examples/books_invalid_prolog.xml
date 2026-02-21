@@ -1,0 +1,13 @@
+<?xml versoin="1.0" encoding="UTF-8"?>
+<library id="112233">
+    <book id="1" genre="Fiction" available="true">
+        <title>The Great Gatsby</title>
+        <author>F. Scott Fitzgerald</author>
+        <year>1925</year>
+        <description>A portrait of the Roaring Twenties and a critique of the American Dream.</description>
+        <reviews>
+            <review reviewer="John Doe" rating="5">A timeless classic that explores deep themes in a beautifully written narrative.</review>
+            <review reviewer="Jane Smith" rating="4">Elegant prose and compelling characters. A bit slow in parts, but worth the read.</review>
+        </reviews>
+    </book>
+</library>

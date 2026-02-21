@@ -4,7 +4,10 @@
     {registered, []},
     {applications, [
         kernel,
-        stdlib
+        stdlib,
+        crypto,
+        public_key,
+        xmerl
     ]},
     {env, []},
     {modules, []},
