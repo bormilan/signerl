@@ -17,17 +17,22 @@ Early development. APIs may change and XML-DSig compliance is not complete yet.
 
 ```erlang
 % Sign from a binary message and a loaded key:
-{ok, Digest} = case signerl:sign(RawMessage, sha256, PrivateKey) of
+{ok, SignedMessage} = case signerl:sign(RawMessage, sha256, PrivateKey) of
     {error, invalid_prolog} -> {error, invalid_prolog};
-    SignedDigest -> {ok, SignedDigest}
+    SignedXml -> {ok, SignedXml}
 end.
 
 % Verify:
-true = signerl:verify(RawMessage, sha256, Digest, PublicKey).
+true = signerl:verify(SignedMessage, sha256, PublicKey).
 ```
 
-`sign/3` and `verify/4` require a valid XML prolog at the beginning of the input
-message. If the prolog is missing or invalid, they return `{error, invalid_prolog}`.
+`sign/3` returns signed XML with `<ds:Signature><ds:SignatureValue>...</ds:SignatureValue></ds:Signature>`.
+
+`verify/3` expects a signed XML message. It returns:
+- `true` when signature verification succeeds
+- `false` when signature bytes are present but do not match message/key
+- `{error, invalid_prolog}` when XML prolog is missing/invalid
+- `{error, invalid_signature}` when signature structure is missing or malformed
 
 ## Tests
 

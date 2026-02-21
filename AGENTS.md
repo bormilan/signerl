@@ -18,8 +18,10 @@ Applies to the entire repository unless a nested `AGENTS.md` overrides it.
 ## Testing Rules
 - Run `rebar3 eunit` for unit-level changes.
 - Run `rebar3 ct` for integration/contract changes.
+- Run `rebar3 as test cover` and keep total coverage at `100%`.
 - Run `rebar3 flint` after task implementation is complete (final quality gate).
 - Run `rebar3 dialyzer` after task implementation is complete (final quality gate).
+- If coverage drops below `100%`, add or update tests until it is restored and document the result.
 - If `rebar3 flint` reports issues, fix them and rerun until clean; if any issue is intentionally deferred, document the reason explicitly.
 - If `rebar3 dialyzer` reports issues, fix them and rerun until clean; if any issue is intentionally deferred, document the reason explicitly.
 - If tests are skipped, explicitly state what was not run and why.
