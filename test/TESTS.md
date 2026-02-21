@@ -5,10 +5,17 @@ from each one.
 
 ## Test Suite: `signerl_SUITE.erl`
 
-- `add_signature_element/1`
-  Why: Validates signature insertion and extraction on the XML tree.
-  Learn: Signature bytes are stored as base64 and extracted back together with
-  the unsigned message shape.
+- `add_signature_element_inserts_signature_value/1`
+  Why: Validates signature insertion on the XML tree.
+  Learn: Signature bytes are stored as base64 under `ds:SignatureValue`.
+
+- `add_signature_element_extracts_signature_value/1`
+  Why: Validates extraction after insertion.
+  Learn: Extractor returns original signature bytes and unsigned message.
+
+- `add_signature_element_extract_binary_and_rejects_empty/1`
+  Why: Validates edge cases for `ds:SignatureValue` content shape.
+  Learn: Binary values decode successfully while empty values are rejected.
 
 - `sign/1`
   Why: Basic sign/verify loop using an explicitly loaded private key.

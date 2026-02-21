@@ -15,7 +15,9 @@
 ]).
 
 -export([
-    add_signature_element/1,
+    add_signature_element_inserts_signature_value/1,
+    add_signature_element_extracts_signature_value/1,
+    add_signature_element_extract_binary_and_rejects_empty/1,
     sign/1,
     sign_with_chain_leaf_rsa/1,
     sign_with_self_signed_rsa/1,
@@ -52,7 +54,9 @@ end_per_testcase(_TestCase, _Config) ->
 groups() ->
     [
         {sign_group, [], [
-            add_signature_element,
+            add_signature_element_inserts_signature_value,
+            add_signature_element_extracts_signature_value,
+            add_signature_element_extract_binary_and_rejects_empty,
             sign,
             sign_with_chain_leaf_rsa,
             sign_with_self_signed_rsa,
@@ -86,10 +90,9 @@ end_per_group(sign_group, _Config) ->
 end_per_group(_, _Config) ->
     ok.
 
-add_signature_element(_Config) ->
+add_signature_element_inserts_signature_value(_Config) ->
     Path = "test/examples/books.xml",
     Message = signerl_xml:parse_file(Path),
-    {Tag, Attrs, Content} = Message,
     SignatureBytes = <<1, 2, 3>>,
     SignedMessage = signerl_signature:add_signature_element(Message, SignatureBytes),
     {_, _, SignedMessageContent} = SignedMessage,
@@ -98,8 +101,19 @@ add_signature_element(_Config) ->
         lists:member(
             {'ds:Signature', [], [{'ds:SignatureValue', [], ["AQID"]}]}, SignedMessageContent
         )
-    ),
+    ).
+
+add_signature_element_extracts_signature_value(_Config) ->
+    Message = signerl_xml:parse_file("test/examples/books.xml"),
+    SignatureBytes = <<1, 2, 3>>,
+    SignedMessage = signerl_signature:add_signature_element(Message, SignatureBytes),
     ?assertEqual({ok, SignatureBytes, Message}, signerl_signature:extract_signature(SignedMessage)),
+    ok.
+
+add_signature_element_extract_binary_and_rejects_empty(_Config) ->
+    Message = signerl_xml:parse_file("test/examples/books.xml"),
+    {Tag, Attrs, Content} = Message,
+    SignatureBytes = <<1, 2, 3>>,
     BinarySignatureValueMessage = {
         Tag,
         Attrs,
@@ -117,7 +131,8 @@ add_signature_element(_Config) ->
     ?assertEqual(
         {error, invalid_signature},
         signerl_signature:extract_signature(EmptyStringSignatureValueMessage)
-    ).
+    ),
+    ok.
 
 sign(_Config) ->
     KeyPath = signerl_utils:file_path("priv/key.pem"),
