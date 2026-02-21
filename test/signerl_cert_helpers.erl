@@ -33,7 +33,7 @@ path(RelPath) ->
     pick_existing(Candidates, RelPath).
 
 cwd_path(RelPath) ->
-    base_dir_path(RelPath, fun() -> file:get_cwd() end, ["priv", "certs"], "priv/certs/").
+    base_dir_path(RelPath, file:get_cwd(), ["priv", "certs"], "priv/certs/").
 
 search_upwards_path(RelPath) ->
     case file:get_cwd() of
@@ -63,10 +63,10 @@ priv_dir_path(RelPath) ->
     end.
 
 lib_dir_path(RelPath) ->
-    base_dir_path(RelPath, fun() -> code:lib_dir(signerl) end, ["priv", "certs"], undefined).
+    base_dir_path(RelPath, code:lib_dir(signerl), ["priv", "certs"], undefined).
 
-base_dir_path(RelPath, BaseDirFun, SuffixParts, Fallback) ->
-    case BaseDirFun() of
+base_dir_path(RelPath, BaseDirResult, SuffixParts, Fallback) ->
+    case BaseDirResult of
         {ok, BaseDir} ->
             filename:join([BaseDir | SuffixParts] ++ [RelPath]);
         {error, _} ->
