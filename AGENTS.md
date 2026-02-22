@@ -11,6 +11,7 @@ Applies to the entire repository unless a nested `AGENTS.md` overrides it.
 - Prefer `rg` for file/text search.
 - Keep Erlang functions focused and avoid unnecessary nesting.
 - Preserve existing module/function naming patterns unless there is a strong reason to change.
+- When switching to a new branch with local uncommitted changes, stash first (`git stash -u`), switch branch, then restore (`git stash pop`) to avoid carrying accidental branch state.
 - Put static/long constants (for example validation regex patterns) into named macros in a shared `.hrl` file instead of inline literals.
 - Do not manually edit generated artifacts under `_build/`.
 - Keep docs in sync when public behavior changes.
@@ -21,6 +22,7 @@ Applies to the entire repository unless a nested `AGENTS.md` overrides it.
 - Run `rebar3 as test cover` and keep total coverage at `100%`.
 - Run `rebar3 flint` after task implementation is complete (final quality gate).
 - Run `rebar3 dialyzer` after task implementation is complete (final quality gate).
+- Run `make ci-local` once before commit/push to validate Linux OTP matrix checks (`test` + `lint` + `dialyzer`) in Docker.
 - If coverage drops below `100%`, add or update tests until it is restored and document the result.
 - If `rebar3 flint` reports issues, fix them and rerun until clean; if any issue is intentionally deferred, document the reason explicitly.
 - If `rebar3 dialyzer` reports issues, fix them and rerun until clean; if any issue is intentionally deferred, document the reason explicitly.

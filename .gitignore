@@ -2,12 +2,12 @@
 *.beam
 
 # Erlang crash dumps
-erl_crash.dump
+/erl_crash.dump
 
 # Common build directories
 .eunit/
 _*.eunit/
-rebar3.crashdump
+/rebar3.crashdump
 _build/
 deps/
 logs/
@@ -16,7 +16,6 @@ ebin/
 # rebar3 specific
 .rebar/
 .rebar3/
-rebar.lock
 
 # Erlang.mk specific
 .config.mk
@@ -46,3 +45,8 @@ _elixir_ls/
 
 # Test-generated certs/keys
 priv/
+
+# Required paths for Erlang tooling
+test/logs/
+doc/
+_checkouts/

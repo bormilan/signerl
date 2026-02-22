@@ -3,16 +3,18 @@
 -export([add_signature_element/2, extract_signature/1]).
 
 -spec add_signature_element(Message, SignatureBytes) -> SignedMessage when
-    Message :: signerl_xml:simplified_xml(),
+    Message :: {atom(), [{atom(), string() | number()}], [any()]},
     SignatureBytes :: binary(),
-    SignedMessage :: signerl_xml:simplified_xml().
+    SignedMessage :: {atom(), [{atom(), string() | number()}], [any()]}.
 add_signature_element(Message, SignatureBytes) ->
     SignatureElement = construct_signature(SignatureBytes),
     signerl_xml:add_new_element(SignatureElement, Message).
 
 -spec extract_signature(Message) -> Result when
-    Message :: signerl_xml:simplified_xml(),
-    Result :: {ok, binary(), signerl_xml:simplified_xml()} | {error, invalid_signature}.
+    Message :: {atom(), [{atom(), string() | number()}], [any()]},
+    Result ::
+        {ok, binary(), {atom(), [{atom(), string() | number()}], [any()]}}
+        | {error, invalid_signature}.
 extract_signature({Tag, Attrs, Content}) ->
     {SignatureElements, UnsignedContent} = lists:partition(fun is_signature_element/1, Content),
     case SignatureElements of
@@ -27,7 +29,7 @@ extract_signature({Tag, Attrs, Content}) ->
             {error, invalid_signature}
     end.
 
--spec construct_signature(SignatureBytes) -> signerl_xml:simplified_xml() when
+-spec construct_signature(SignatureBytes) -> {atom(), [{atom(), string() | number()}], [any()]} when
     SignatureBytes :: binary().
 construct_signature(SignatureBytes) ->
     SignatureValue = base64:encode(SignatureBytes),
