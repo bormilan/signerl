@@ -6,16 +6,17 @@ PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 OTP26_IMAGE="${OTP26_IMAGE:-erlang:26.2.5}"
 OTP27_IMAGE="${OTP27_IMAGE:-erlang:27.3.4}"
+OTP28_IMAGE="${OTP28_IMAGE:-erlang:28}"
 
 usage() {
     cat <<'USAGE'
 Usage: scripts/ci_local_docker.sh [--otp <version>]...
 
 Runs local CI-equivalent checks in Docker for selected OTP versions.
-Defaults to OTP 26 and 27.
+Defaults to OTP 26, 27, and 28.
 
 Options:
-  --otp <version>  Run only selected OTP version (26 or 27). Can be repeated.
+  --otp <version>  Run only selected OTP version (26, 27, or 28). Can be repeated.
   -h, --help       Show this help text.
 USAGE
 }
@@ -44,15 +45,16 @@ while [[ $# -gt 0 ]]; do
 done
 
 if [[ ${#selected[@]} -eq 0 ]]; then
-    selected=(26 27)
+    selected=(26 27 28)
 fi
 
 image_for() {
     case "$1" in
         26) echo "$OTP26_IMAGE" ;;
         27) echo "$OTP27_IMAGE" ;;
+        28) echo "$OTP28_IMAGE" ;;
         *)
-            echo "Unsupported OTP version: $1 (expected 26 or 27)" >&2
+            echo "Unsupported OTP version: $1 (expected 26, 27, or 28)" >&2
             exit 1
             ;;
     esac
