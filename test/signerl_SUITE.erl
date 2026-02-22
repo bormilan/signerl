@@ -15,22 +15,27 @@
 ]).
 
 -export([
-    add_signature_element/1,
+    add_signature_element_inserts_signature_value/1,
+    add_signature_element_extracts_signature_value/1,
+    add_signature_element_extract_binary_and_rejects_empty/1,
     sign/1,
-    sign_from_file/1,
     sign_with_chain_leaf_rsa/1,
     sign_with_self_signed_rsa/1,
     sign_with_self_signed_ecdsa/1,
     sign_deterministic/1,
-    sign_uses_input_prolog_binary/1,
-    sign_uses_input_prolog_file/1,
+    sign_uses_input_prolog_binary_and_file/1,
     sign_missing_prolog_binary_returns_error/1,
     sign_invalid_prolog_file_returns_error/1,
     verify_missing_prolog_binary_returns_error/1,
     verify_invalid_prolog_file_returns_error/1,
+    verify_returns_error_without_signature_element/1,
+    verify_returns_error_without_signature_value/1,
+    verify_returns_error_with_empty_signature_value/1,
+    verify_returns_error_with_invalid_base64_signature_value/1,
+    verify_returns_error_with_self_closing_signature_value/1,
+    verify_returns_false_with_wrong_signature_value/1,
     verify_fails_on_modified_message/1,
-    verify_fails_with_wrong_key/1,
-    verify_fails_with_wrong_ecdsa_key/1
+    verify_fails_with_wrong_keys/1
 ]).
 
 suite() ->
@@ -52,22 +57,27 @@ end_per_testcase(_TestCase, _Config) ->
 groups() ->
     [
         {sign_group, [], [
-            add_signature_element,
+            add_signature_element_inserts_signature_value,
+            add_signature_element_extracts_signature_value,
+            add_signature_element_extract_binary_and_rejects_empty,
             sign,
-            sign_from_file,
             sign_with_chain_leaf_rsa,
             sign_with_self_signed_rsa,
             sign_with_self_signed_ecdsa,
             sign_deterministic,
-            sign_uses_input_prolog_binary,
-            sign_uses_input_prolog_file,
+            sign_uses_input_prolog_binary_and_file,
             sign_missing_prolog_binary_returns_error,
             sign_invalid_prolog_file_returns_error,
             verify_missing_prolog_binary_returns_error,
             verify_invalid_prolog_file_returns_error,
+            verify_returns_error_without_signature_element,
+            verify_returns_error_without_signature_value,
+            verify_returns_error_with_empty_signature_value,
+            verify_returns_error_with_invalid_base64_signature_value,
+            verify_returns_error_with_self_closing_signature_value,
+            verify_returns_false_with_wrong_signature_value,
             verify_fails_on_modified_message,
-            verify_fails_with_wrong_key,
-            verify_fails_with_wrong_ecdsa_key
+            verify_fails_with_wrong_keys
         ]}
     ].
 
@@ -86,32 +96,63 @@ end_per_group(sign_group, _Config) ->
 end_per_group(_, _Config) ->
     ok.
 
-add_signature_element(_Config) ->
+add_signature_element_inserts_signature_value(_Config) ->
     Path = "test/examples/books.xml",
     Message = signerl_xml:parse_file(Path),
-    {_, _, SignedMessageContent} = signerl_signature:add_signature_element(Message),
+    SignatureBytes = <<1, 2, 3>>,
+    SignedMessage = signerl_signature:add_signature_element(Message, SignatureBytes),
+    {_, _, SignedMessageContent} = SignedMessage,
     ?assertEqual(
         true,
-        lists:member({'ds:Signature', [], []}, SignedMessageContent)
+        lists:member(
+            {'ds:Signature', [], [{'ds:SignatureValue', [], ["AQID"]}]}, SignedMessageContent
+        )
     ).
 
-sign_from_file(_) ->
-    KeyPath = signerl_utils:file_path("priv/key.pem"),
-    MessagePath = signerl_utils:file_path("test/examples/books.xml"),
+add_signature_element_extracts_signature_value(_Config) ->
+    Message = signerl_xml:parse_file("test/examples/books.xml"),
+    SignatureBytes = <<1, 2, 3>>,
+    SignedMessage = signerl_signature:add_signature_element(Message, SignatureBytes),
+    ?assertEqual({ok, SignatureBytes, Message}, signerl_signature:extract_signature(SignedMessage)),
+    ok.
 
-    Digest = signerl:sign(MessagePath, sha256, KeyPath),
-    ?assertEqual(true, signerl:verify(MessagePath, sha256, Digest, KeyPath)).
+add_signature_element_extract_binary_and_rejects_empty(_Config) ->
+    Message = signerl_xml:parse_file("test/examples/books.xml"),
+    {Tag, Attrs, Content} = Message,
+    SignatureBytes = <<1, 2, 3>>,
+    BinarySignatureValueMessage = {
+        Tag,
+        Attrs,
+        Content ++ [{'ds:Signature', [], [{'ds:SignatureValue', [], [<<"AQID">>]}]}]
+    },
+    ?assertEqual(
+        {ok, SignatureBytes, Message},
+        signerl_signature:extract_signature(BinarySignatureValueMessage)
+    ),
+    EmptyStringSignatureValueMessage = {
+        Tag,
+        Attrs,
+        Content ++ [{'ds:Signature', [], [{'ds:SignatureValue', [], [""]}]}]
+    },
+    ?assertEqual(
+        {error, invalid_signature},
+        signerl_signature:extract_signature(EmptyStringSignatureValueMessage)
+    ),
+    ok.
 
 sign(_Config) ->
-    {ok, KeyRaw} = file:read_file(signerl_utils:file_path("priv/key.pem")),
+    KeyPath = signerl_utils:file_path("priv/key.pem"),
+    {ok, KeyRaw} = file:read_file(KeyPath),
     [KeyDer] = public_key:pem_decode(KeyRaw),
     Key = public_key:pem_entry_decode(KeyDer),
 
     Path = "test/examples/books.xml",
     {ok, RawMessage} = file:read_file(signerl_utils:file_path(Path)),
 
-    Digest = signerl:sign(RawMessage, sha256, Key),
-    ?assertEqual(true, signerl:verify(RawMessage, sha256, Digest, Key)).
+    SignedMessage = signerl:sign(RawMessage, sha256, Key),
+    SignedMessageFromFile = signerl:sign(signerl_utils:file_path(Path), sha256, KeyPath),
+    ?assertEqual(true, signerl:verify(SignedMessage, sha256, Key)),
+    ?assertEqual(true, signerl:verify(SignedMessageFromFile, sha256, KeyPath)).
 
 sign_with_chain_leaf_rsa(_Config) ->
     MessagePath = signerl_utils:file_path("test/examples/books.xml"),
@@ -121,8 +162,8 @@ sign_with_chain_leaf_rsa(_Config) ->
     CertPath = signerl_cert_helpers:leaf_cert_path(),
     PublicKey = test_helpers:rsa_public_key_from_cert(CertPath),
 
-    Digest = signerl:sign(RawMessage, sha256, Key),
-    ?assertEqual(true, signerl:verify(RawMessage, sha256, Digest, PublicKey)).
+    SignedMessage = signerl:sign(RawMessage, sha256, Key),
+    ?assertEqual(true, signerl:verify(SignedMessage, sha256, PublicKey)).
 
 sign_with_self_signed_rsa(_Config) ->
     MessagePath = signerl_utils:file_path("test/examples/books.xml"),
@@ -132,8 +173,8 @@ sign_with_self_signed_rsa(_Config) ->
     CertPath = signerl_cert_helpers:signer_rsa_cert_path(),
     PublicKey = test_helpers:rsa_public_key_from_cert(CertPath),
 
-    Digest = signerl:sign(RawMessage, sha256, Key),
-    ?assertEqual(true, signerl:verify(RawMessage, sha256, Digest, PublicKey)).
+    SignedMessage = signerl:sign(RawMessage, sha256, Key),
+    ?assertEqual(true, signerl:verify(SignedMessage, sha256, PublicKey)).
 
 sign_with_self_signed_ecdsa(_Config) ->
     MessagePath = signerl_utils:file_path("test/examples/books.xml"),
@@ -143,8 +184,8 @@ sign_with_self_signed_ecdsa(_Config) ->
     CertPath = signerl_cert_helpers:signer_ecdsa_cert_path(),
     PublicKey = test_helpers:ecdsa_public_key_from_cert(CertPath),
 
-    Digest = signerl:sign(RawMessage, sha256, Key),
-    ?assertEqual(true, signerl:verify(RawMessage, sha256, Digest, PublicKey)).
+    SignedMessage = signerl:sign(RawMessage, sha256, Key),
+    ?assertEqual(true, signerl:verify(SignedMessage, sha256, PublicKey)).
 
 sign_deterministic(_Config) ->
     MessagePath = signerl_utils:file_path("test/examples/books.xml"),
@@ -152,35 +193,24 @@ sign_deterministic(_Config) ->
 
     Key = signerl_cert_helpers:signer_rsa_key(),
 
-    Digest1 = signerl:sign(RawMessage, sha256, Key),
-    Digest2 = signerl:sign(RawMessage, sha256, Key),
-    ?assertEqual(Digest1, Digest2).
+    SignedMessage1 = signerl:sign(RawMessage, sha256, Key),
+    SignedMessage2 = signerl:sign(RawMessage, sha256, Key),
+    ?assertEqual(SignedMessage1, SignedMessage2).
 
-sign_uses_input_prolog_binary(_Config) ->
+sign_uses_input_prolog_binary_and_file(_Config) ->
     MessagePath = signerl_utils:file_path("test/examples/books_custom_prolog.xml"),
     {ok, RawMessage} = file:read_file(MessagePath),
 
     Key = signerl_cert_helpers:signer_rsa_key(),
-    ParsedMessage = signerl_xml:parse_binary(RawMessage),
-    Prolog = ["<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>"],
-    ExpectedSignable = signerl_xml:export(Prolog, ParsedMessage),
-    ExpectedDigest = public_key:sign(ExpectedSignable, sha256, Key),
+    CertPath = signerl_cert_helpers:signer_rsa_cert_path(),
+    PublicKey = test_helpers:rsa_public_key_from_cert(CertPath),
 
-    Digest = signerl:sign(RawMessage, sha256, Key),
-    ?assertEqual(ExpectedDigest, Digest).
-
-sign_uses_input_prolog_file(_Config) ->
-    MessagePath = signerl_utils:file_path("test/examples/books_custom_prolog.xml"),
-
-    Key = signerl_cert_helpers:signer_rsa_key(),
-    {ok, RawMessage} = file:read_file(MessagePath),
-    ParsedMessage = signerl_xml:parse_binary(RawMessage),
-    Prolog = ["<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>"],
-    ExpectedSignable = signerl_xml:export(Prolog, ParsedMessage),
-    ExpectedDigest = public_key:sign(ExpectedSignable, sha256, Key),
-
-    Digest = signerl:sign(MessagePath, sha256, Key),
-    ?assertEqual(ExpectedDigest, Digest).
+    SignedMessage = signerl:sign(RawMessage, sha256, Key),
+    ?assertMatch({_, _}, binary:match(SignedMessage, <<"standalone=\"yes\"">>)),
+    ?assertEqual(true, signerl:verify(SignedMessage, sha256, PublicKey)),
+    SignedMessageFromFile = signerl:sign(MessagePath, sha256, Key),
+    ?assertMatch({_, _}, binary:match(SignedMessageFromFile, <<"standalone=\"yes\"">>)),
+    ?assertEqual(true, signerl:verify(SignedMessageFromFile, sha256, PublicKey)).
 
 sign_missing_prolog_binary_returns_error(_Config) ->
     MessagePath = signerl_utils:file_path("test/examples/books_no_prolog.xml"),
@@ -196,31 +226,80 @@ sign_invalid_prolog_file_returns_error(_Config) ->
     ?assertEqual({error, invalid_prolog}, signerl:sign(MessagePath, sha256, Key)).
 
 verify_missing_prolog_binary_returns_error(_Config) ->
-    ValidPath = signerl_utils:file_path("test/examples/books.xml"),
     MissingPath = signerl_utils:file_path("test/examples/books_no_prolog.xml"),
-    {ok, ValidRawMessage} = file:read_file(ValidPath),
     {ok, MissingRawMessage} = file:read_file(MissingPath),
 
-    SignKey = signerl_cert_helpers:signer_rsa_key(),
     CertPath = signerl_cert_helpers:signer_rsa_cert_path(),
     PublicKey = test_helpers:rsa_public_key_from_cert(CertPath),
-    Digest = signerl:sign(ValidRawMessage, sha256, SignKey),
 
-    ?assertEqual(
-        {error, invalid_prolog}, signerl:verify(MissingRawMessage, sha256, Digest, PublicKey)
-    ).
+    ?assertEqual({error, invalid_prolog}, signerl:verify(MissingRawMessage, sha256, PublicKey)).
 
 verify_invalid_prolog_file_returns_error(_Config) ->
-    ValidPath = signerl_utils:file_path("test/examples/books.xml"),
     InvalidPath = signerl_utils:file_path("test/examples/books_invalid_prolog.xml"),
-    {ok, ValidRawMessage} = file:read_file(ValidPath),
 
-    SignKey = signerl_cert_helpers:signer_rsa_key(),
     CertPath = signerl_cert_helpers:signer_rsa_cert_path(),
     PublicKey = test_helpers:rsa_public_key_from_cert(CertPath),
-    Digest = signerl:sign(ValidRawMessage, sha256, SignKey),
 
-    ?assertEqual({error, invalid_prolog}, signerl:verify(InvalidPath, sha256, Digest, PublicKey)).
+    ?assertEqual({error, invalid_prolog}, signerl:verify(InvalidPath, sha256, PublicKey)).
+
+verify_returns_error_without_signature_element(_Config) ->
+    UnsignedPath = signerl_utils:file_path("test/examples/books.xml"),
+    {ok, RawMessage} = file:read_file(UnsignedPath),
+    SignKey = signerl_cert_helpers:signer_rsa_key(),
+
+    CertPath = signerl_cert_helpers:signer_rsa_cert_path(),
+    PublicKey = test_helpers:rsa_public_key_from_cert(CertPath),
+
+    ?assertEqual({error, invalid_signature}, signerl:verify(UnsignedPath, sha256, PublicKey)),
+    SignedMessage = signerl:sign(RawMessage, sha256, SignKey),
+    DoubleSignedMessage = signerl:sign(SignedMessage, sha256, SignKey),
+    ?assertEqual(
+        {error, invalid_signature}, signerl:verify(DoubleSignedMessage, sha256, PublicKey)
+    ).
+
+verify_returns_error_without_signature_value(_Config) ->
+    SignedPath = signerl_utils:file_path("test/examples/books_signature_no_value.xml"),
+
+    CertPath = signerl_cert_helpers:signer_rsa_cert_path(),
+    PublicKey = test_helpers:rsa_public_key_from_cert(CertPath),
+
+    ?assertEqual({error, invalid_signature}, signerl:verify(SignedPath, sha256, PublicKey)).
+
+verify_returns_error_with_empty_signature_value(_Config) ->
+    EmptyValuePath = signerl_utils:file_path("test/examples/books_signature_empty_value.xml"),
+
+    CertPath = signerl_cert_helpers:signer_rsa_cert_path(),
+    PublicKey = test_helpers:rsa_public_key_from_cert(CertPath),
+
+    ?assertEqual({error, invalid_signature}, signerl:verify(EmptyValuePath, sha256, PublicKey)).
+
+verify_returns_error_with_invalid_base64_signature_value(_Config) ->
+    InvalidBase64Path = signerl_utils:file_path("test/examples/books_signature_invalid_base64.xml"),
+
+    CertPath = signerl_cert_helpers:signer_rsa_cert_path(),
+    PublicKey = test_helpers:rsa_public_key_from_cert(CertPath),
+
+    ?assertEqual({error, invalid_signature}, signerl:verify(InvalidBase64Path, sha256, PublicKey)).
+
+verify_returns_error_with_self_closing_signature_value(_Config) ->
+    SelfClosingValuePath = signerl_utils:file_path(
+        "test/examples/books_signature_self_closing_value.xml"
+    ),
+
+    CertPath = signerl_cert_helpers:signer_rsa_cert_path(),
+    PublicKey = test_helpers:rsa_public_key_from_cert(CertPath),
+
+    ?assertEqual(
+        {error, invalid_signature}, signerl:verify(SelfClosingValuePath, sha256, PublicKey)
+    ).
+
+verify_returns_false_with_wrong_signature_value(_Config) ->
+    SignedPath = signerl_utils:file_path("test/examples/books_signature_wrong_value.xml"),
+
+    CertPath = signerl_cert_helpers:signer_rsa_cert_path(),
+    PublicKey = test_helpers:rsa_public_key_from_cert(CertPath),
+
+    ?assertEqual(false, signerl:verify(SignedPath, sha256, PublicKey)).
 
 verify_fails_on_modified_message(_Config) ->
     MessagePath = signerl_utils:file_path("test/examples/books.xml"),
@@ -230,12 +309,12 @@ verify_fails_on_modified_message(_Config) ->
     CertPath = signerl_cert_helpers:signer_rsa_cert_path(),
     PublicKey = test_helpers:rsa_public_key_from_cert(CertPath),
 
-    Digest = signerl:sign(RawMessage, sha256, Key),
+    SignedMessage = signerl:sign(RawMessage, sha256, Key),
     % Change actual content to avoid being normalized away by XML parsing.
-    Modified = binary:replace(RawMessage, <<"Gatsby">>, <<"Gatzby">>, []),
-    ?assertEqual(false, signerl:verify(Modified, sha256, Digest, PublicKey)).
+    Modified = binary:replace(SignedMessage, <<"Gatsby">>, <<"Gatzby">>, []),
+    ?assertEqual(false, signerl:verify(Modified, sha256, PublicKey)).
 
-verify_fails_with_wrong_key(_Config) ->
+verify_fails_with_wrong_keys(_Config) ->
     MessagePath = signerl_utils:file_path("test/examples/books.xml"),
     {ok, RawMessage} = file:read_file(MessagePath),
 
@@ -243,16 +322,9 @@ verify_fails_with_wrong_key(_Config) ->
     WrongCertPath = signerl_cert_helpers:leaf_cert_path(),
     WrongPublicKey = test_helpers:rsa_public_key_from_cert(WrongCertPath),
 
-    Digest = signerl:sign(RawMessage, sha256, SignKey),
-    ?assertEqual(false, signerl:verify(RawMessage, sha256, Digest, WrongPublicKey)).
-
-verify_fails_with_wrong_ecdsa_key(_Config) ->
-    MessagePath = signerl_utils:file_path("test/examples/books.xml"),
-    {ok, RawMessage} = file:read_file(MessagePath),
-
-    SignKey = signerl_cert_helpers:signer_ecdsa_key(),
-    WrongCertPath = signerl_cert_helpers:leaf_cert_path(),
-    WrongPublicKey = test_helpers:rsa_public_key_from_cert(WrongCertPath),
-
-    Digest = signerl:sign(RawMessage, sha256, SignKey),
-    ?assertEqual(false, signerl:verify(RawMessage, sha256, Digest, WrongPublicKey)).
+    RsaSignedMessage = signerl:sign(RawMessage, sha256, SignKey),
+    ?assertEqual(false, signerl:verify(RsaSignedMessage, sha256, WrongPublicKey)),
+    EcdsaKey = signerl_cert_helpers:signer_ecdsa_key(),
+    EcdsaSignedMessage = signerl:sign(RawMessage, sha256, EcdsaKey),
+    % Wrong key type (RSA key against ECDSA signature) must fail verification.
+    ?assertEqual(false, signerl:verify(EcdsaSignedMessage, sha256, WrongPublicKey)).

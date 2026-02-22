@@ -5,18 +5,21 @@ from each one.
 
 ## Test Suite: `signerl_SUITE.erl`
 
-- `add_signature_element/1`
-  Why: Validates that a signature placeholder element can be inserted into the
-  XML tree. This is a base capability for later XML-DSig work.
-  Learn: The XML helper functions handle element insertion as expected.
+- `add_signature_element_inserts_signature_value/1`
+  Why: Validates signature insertion on the XML tree.
+  Learn: Signature bytes are stored as base64 under `ds:SignatureValue`.
+
+- `add_signature_element_extracts_signature_value/1`
+  Why: Validates extraction after insertion.
+  Learn: Extractor returns original signature bytes and unsigned message.
+
+- `add_signature_element_extract_binary_and_rejects_empty/1`
+  Why: Validates edge cases for `ds:SignatureValue` content shape.
+  Learn: Binary values decode successfully while empty values are rejected.
 
 - `sign/1`
   Why: Basic sign/verify loop using an explicitly loaded private key.
-  Learn: The core sign/verify APIs work correctly with in-memory keys.
-
-- `sign_from_file/1`
-  Why: Sign and verify while loading both XML and key from files.
-  Learn: File-based flows (common in real usage) behave correctly.
+  Learn: `sign/3` returns signed XML and `verify/3` consumes it correctly for both binary and file-based inputs.
 
 - `sign_with_chain_leaf_rsa/1`
   Why: Sign using the leaf RSA key from a certificate chain and verify with the
@@ -34,20 +37,40 @@ from each one.
   Learn: Non-RSA keys work with the same sign/verify APIs.
 
 - `sign_deterministic/1`
-  Why: Signs the same XML twice with the same RSA key and compares signatures.
-  Learn: The signing flow is deterministic (important for repeatable tests).
+  Why: Signs the same XML twice with the same RSA key and compares outputs.
+  Learn: The signed XML output is deterministic (important for repeatable tests).
+
+- `verify_returns_error_without_signature_element/1`
+  Why: Verify should reject invalid signature structure.
+  Learn: Missing and duplicated `ds:Signature` are mapped to `{error, invalid_signature}`.
+
+- `verify_returns_error_without_signature_value/1`
+  Why: Verify should reject signatures without `ds:SignatureValue`.
+  Learn: Missing signature value maps to `{error, invalid_signature}`.
+
+- `verify_returns_error_with_empty_signature_value/1`
+  Why: Verify should reject empty signature values.
+  Learn: Empty signature value maps to `{error, invalid_signature}`.
+
+- `verify_returns_error_with_invalid_base64_signature_value/1`
+  Why: Verify should reject non-base64 signature values.
+  Learn: Invalid base64 maps to `{error, invalid_signature}`.
+
+- `verify_returns_error_with_self_closing_signature_value/1`
+  Why: Verify should reject self-closing `ds:SignatureValue`.
+  Learn: Self-closing value maps to `{error, invalid_signature}`.
+
+- `verify_returns_false_with_wrong_signature_value/1`
+  Why: Verify should return `false` for present-but-wrong signature bytes.
+  Learn: Cryptographic mismatch is distinct from malformed signature structure.
 
 - `verify_fails_on_modified_message/1`
   Why: Verify fails when the signed XML is modified.
   Learn: Signatures are bound to the exact message content.
 
-- `verify_fails_with_wrong_key/1`
-  Why: Verify fails when using a different RSA key than the signer’s key.
-  Learn: Verification is correctly tied to the signer’s public key.
-
-- `verify_fails_with_wrong_ecdsa_key/1`
-  Why: Verify fails when an ECDSA signature is checked with an RSA public key.
-  Learn: Algorithm/key mismatches are rejected by verification.
+- `verify_fails_with_wrong_keys/1`
+  Why: Verify fails with both wrong RSA public key and wrong key type for ECDSA signatures.
+  Learn: Verification is correctly tied to both key identity and key algorithm compatibility.
 
 ## Helpers: `test_helpers.erl`
 
@@ -60,4 +83,3 @@ These are not tests, but they are used by the suite:
 - `ecdsa_public_key_from_cert/1`
   Why: Extracts the EC public key and curve parameters from a certificate.
   Learn: How ECDSA public keys are represented in OTP records.
-

@@ -10,7 +10,8 @@
     to_file/2
 ]).
 
--type simplified_xml() :: {atom(), [{atom(), string() | number()}], [simplified_xml()]}.
+-type simplified_xml_item() :: simplified_xml() | string().
+-type simplified_xml() :: {atom(), [{atom(), string() | number()}], [simplified_xml_item()]}.
 -export_type([simplified_xml/0]).
 
 -spec parse_file(FileName) -> SimplifiedXml when
