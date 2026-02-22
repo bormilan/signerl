@@ -5,7 +5,7 @@ set -euo pipefail
 # Output directory is priv/certs under the project root.
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-ROOT_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
+ROOT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 OUT_DIR="$ROOT_DIR/priv/certs"
 mkdir -p "$OUT_DIR"
 cd "$OUT_DIR"

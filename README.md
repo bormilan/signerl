@@ -42,6 +42,22 @@ Run tests with rebar3:
 rebar3 test
 ```
 
+Run local Linux OTP matrix checks in Docker (OTP 26 and 27):
+
+```bash
+make ci-local
+```
+
+Optional: run only one OTP version:
+
+```bash
+./scripts/ci_local_docker.sh --otp 27
+```
+
+Notes:
+- This workflow is Linux-OTP parity only; it does not emulate Windows CI.
+- Docker named volumes are used for `_build` and rebar3 cache to speed up repeated runs.
+
 ## Test Certificates
 
 Generate test-only keys and certificates:

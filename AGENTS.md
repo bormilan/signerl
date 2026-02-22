@@ -22,6 +22,7 @@ Applies to the entire repository unless a nested `AGENTS.md` overrides it.
 - Run `rebar3 as test cover` and keep total coverage at `100%`.
 - Run `rebar3 flint` after task implementation is complete (final quality gate).
 - Run `rebar3 dialyzer` after task implementation is complete (final quality gate).
+- Run `make ci-local` once before commit/push to validate Linux OTP matrix checks (`test` + `lint` + `dialyzer`) in Docker.
 - If coverage drops below `100%`, add or update tests until it is restored and document the result.
 - If `rebar3 flint` reports issues, fix them and rerun until clean; if any issue is intentionally deferred, document the reason explicitly.
 - If `rebar3 dialyzer` reports issues, fix them and rerun until clean; if any issue is intentionally deferred, document the reason explicitly.
