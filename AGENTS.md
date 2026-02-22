@@ -11,6 +11,7 @@ Applies to the entire repository unless a nested `AGENTS.md` overrides it.
 - Prefer `rg` for file/text search.
 - Keep Erlang functions focused and avoid unnecessary nesting.
 - Preserve existing module/function naming patterns unless there is a strong reason to change.
+- When switching to a new branch with local uncommitted changes, stash first (`git stash -u`), switch branch, then restore (`git stash pop`) to avoid carrying accidental branch state.
 - Put static/long constants (for example validation regex patterns) into named macros in a shared `.hrl` file instead of inline literals.
 - Do not manually edit generated artifacts under `_build/`.
 - Keep docs in sync when public behavior changes.

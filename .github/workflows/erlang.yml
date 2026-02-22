@@ -48,3 +48,7 @@ jobs:
         run: scripts/gen_certs.sh
       - name: Run test
         run: rebar3 test
+      - name: Run lint
+        run: rebar3 lint
+      - name: Run dialyzer
+        run: rebar3 dialyzer
