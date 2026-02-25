@@ -9,9 +9,9 @@
 - Cover valid prolog preservation and missing prolog error path.
 
 ### Changes Made
-- `test/examples/books_custom_prolog.xml`: added fixture with valid non-static prolog (`standalone="yes"`).
-- `test/examples/books_no_prolog.xml`: added fixture with no XML prolog.
-- `test/examples/books_invalid_prolog.xml`: added fixture with malformed XML declaration (`versoin` typo).
+- `test/examples/prolog/books_custom_prolog.xml`: added fixture with valid non-static prolog (`standalone="yes"`).
+- `test/examples/prolog/books_no_prolog.xml`: added fixture with no XML prolog.
+- `test/examples/prolog/books_invalid_prolog.xml`: added fixture with malformed XML declaration (`versoin` typo).
 - `test/signerl_SUITE.erl`: added and registered six new test cases:
   - `sign_uses_input_prolog_binary/1`
   - `sign_uses_input_prolog_file/1`
@@ -125,7 +125,7 @@
 
 ## Final Outcome
 - Summary: static prolog usage was removed, prolog is now parsed from input for both `sign/3` and `verify/4`, and missing/invalid prolog consistently returns `{error, invalid_prolog}`. Parser and integration tests now cover both positive and negative paths across binary and filepath inputs.
-- Files touched: `src/signerl.erl`, `src/signerl_utils.erl`, `src/signerl_xml.erl`, `test/signerl_SUITE.erl`, `test/signerl_xml_test.erl`, `test/examples/books_custom_prolog.xml`, `test/examples/books_no_prolog.xml`, `test/examples/books_invalid_prolog.xml`, `README.md`, `docs/tasks/parse_prolog_from_message.md`, `docs/implementations/parse_prolog_from_message.md`
+- Files touched: `src/signerl.erl`, `src/signerl_utils.erl`, `src/signerl_xml.erl`, `test/signerl_SUITE.erl`, `test/signerl_xml_test.erl`, `test/examples/prolog/books_custom_prolog.xml`, `test/examples/prolog/books_no_prolog.xml`, `test/examples/prolog/books_invalid_prolog.xml`, `README.md`, `docs/tasks/parse_prolog_from_message.md`, `docs/implementations/parse_prolog_from_message.md`
 - Acceptance criteria status:
   - [x] Static prolog removed
   - [x] Valid input prolog preserved in output

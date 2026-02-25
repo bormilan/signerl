@@ -4,6 +4,10 @@
         <title>The Great Gatsby</title>
     </book>
     <ds:Signature>
-        <ds:SignatureValue></ds:SignatureValue>
+        <ds:SignatureValue>AQID</ds:SignatureValue>
+        <ds:Object>
+            <xades:QualifyingProperties>
+            </xades:QualifyingProperties>
+        </ds:Object>
     </ds:Signature>
 </library>

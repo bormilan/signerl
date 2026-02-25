@@ -6,6 +6,8 @@
     parse_binary/1,
     parse_prolog/1,
     add_new_element/2,
+    find_path/2,
+    single_text/1,
     export/2,
     to_file/2
 ]).
@@ -81,3 +83,36 @@ to_file(FileName, XmlBinary) ->
     Xml :: simplified_xml().
 add_new_element(NewElement, {Tag, Attrs, Content}) ->
     {Tag, Attrs, Content ++ [NewElement]}.
+
+-spec find_path(Path, Xml) -> Result when
+    Path :: [atom(), ...],
+    Xml :: simplified_xml(),
+    Result :: {ok, simplified_xml()} | error.
+find_path([Tag], Xml) ->
+    find_unique_child(Tag, Xml);
+find_path([Tag | Rest], Xml) ->
+    case find_unique_child(Tag, Xml) of
+        {ok, Child} ->
+            find_path(Rest, Child);
+        error ->
+            error
+    end.
+
+-spec single_text(Xml) -> Result when
+    Xml :: simplified_xml(),
+    Result :: {ok, binary()} | error.
+single_text({_, _, [Text]}) when is_binary(Text) ->
+    {ok, Text};
+single_text({_, _, [Text]}) when is_list(Text) ->
+    {ok, list_to_binary(Text)};
+single_text(_) ->
+    error.
+
+find_unique_child(Tag, {_, _, Content}) ->
+    Children = [Element || Element = {TagValue, _, _} <- Content, TagValue =:= Tag],
+    case Children of
+        [Child] ->
+            {ok, Child};
+        _ ->
+            error
+    end.

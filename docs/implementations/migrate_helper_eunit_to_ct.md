@@ -17,8 +17,8 @@
     - binary-form signature value decoding path
 
 - Added minimal malformed-signature fixtures used by suite behavior tests:
-  - `test/examples/books_signature_invalid_base64.xml`
-  - `test/examples/books_signature_self_closing_value.xml`
+  - `test/examples/signed_properties/books_signature_invalid_base64.xml`
+  - `test/examples/signed_properties/books_signature_self_closing_value.xml`
 
 - Simplified utils module to remove dead helper no longer used by public flows:
   - `src/signerl_utils.erl`: removed `signable_message/1` export and implementation
