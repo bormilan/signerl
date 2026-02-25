@@ -45,7 +45,7 @@ verify(SignedMessage, Hash, Key) ->
     maybe
         {ok, Prolog} ?= signerl_xml:parse_prolog(SignedMessage),
         ParsedMessage = signerl_xml:parse_binary(SignedMessage),
-        {ok, SignatureBytes, UnsignedMessage} ?= signerl_signature:extract_signature(ParsedMessage),
+        {ok, SignatureBytes, UnsignedMessage} ?= signerl_verify:extract_signature(ParsedMessage),
         MessageWithoutSignature = signerl_xml:export(Prolog, UnsignedMessage),
         public_key:verify(MessageWithoutSignature, Hash, SignatureBytes, Key)
     else
