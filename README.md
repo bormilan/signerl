@@ -26,13 +26,17 @@ end.
 true = signerl:verify(SignedMessage, sha256, PublicKey).
 ```
 
-`sign/3` returns signed XML with `<ds:Signature><ds:SignatureValue>...</ds:SignatureValue></ds:Signature>`.
+`sign/3` returns signed XML with:
+- `<ds:SignatureValue>` containing base64 signature bytes
+- `<ds:Object>/<xades:QualifyingProperties>/<xades:SignedProperties>/<xades:SignedSignatureProperties>/<xades:SigningTime>`
+
+`SigningTime` is currently strict UTC in `YYYY-MM-DDThh:mm:ssZ` format.
 
 `verify/3` expects a signed XML message. It returns:
 - `true` when signature verification succeeds
 - `false` when signature bytes are present but do not match message/key
 - `{error, invalid_prolog}` when XML prolog is missing/invalid
-- `{error, invalid_signature}` when signature structure is missing or malformed
+- `{error, invalid_signature}` when signature structure/properties are missing or malformed
 
 ## Tests
 
@@ -42,7 +46,7 @@ Run tests with rebar3:
 rebar3 test
 ```
 
-Run local Linux OTP matrix checks in Docker (OTP 26 and 27):
+Run local Linux OTP matrix checks in Docker (OTP 26, 27, and 28):
 
 ```bash
 make ci-local

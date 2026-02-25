@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<library id="112233">
+    <book id="1" genre="Fiction" available="true">
+        <title>The Great Gatsby</title>
+    </book>
+    <ds:Signature>
+        <ds:SignatureValue></ds:SignatureValue>
+        <ds:Object>
+        <xades:QualifyingProperties>
+            <xades:SignedProperties>
+            <xades:SignedSignatureProperties>
+                <xades:SigningTime>2026-01-01T00:00:00Z</xades:SigningTime>
+            </xades:SignedSignatureProperties>
+        </xades:SignedProperties>
+        </xades:QualifyingProperties>
+    </ds:Object>
+    </ds:Signature>
+</library>

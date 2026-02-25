@@ -9,6 +9,10 @@ from each one.
   Why: Validates signature insertion on the XML tree.
   Learn: Signature bytes are stored as base64 under `ds:SignatureValue`.
 
+- `add_signature_element_inserts_signed_properties/1`
+  Why: Validates that signing metadata is present in signature XML.
+  Learn: Signed output includes `ds:Object/xades:QualifyingProperties/xades:SignedProperties` with `xades:SigningTime`.
+
 - `add_signature_element_extracts_signature_value/1`
   Why: Validates extraction after insertion.
   Learn: Extractor returns original signature bytes and unsigned message.
@@ -60,6 +64,34 @@ from each one.
   Why: Verify should reject self-closing `ds:SignatureValue`.
   Learn: Self-closing value maps to `{error, invalid_signature}`.
 
+- `verify_returns_error_without_signed_properties/1`
+  Why: Signed-properties are mandatory in current profile.
+  Learn: Missing `xades:SignedProperties` maps to `{error, invalid_signature}`.
+
+- `verify_returns_error_without_object/1`
+  Why: XAdES properties wrapper object is required.
+  Learn: Missing `ds:Object` maps to `{error, invalid_signature}`.
+
+- `verify_returns_error_without_qualifying_properties/1`
+  Why: Qualifying-properties wrapper is required.
+  Learn: Missing `xades:QualifyingProperties` maps to `{error, invalid_signature}`.
+
+- `verify_returns_error_without_signed_signature_properties/1`
+  Why: Nested signed-signature-properties container is required.
+  Learn: Missing `xades:SignedSignatureProperties` maps to `{error, invalid_signature}`.
+
+- `verify_returns_error_without_signing_time/1`
+  Why: Signing time must be present.
+  Learn: Missing `xades:SigningTime` maps to `{error, invalid_signature}`.
+
+- `verify_returns_error_with_invalid_signing_time/1`
+  Why: Signing time format must be strict UTC.
+  Learn: Invalid timestamp format maps to `{error, invalid_signature}`.
+
+- `verify_returns_error_with_self_closing_signing_time/1`
+  Why: Self-closing signing-time element is malformed.
+  Learn: Self-closing `xades:SigningTime` maps to `{error, invalid_signature}`.
+
 - `verify_returns_false_with_wrong_signature_value/1`
   Why: Verify should return `false` for present-but-wrong signature bytes.
   Learn: Cryptographic mismatch is distinct from malformed signature structure.
@@ -68,9 +100,31 @@ from each one.
   Why: Verify fails when the signed XML is modified.
   Learn: Signatures are bound to the exact message content.
 
+- `verify_fails_on_modified_signing_time/1`
+  Why: Verify fails when `xades:SigningTime` is changed.
+  Learn: Signed-properties are cryptographically bound to the signature payload.
+
 - `verify_fails_with_wrong_keys/1`
   Why: Verify fails with both wrong RSA public key and wrong key type for ECDSA signatures.
   Learn: Verification is correctly tied to both key identity and key algorithm compatibility.
+
+## Test Suite: `signerl_signed_properties_SUITE.erl`
+
+- `extract_accepts_optional_signed_signature_properties/1`
+  Why: Validates the dedicated signed-properties module accepts optional known XAdES properties.
+  Learn: Known optional signed-signature properties are parsed into the properties map and preserved.
+
+- `extract_ignores_unknown_signed_signature_properties/1`
+  Why: Validates forward-compatible behavior for unknown properties.
+  Learn: Unknown signed-signature properties are ignored rather than causing verification failure.
+
+- `extract_returns_error_with_duplicate_signing_time_property/1`
+  Why: Ensures required known properties are unique.
+  Learn: Duplicate `xades:SigningTime` is treated as invalid.
+
+- `extract_returns_error_without_signing_time/1`
+  Why: Confirms required-property enforcement in the dedicated module.
+  Learn: Missing `xades:SigningTime` returns `error`.
 
 ## Helpers: `test_helpers.erl`
 

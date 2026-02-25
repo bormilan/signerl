@@ -44,3 +44,4 @@ Applies to the entire repository unless a nested `AGENTS.md` overrides it.
 
 ## Skills
 - `xml-debugger`: `.codex/skills/xml-debugger/SKILL.md`
+- `ferike`: `.codex/skills/ferike/SKILL.md`

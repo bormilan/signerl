@@ -3,7 +3,7 @@
 -include_lib("eunit/include/eunit.hrl").
 
 parse_test() ->
-    Path = "test/examples/books.xml",
+    Path = "test/examples/base/books.xml",
     {library, [{id, "112233"}], [
         {book, _, _},
         {book, _, _},
@@ -13,8 +13,8 @@ parse_test() ->
     ).
 
 add_new_test() ->
-    Path = "test/examples/books.xml",
-    ExpectedPath = "test/examples/books_with_new.xml",
+    Path = "test/examples/base/books.xml",
+    ExpectedPath = "test/examples/xml/books_with_new.xml",
 
     Root = signerl_xml:parse_file(Path),
     Expected = signerl_xml:parse_file(ExpectedPath),
@@ -28,8 +28,8 @@ add_new_test() ->
     ).
 
 export_test() ->
-    Path = "test/examples/books.xml",
-    PathTo = "test/examples/books_export_test.xml",
+    Path = "test/examples/base/books.xml",
+    PathTo = "test/examples/xml/books_export_test.xml",
     Root = signerl_xml:parse_file(Path),
     Prolog = ["<?xml version=\"1.0\" encoding=\"UTF-8\"?>"],
     Binary = signerl_xml:export(Prolog, Root),
@@ -72,6 +72,55 @@ parse_prolog_only_extracts_declaration_test() ->
     Message = <<"<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<root><child>1</child></root>">>,
     {ok, [Prolog]} = signerl_xml:parse_prolog(Message),
     ?assertEqual("<?xml version=\"1.0\" encoding=\"UTF-8\"?>", Prolog).
+
+find_path_success_test() ->
+    Root = {
+        'ds:Signature',
+        [],
+        [
+            {'ds:Object', [], [
+                {'xades:QualifyingProperties', [], [
+                    {'xades:SignedProperties', [], [
+                        {'xades:SignedSignatureProperties', [], [
+                            {'xades:SigningTime', [], ["2026-01-01T00:00:00Z"]}
+                        ]}
+                    ]}
+                ]}
+            ]}
+        ]
+    },
+    ?assertMatch(
+        {ok, {'xades:SigningTime', _, _}},
+        signerl_xml:find_path(
+            [
+                'ds:Object',
+                'xades:QualifyingProperties',
+                'xades:SignedProperties',
+                'xades:SignedSignatureProperties',
+                'xades:SigningTime'
+            ],
+            Root
+        )
+    ).
+
+find_path_errors_on_missing_or_ambiguous_nodes_test() ->
+    MissingRoot = {'ds:Signature', [], []},
+    ?assertEqual(error, signerl_xml:find_path(['ds:Object'], MissingRoot)),
+    AmbiguousRoot = {
+        'ds:Signature',
+        [],
+        [
+            {'ds:Object', [], []},
+            {'ds:Object', [], []}
+        ]
+    },
+    ?assertEqual(error, signerl_xml:find_path(['ds:Object'], AmbiguousRoot)).
+
+single_text_handles_binary_list_and_invalid_shapes_test() ->
+    ?assertEqual({ok, <<"abc">>}, signerl_xml:single_text({tag, [], [<<"abc">>]})),
+    ?assertEqual({ok, <<"abc">>}, signerl_xml:single_text({tag, [], ["abc"]})),
+    ?assertEqual(error, signerl_xml:single_text({tag, [], []})),
+    ?assertEqual(error, signerl_xml:single_text({tag, [], ["a", "b"]})).
 
 %% Utils
 

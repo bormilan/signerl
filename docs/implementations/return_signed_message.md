@@ -39,9 +39,9 @@
   - kept coverage for modified-message and wrong-key verification failures
 
 - Added fixtures:
-  - `test/examples/books_signature_no_value.xml`
-  - `test/examples/books_signature_empty_value.xml`
-  - `test/examples/books_signature_wrong_value.xml`
+  - `test/examples/signed_properties/books_signature_no_value.xml`
+  - `test/examples/signed_properties/books_signature_empty_value.xml`
+  - `test/examples/signed_properties/books_signature_wrong_value.xml`
 
 - Documentation:
   - `README.md` updated for new `sign/3` + `verify/3` contract and return behavior

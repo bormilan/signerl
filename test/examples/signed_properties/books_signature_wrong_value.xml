@@ -5,5 +5,14 @@
     </book>
     <ds:Signature>
         <ds:SignatureValue>AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==</ds:SignatureValue>
+        <ds:Object>
+        <xades:QualifyingProperties>
+            <xades:SignedProperties>
+            <xades:SignedSignatureProperties>
+                <xades:SigningTime>2026-01-01T00:00:00Z</xades:SigningTime>
+            </xades:SignedSignatureProperties>
+        </xades:SignedProperties>
+        </xades:QualifyingProperties>
+    </ds:Object>
     </ds:Signature>
 </library>

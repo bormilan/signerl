@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<library id="112233">
+    <book id="1" genre="Fiction" available="true">
+        <title>The Great Gatsby</title>
+        <author>F. Scott Fitzgerald</author>
+        <year>1925</year>
+        <description>A portrait of the Roaring Twenties and a critique of the American Dream.</description>
+    </book>
+    <ds:Signature>
+        <ds:SignatureValue>BASE64_SIGNATURE_VALUE_PLACEHOLDER</ds:SignatureValue>
+        <ds:Object>
+            <xades:QualifyingProperties>
+                <xades:SignedProperties>
+                    <xades:SignedSignatureProperties>
+                        <xades:SigningTime>2026-02-25T12:34:56Z</xades:SigningTime>
+                    </xades:SignedSignatureProperties>
+                </xades:SignedProperties>
+            </xades:QualifyingProperties>
+        </ds:Object>
+    </ds:Signature>
+</library>
