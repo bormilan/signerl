@@ -113,7 +113,7 @@ add_signature_element_extracts_signature_value(_Config) ->
     Message = signerl_xml:parse_file("test/examples/books.xml"),
     SignatureBytes = <<1, 2, 3>>,
     SignedMessage = signerl_signature:add_signature_element(Message, SignatureBytes),
-    ?assertEqual({ok, SignatureBytes, Message}, signerl_signature:extract_signature(SignedMessage)),
+    ?assertEqual({ok, SignatureBytes, Message}, signerl_verify:extract_signature(SignedMessage)),
     ok.
 
 add_signature_element_extract_binary_and_rejects_empty(_Config) ->
@@ -127,7 +127,7 @@ add_signature_element_extract_binary_and_rejects_empty(_Config) ->
     },
     ?assertEqual(
         {ok, SignatureBytes, Message},
-        signerl_signature:extract_signature(BinarySignatureValueMessage)
+        signerl_verify:extract_signature(BinarySignatureValueMessage)
     ),
     EmptyStringSignatureValueMessage = {
         Tag,
@@ -136,7 +136,7 @@ add_signature_element_extract_binary_and_rejects_empty(_Config) ->
     },
     ?assertEqual(
         {error, invalid_signature},
-        signerl_signature:extract_signature(EmptyStringSignatureValueMessage)
+        signerl_verify:extract_signature(EmptyStringSignatureValueMessage)
     ),
     ok.
 
