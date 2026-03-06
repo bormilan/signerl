@@ -3,8 +3,6 @@
 
 -export([sign/3, verify/3]).
 
--define(DEFAULT_SIGNING_TIME, <<"2026-01-01T00:00:00Z">>).
-
 sign(Message, Hash, FilePath) when is_list(FilePath) ->
     sign(
         Message,
@@ -21,13 +19,10 @@ sign(FilePath, Hash, Key) when is_list(FilePath) ->
 sign(Message, Hash, Key) ->
     maybe
         {ok, Prolog} ?= signerl_xml:parse_prolog(Message),
-        ParsedMessage = signerl_xml:parse_binary(Message),
-        SignableMessage = signerl_xml:export(Prolog, ParsedMessage),
-        SigningTime = ?DEFAULT_SIGNING_TIME,
-        SignablePayload = signed_payload(SignableMessage, SigningTime),
-        SignatureBytes = public_key:sign(SignablePayload, Hash, Key),
-        SignedMessage =
-            signerl_signature:add_signature_element(ParsedMessage, SignatureBytes, SigningTime),
+        {ok, ParsedMessage} ?= signerl_xml:parse_binary(Message),
+        {ok, SignatureElement} ?=
+            signerl_signature:build_signature_element(ParsedMessage, Hash, Key),
+        SignedMessage = signerl_xml:add_new_element(SignatureElement, ParsedMessage),
         signerl_xml:export(Prolog, SignedMessage)
     else
         {error, Reason} ->
@@ -48,18 +43,16 @@ verify(FilePath, Hash, Key) when is_list(FilePath) ->
     );
 verify(SignedMessage, Hash, Key) ->
     maybe
-        {ok, Prolog} ?= signerl_xml:parse_prolog(SignedMessage),
-        ParsedMessage = signerl_xml:parse_binary(SignedMessage),
-        {ok, SignatureBytes, UnsignedMessage, SignedProperties} ?=
-            signerl_verify:extract_signature(ParsedMessage),
-        SigningTime = maps:get(signing_time, SignedProperties),
-        MessageWithoutSignature = signerl_xml:export(Prolog, UnsignedMessage),
-        SignablePayload = signed_payload(MessageWithoutSignature, SigningTime),
-        public_key:verify(SignablePayload, Hash, SignatureBytes, Key)
+        {ok, ParsedMessage} ?= signerl_xml:parse_binary(SignedMessage),
+        {ok, SignatureData} ?= signerl_verify:extract_signature_data(ParsedMessage),
+        {ok, SignatureBytes} ?= maps:find(signature_bytes, SignatureData),
+        {ok, SignedInfoElement} ?= maps:find(signed_info_element, SignatureData),
+        true ?= signerl_verify:verify_reference_digests(SignatureData, Hash),
+        SignedInfoBytes = signerl_xml:export_fragment(SignedInfoElement),
+        public_key:verify(SignedInfoBytes, Hash, SignatureBytes, Key)
     else
+        false ->
+            false;
         {error, Reason} ->
             {error, Reason}
     end.
-
-signed_payload(MessageWithoutSignature, SigningTime) ->
-    <<MessageWithoutSignature/binary, "\n", SigningTime/binary>>.
