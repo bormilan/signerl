@@ -8,6 +8,7 @@
     add_new_element/2,
     find_path/2,
     single_text/1,
+    export_fragment/1,
     export/2,
     to_file/2
 ]).
@@ -23,12 +24,17 @@ parse_file(FileName) ->
     {Element, _} = xmerl_scan:file(FileName, [{space, normalize}]),
     simplifie_xml_element(Element).
 
--spec parse_binary(Message) -> SimplifiedXml when
+-spec parse_binary(Message) -> Result when
     Message :: binary(),
-    SimplifiedXml :: simplified_xml().
+    Result :: {ok, simplified_xml()} | {error, invalid_signature}.
 parse_binary(Message) ->
-    {Element, _} = xmerl_scan:string(binary_to_list(Message)),
-    simplifie_xml_element(Element).
+    try
+        {Element, _} = xmerl_scan:string(binary_to_list(Message)),
+        {ok, simplifie_xml_element(Element)}
+    catch
+        _:_ ->
+            {error, invalid_signature}
+    end.
 
 -spec parse_prolog(Message) -> Result when
     Message :: binary(),
@@ -69,6 +75,13 @@ valid_prolog(PrologBin) ->
 export(Prolog, XmlTerm) ->
     Exported = xmerl:export([xmerl_lib:normalize_element(XmlTerm)], xmerl_xml, [{prolog, Prolog}]),
     list_to_binary(Exported ++ "\n").
+
+-spec export_fragment(XmlTerm) -> Result when
+    XmlTerm :: simplified_xml(),
+    Result :: binary().
+export_fragment(XmlTerm) ->
+    Exported = xmerl:export([xmerl_lib:normalize_element(XmlTerm)], xmerl_xml),
+    list_to_binary(Exported).
 
 -spec to_file(FileName, XmlBinary) -> Result when
     FileName :: string(),

@@ -17,13 +17,17 @@ from each one.
   Why: Validates extraction after insertion.
   Learn: Extractor returns original signature bytes and unsigned message.
 
-- `add_signature_element_extract_binary_and_rejects_empty/1`
-  Why: Validates edge cases for `ds:SignatureValue` content shape.
-  Learn: Binary values decode successfully while empty values are rejected.
+- `build_signature_element_rsa_and_ecdsa/1`
+  Why: Validates SignedInfo-based signature element construction for both key types.
+  Learn: `build_signature_element/3` emits `ds:SignedInfo` for RSA and ECDSA keys.
+
+- `build_signature_element_returns_error_with_invalid_hash_or_key/1`
+  Why: Enforces current profile constraints at constructor level.
+  Learn: Unsupported hash/key inputs return `{error, invalid_signature}`.
 
 - `sign/1`
   Why: Basic sign/verify loop using an explicitly loaded private key.
-  Learn: `sign/3` returns signed XML and `verify/3` consumes it correctly for both binary and file-based inputs.
+  Learn: `sign/3` now emits `ds:SignedInfo` and `verify/3` validates reference digests before signature bytes.
 
 - `sign_with_chain_leaf_rsa/1`
   Why: Sign using the leaf RSA key from a certificate chain and verify with the
@@ -64,6 +68,10 @@ from each one.
   Why: Verify should reject self-closing `ds:SignatureValue`.
   Learn: Self-closing value maps to `{error, invalid_signature}`.
 
+- `verify_returns_error_with_non_text_signature_value_in_signedinfo/1`, `verify_returns_error_with_non_byte_list_signature_value_in_signedinfo/1`, `verify_returns_error_with_empty_binary_signature_value_in_signedinfo/1`
+  Why: SignedInfo-era extraction still validates malformed `ds:SignatureValue` payload shapes.
+  Learn: Non-text, invalid byte-list, and empty-binary signature values map to `{error, invalid_signature}`.
+
 - `verify_returns_error_without_signed_properties/1`
   Why: Signed-properties are mandatory in current profile.
   Learn: Missing `xades:SignedProperties` maps to `{error, invalid_signature}`.
@@ -79,6 +87,10 @@ from each one.
 - `verify_returns_error_without_signed_signature_properties/1`
   Why: Nested signed-signature-properties container is required.
   Learn: Missing `xades:SignedSignatureProperties` maps to `{error, invalid_signature}`.
+
+- `verify_returns_error_without_signed_info/1`
+  Why: SignedInfo is mandatory in current profile.
+  Learn: Missing `ds:SignedInfo` maps to `{error, invalid_signature}`.
 
 - `verify_returns_error_without_signing_time/1`
   Why: Signing time must be present.
@@ -108,6 +120,26 @@ from each one.
   Why: Verify fails with both wrong RSA public key and wrong key type for ECDSA signatures.
   Learn: Verification is correctly tied to both key identity and key algorithm compatibility.
 
+- `sign_returns_error_with_unsupported_hash/1`, `sign_returns_error_with_unsupported_key/1`, `verify_returns_error_with_unsupported_hash/1`
+  Why: Profile currently supports deterministic SHA-256 signing/verification only.
+  Learn: Unsupported hash/key combinations return `{error, invalid_signature}`.
+
+- `extract_signature_data_returns_error_with_missing_c14n/1`, `extract_signature_data_returns_error_with_missing_reference_uri/1`, `extract_signature_data_returns_error_with_invalid_reference_payload/1`
+  Why: `ds:SignedInfo` structure and reference nodes are required.
+  Learn: Malformed SignedInfo/reference layouts map to `{error, invalid_signature}`.
+
+- `verify_reference_digests_returns_error_with_missing_signed_properties_element/1`, `verify_reference_digests_returns_error_with_invalid_document_reference/1`, `verify_reference_digests_returns_error_with_invalid_signed_properties_reference/1`
+  Why: Reference metadata must match expected URI/type contract.
+  Learn: Invalid reference metadata is rejected before cryptographic verification.
+
+- `verify_reference_digests_returns_error_with_invalid_signature_data/1`
+  Why: Verifier must reject malformed signature-data maps defensively.
+  Learn: Non-conforming signature-data input returns `{error, invalid_signature}`.
+
+- `xades_xml_returns_error_with_non_signature_input/1`
+  Why: XAdES XML extractors should reject non-`ds:Signature` roots.
+  Learn: Non-signature input returns `{error, invalid_signature}` from both extractor helpers.
+
 ## Test Suite: `signerl_signed_properties_SUITE.erl`
 
 - `extract_accepts_optional_signed_signature_properties/1`
@@ -118,13 +150,17 @@ from each one.
   Why: Validates forward-compatible behavior for unknown properties.
   Learn: Unknown signed-signature properties are ignored rather than causing verification failure.
 
+- `extract_accepts_binary_signing_time/1`, `extract_returns_error_with_non_byte_list_signing_time/1`, `extract_returns_error_with_non_text_signing_time/1`
+  Why: Validates accepted and rejected SigningTime value representations.
+  Learn: Binary SigningTime is accepted; invalid list/non-text forms return `{error, invalid_signature}`.
+
 - `extract_returns_error_with_duplicate_signing_time_property/1`
   Why: Ensures required known properties are unique.
   Learn: Duplicate `xades:SigningTime` is treated as invalid.
 
 - `extract_returns_error_without_signing_time/1`
   Why: Confirms required-property enforcement in the dedicated module.
-  Learn: Missing `xades:SigningTime` returns `error`.
+  Learn: Missing `xades:SigningTime` returns `{error, invalid_signature}`.
 
 ## Helpers: `test_helpers.erl`
 

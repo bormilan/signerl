@@ -4,50 +4,36 @@
 
 -spec extract(SignatureElement) -> Result when
     SignatureElement :: {atom(), [{atom(), string() | number()}], [any()]},
-    Result :: {ok, map()} | error.
-extract({'ds:Signature', _, SignatureContent}) ->
-    SignatureElement = {'ds:Signature', [], SignatureContent},
-    decode_signed_properties(
-        signerl_xml:find_path(
-            [
-                'ds:Object',
-                'xades:QualifyingProperties',
-                'xades:SignedProperties',
-                'xades:SignedSignatureProperties'
-            ],
-            SignatureElement
-        )
-    ).
-
-decode_signed_properties({ok, {'xades:SignedSignatureProperties', _, Properties}}) ->
-    validate_signed_properties(Properties, #{});
-decode_signed_properties(error) ->
-    error.
+    Result :: {ok, map()} | {error, invalid_signature}.
+extract(SignatureElement) ->
+    case signerl_xades_xml:find_signed_signature_properties(SignatureElement) of
+        {ok, {'xades:SignedSignatureProperties', _, Properties}} ->
+            validate_signed_properties(Properties, #{});
+        {error, invalid_signature} ->
+            {error, invalid_signature}
+    end.
 
 validate_signed_properties([], SignedProperties) ->
     case maps:is_key(signing_time, SignedProperties) of
         true -> {ok, SignedProperties};
-        false -> error
+        false -> {error, invalid_signature}
     end;
 validate_signed_properties([Property | Rest], SignedProperties) ->
     case validate_signed_property(Property, SignedProperties) of
         {ok, UpdatedProperties} ->
             validate_signed_properties(Rest, UpdatedProperties);
-        error ->
-            error
+        {error, invalid_signature} ->
+            {error, invalid_signature}
     end.
 
 validate_signed_property(PropertyElement, SignedProperties) ->
-    validate_known_signed_property(PropertyElement, SignedProperties).
-
-validate_known_signed_property(PropertyElement, SignedProperties) ->
     case PropertyElement of
         {'xades:SigningTime', _, _} = SigningTimeElement ->
             case validate_signing_time(SigningTimeElement) of
                 {ok, SigningTime} ->
                     put_unique_property(signing_time, SigningTime, SignedProperties);
-                error ->
-                    error
+                {error, invalid_signature} ->
+                    {error, invalid_signature}
             end;
         {'xades:SigningCertificate', _, _} = SigningCertificateElement ->
             _ = validate_signing_certificate(SigningCertificateElement),
@@ -73,7 +59,7 @@ validate_known_signed_property(PropertyElement, SignedProperties) ->
 put_unique_property(Key, Value, Properties) ->
     case maps:is_key(Key, Properties) of
         true ->
-            error;
+            {error, invalid_signature};
         false ->
             {ok, maps:put(Key, Value, Properties)}
     end.
@@ -85,12 +71,12 @@ validate_signing_time({'xades:SigningTime', _, [SigningTime]}) when is_list(Sign
         true ->
             decode_signing_time_binary(list_to_binary(SigningTime));
         false ->
-            error
+            {error, invalid_signature}
     end;
 validate_signing_time({'xades:SigningTime', _, [_SigningTime]}) ->
-    error;
+    {error, invalid_signature};
 validate_signing_time({'xades:SigningTime', _, _}) ->
-    error.
+    {error, invalid_signature}.
 
 validate_signing_certificate({'xades:SigningCertificate', _, _}) ->
     ok.
@@ -110,5 +96,5 @@ validate_signer_role({'xades:SignerRole', _, _}) ->
 decode_signing_time_binary(SigningTime) when is_binary(SigningTime) ->
     case signerl_utils:valid_utc_timestamp(SigningTime) of
         true -> {ok, SigningTime};
-        false -> error
+        false -> {error, invalid_signature}
     end.
