@@ -1,0 +1,1 @@
+<root xmlns:b="http://b.example" xmlns:a="http://a.example"><a:elem b:attr="val" a:attr="val" plain="yes"/></root>

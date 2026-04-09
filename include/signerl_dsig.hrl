@@ -3,6 +3,9 @@
     "http://www.w3.org/2000/09/xmldsig#enveloped-signature"
 ).
 
+-define(DSIG_NAMESPACE_URI, "http://www.w3.org/2000/09/xmldsig#").
+-define(XADES_NAMESPACE_URI, "http://uri.etsi.org/01903/v1.3.2#").
+
 -define(DSIG_DIGEST_SHA1_URI, "http://www.w3.org/2000/09/xmldsig#sha1").
 -define(DSIG_DIGEST_SHA256_URI, "http://www.w3.org/2001/04/xmlenc#sha256").
 -define(DSIG_DIGEST_SHA384_URI, "http://www.w3.org/2001/04/xmldsig-more#sha384").

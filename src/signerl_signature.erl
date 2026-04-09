@@ -24,7 +24,7 @@ build_signature_element_with_method_uri(Message, Hash, Key, SignatureMethodUri) 
         construct_signature_without_value(
             Message, Hash, ?DSIG_DIGEST_SHA256_URI, SignatureMethodUri
         ),
-    SignedInfoBytes = signerl_xml:export_fragment(SignedInfo),
+    SignedInfoBytes = signerl_c14n:canonicalize(SignedInfo),
     SignatureBytes = public_key:sign(SignedInfoBytes, Hash, Key),
     SignatureValue = base64:encode(SignatureBytes),
     SignatureElement =
@@ -36,16 +36,21 @@ construct_signature_without_value(Message, Hash, DigestMethodUri, SignatureMetho
     SignedProperties = signed_properties(SigningTime),
     SignedInfo = signed_info(Message, SignedProperties, Hash, DigestMethodUri, SignatureMethodUri),
     SignatureElement =
-        {'ds:Signature', [{'Id', ?SIGNATURE_ID}], [
-            SignedInfo,
-            signature_object(SignedProperties)
-        ]},
+        {'ds:Signature',
+            [
+                {'xmlns:ds', ?DSIG_NAMESPACE_URI},
+                {'Id', ?SIGNATURE_ID}
+            ],
+            [
+                SignedInfo,
+                signature_object(SignedProperties)
+            ]},
     {ok, SignatureElement, SignedInfo}.
 
 signed_info(Message, SignedProperties, Hash, DigestMethodUri, SignatureMethodUri) ->
-    MessageDigest = signerl_dsig_utils:digest_base64(Hash, signerl_xml:export_fragment(Message)),
+    MessageDigest = signerl_dsig_utils:digest_base64(Hash, signerl_c14n:canonicalize(Message)),
     SignedPropertiesDigest =
-        signerl_dsig_utils:digest_base64(Hash, signerl_xml:export_fragment(SignedProperties)),
+        signerl_dsig_utils:digest_base64(Hash, signerl_c14n:canonicalize(SignedProperties)),
     DigestMethodElement = {'ds:DigestMethod', [{'Algorithm', DigestMethodUri}], []},
     MessageDigestElement = {'ds:DigestValue', [], [binary_to_list(MessageDigest)]},
     SignedPropertiesDigestElement =
@@ -87,9 +92,14 @@ add_signature_value({'ds:Signature', Attrs, Content}, SignatureValue) ->
 
 signature_object(SignedProperties) ->
     {'ds:Object', [], [
-        {'xades:QualifyingProperties', [{'Target', "#" ++ ?SIGNATURE_ID}], [
-            SignedProperties
-        ]}
+        {'xades:QualifyingProperties',
+            [
+                {'xmlns:xades', ?XADES_NAMESPACE_URI},
+                {'Target', "#" ++ ?SIGNATURE_ID}
+            ],
+            [
+                SignedProperties
+            ]}
     ]}.
 
 signed_properties(SigningTime) ->
