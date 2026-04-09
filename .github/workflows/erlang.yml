@@ -49,20 +49,6 @@ jobs:
         run: scripts/gen_certs.sh
       - name: Run test
         run: rebar3 test
-      - name: Debug cover (temporary)
-        if: failure()
-        run: |
-          erl -noshell -eval '
-            cover:start(),
-            cover:import("_build/test/cover/ct.coverdata"),
-            cover:import("_build/test/cover/eunit.coverdata"),
-            {ok, Lines} = cover:analyse(signerl_c14n, calls, line),
-            Total = length(Lines),
-            Covered = length([L || {_, C} = L <- Lines, C > 0]),
-            io:format("Total: ~p Covered: ~p~n", [Total, Covered]),
-            [io:format("UNCOVERED line ~p~n", [L]) || {{signerl_c14n, L}, C} <- Lines, C =:= 0],
-            halt().
-          '
       - name: Run lint
         run: rebar3 lint
       - name: Run dialyzer

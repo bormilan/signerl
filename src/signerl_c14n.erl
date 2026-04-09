@@ -26,7 +26,7 @@ canonicalize_element({Tag, Attrs, Children}, ParentNs) ->
     EmittedNsDecls = filter_visibly_used(NewNsDecls, VisiblyUsed, ParentNs),
     SortedNsDecls = sort_ns_decls(EmittedNsDecls),
     SortedAttrs = sort_attributes(RegularAttrs, CurrentNs),
-    [
+    Result = [
         "<",
         TagStr,
         render_ns_decls(SortedNsDecls),
@@ -36,7 +36,8 @@ canonicalize_element({Tag, Attrs, Children}, ParentNs) ->
         "</",
         TagStr,
         ">"
-    ].
+    ],
+    Result.
 
 %% --- Attribute partitioning ---
 
