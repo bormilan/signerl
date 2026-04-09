@@ -5,21 +5,21 @@
 -export([extract_signature_data/1, verify_reference_digests/2]).
 
 -spec extract_signature_data(Message) -> Result when
-    Message :: {atom(), [{atom(), string() | number()}], [any()]},
-    Result :: {ok, map()} | {error, invalid_signature}.
+    Message :: signerl_xml:simplified_xml(),
+    Result :: {ok, map()} | {error, atom()}.
 extract_signature_data({Tag, Attrs, Content}) ->
     {SignatureElements, UnsignedContent} = lists:partition(fun is_signature_element/1, Content),
     case SignatureElements of
         [SignatureElement] ->
             decode_signature_data(SignatureElement, {Tag, Attrs, UnsignedContent});
         _ ->
-            {error, invalid_signature}
+            {error, missing_signature}
     end.
 
 -spec verify_reference_digests(SignatureData, Hash) -> Result when
     SignatureData :: map(),
     Hash :: atom(),
-    Result :: true | false | {error, invalid_signature}.
+    Result :: true | false | {error, atom()}.
 verify_reference_digests(
     #{
         unsigned_message := UnsignedMessage,
@@ -60,10 +60,10 @@ verify_reference_digests(
         end
     else
         _ ->
-            {error, invalid_signature}
+            {error, invalid_signature_structure}
     end;
 verify_reference_digests(_, _) ->
-    {error, invalid_signature}.
+    {error, invalid_signature_structure}.
 
 decode_signature_data(SignatureElement, UnsignedMessage) ->
     maybe
@@ -79,9 +79,6 @@ decode_signature_data(SignatureElement, UnsignedMessage) ->
             signed_info_element => SignedInfoElement,
             references => References
         }}
-    else
-        _ ->
-            {error, invalid_signature}
     end.
 
 is_signature_element({'ds:Signature', _, _}) ->
@@ -95,16 +92,16 @@ signature_value({'ds:Signature', _, _} = SignatureElement) ->
 decode_signature_value({ok, {'ds:SignatureValue', _, [SignatureValue]}}) ->
     decode_base64_binary(SignatureValue);
 decode_signature_value({ok, {'ds:SignatureValue', _, _}}) ->
-    {error, invalid_signature};
-decode_signature_value(error) ->
-    {error, invalid_signature}.
+    {error, missing_signature_value};
+decode_signature_value({error, not_found}) ->
+    {error, missing_signature_value}.
 
 signed_info_element({'ds:Signature', _, _} = SignatureElement) ->
     case signerl_xml:find_path(['ds:SignedInfo'], SignatureElement) of
         {ok, {'ds:SignedInfo', _, _} = SignedInfoElement} ->
             {ok, SignedInfoElement};
         _ ->
-            {error, invalid_signature}
+            {error, missing_signed_info}
     end.
 
 signed_info_references({'ds:SignedInfo', _, _} = SignedInfoElement) ->
@@ -112,10 +109,10 @@ signed_info_references({'ds:SignedInfo', _, _} = SignedInfoElement) ->
     maybe
         {ok, {'ds:CanonicalizationMethod', C14NAttrs, _}} ?=
             signerl_xml:find_path(['ds:CanonicalizationMethod'], SignedInfoElement),
-        {ok, C14NAlgorithm} ?= attr_value('Algorithm', C14NAttrs),
+        {ok, C14NAlgorithm} ?= signerl_xml:attr_value('Algorithm', C14NAttrs),
         {ok, {'ds:SignatureMethod', SignatureMethodAttrs, _}} ?=
             signerl_xml:find_path(['ds:SignatureMethod'], SignedInfoElement),
-        {ok, SignatureMethodAlgorithm} ?= attr_value('Algorithm', SignatureMethodAttrs),
+        {ok, SignatureMethodAlgorithm} ?= signerl_xml:attr_value('Algorithm', SignatureMethodAttrs),
         ReferenceElements =
             [Element || Element = {'ds:Reference', _, _} <- SignedInfoContent],
         {ok, DocumentReference, SignedPropertiesReference} ?=
@@ -128,7 +125,7 @@ signed_info_references({'ds:SignedInfo', _, _} = SignedInfoElement) ->
         }}
     else
         _ ->
-            {error, invalid_signature}
+            {error, invalid_signed_info}
     end.
 
 decode_reference_elements(ReferenceElements) ->
@@ -136,13 +133,13 @@ decode_reference_elements(ReferenceElements) ->
         [
             Reference
          || Reference = {'ds:Reference', Attrs, _} <- ReferenceElements,
-            attr_value('URI', Attrs) =:= {ok, ""}
+            signerl_xml:attr_value('URI', Attrs) =:= {ok, ""}
         ],
     SignedPropertiesReferences =
         [
             Reference
          || Reference = {'ds:Reference', Attrs, _} <- ReferenceElements,
-            attr_value('URI', Attrs) =:= {ok, "#" ++ ?SIGNED_PROPERTIES_ID}
+            signerl_xml:attr_value('URI', Attrs) =:= {ok, "#" ++ ?SIGNED_PROPERTIES_ID}
         ],
     case {DocumentReferences, SignedPropertiesReferences} of
         {[DocumentReferenceElement], [SignedPropertiesReferenceElement]} ->
@@ -151,55 +148,53 @@ decode_reference_elements(ReferenceElements) ->
                 {ok, SignedPropertiesReference} ?=
                     decode_reference(SignedPropertiesReferenceElement),
                 {ok, DocumentReference, SignedPropertiesReference}
-            else
-                _ ->
-                    {error, invalid_signature}
             end;
         _ ->
-            {error, invalid_signature}
+            {error, invalid_reference}
     end.
 
 decode_reference({'ds:Reference', Attrs, ReferenceContent}) ->
     ReferenceElement = {'ds:Reference', [], ReferenceContent},
     maybe
-        {ok, Uri} ?= attr_value('URI', Attrs),
+        {ok, Uri} ?= signerl_xml:attr_value('URI', Attrs),
         {ok, TransformUris} ?= transform_uris(ReferenceElement),
         {ok, DigestMethodElement} ?= signerl_xml:find_path(['ds:DigestMethod'], ReferenceElement),
-        {ok, DigestMethodUri} ?= attr_value('Algorithm', element(2, DigestMethodElement)),
+        {ok, DigestMethodUri} ?=
+            signerl_xml:attr_value('Algorithm', element(2, DigestMethodElement)),
         {ok, DigestValueElement} ?= signerl_xml:find_path(['ds:DigestValue'], ReferenceElement),
         {ok, DigestValueText} ?= signerl_xml:single_text(DigestValueElement),
         {ok, DigestValue} ?= decode_base64_binary(DigestValueText),
         {ok, #{
             uri => Uri,
-            type => attr_value_or_undefined('Type', Attrs),
+            type => signerl_xml:attr_value_or_undefined('Type', Attrs),
             transforms => TransformUris,
             digest_method => DigestMethodUri,
             digest_value => DigestValue
         }}
     else
         _ ->
-            {error, invalid_signature}
+            {error, invalid_reference}
     end.
 
 transform_uris(ReferenceElement) ->
     case signerl_xml:find_path(['ds:Transforms'], ReferenceElement) of
         {ok, {'ds:Transforms', _, TransformElements}} ->
             decode_transform_uris(TransformElements, []);
-        error ->
+        {error, not_found} ->
             {ok, []}
     end.
 
 decode_transform_uris([], Acc) ->
     {ok, lists:reverse(Acc)};
 decode_transform_uris([{'ds:Transform', Attrs, []} | Rest], Acc) ->
-    case attr_value('Algorithm', Attrs) of
+    case signerl_xml:attr_value('Algorithm', Attrs) of
         {ok, Algorithm} ->
             decode_transform_uris(Rest, [Algorithm | Acc]);
-        {error, invalid_signature} ->
-            {error, invalid_signature}
+        {error, _} = Err ->
+            Err
     end;
 decode_transform_uris([_Other | _Rest], _Acc) ->
-    {error, invalid_signature}.
+    {error, invalid_reference}.
 
 validate_signed_info_algorithms(References, SignatureMethodUris) ->
     maybe
@@ -209,7 +204,7 @@ validate_signed_info_algorithms(References, SignatureMethodUris) ->
         ok
     else
         _ ->
-            {error, invalid_signature}
+            {error, unsupported_algorithm}
     end.
 
 validate_document_reference(Reference, DigestMethodUri) ->
@@ -220,7 +215,7 @@ validate_document_reference(Reference, DigestMethodUri) ->
         ok
     else
         _ ->
-            {error, invalid_signature}
+            {error, invalid_reference}
     end.
 
 validate_signed_properties_reference(Reference, DigestMethodUri) ->
@@ -232,25 +227,7 @@ validate_signed_properties_reference(Reference, DigestMethodUri) ->
         ok
     else
         _ ->
-            {error, invalid_signature}
-    end.
-
-attr_value(Key, Attrs) ->
-    case [Value || {AttrKey, Value} <- Attrs, AttrKey =:= Key] of
-        [Value] ->
-            {ok, Value};
-        _ ->
-            {error, invalid_signature}
-    end.
-
-attr_value_or_undefined(Key, Attrs) ->
-    case [Value || {AttrKey, Value} <- Attrs, AttrKey =:= Key] of
-        [Value] ->
-            Value;
-        [] ->
-            undefined;
-        _ ->
-            undefined
+            {error, invalid_reference}
     end.
 
 decode_base64_binary(Value) when is_binary(Value) ->
@@ -260,22 +237,22 @@ decode_base64_binary(Value) when is_list(Value) ->
         true ->
             decode_base64_binary_value(list_to_binary(Value));
         false ->
-            {error, invalid_signature}
+            {error, invalid_base64}
     end;
 decode_base64_binary(_) ->
-    {error, invalid_signature}.
+    {error, invalid_base64}.
 
 decode_base64_binary_value(<<>>) ->
-    {error, invalid_signature};
+    {error, invalid_base64};
 decode_base64_binary_value(Value) ->
     try
         {ok, base64:decode(Value)}
     catch
         _:_ ->
-            {error, invalid_signature}
+            {error, invalid_base64}
     end.
 
 digest_method_uri(sha256) ->
     {ok, ?DSIG_DIGEST_SHA256_URI};
 digest_method_uri(_) ->
-    {error, invalid_signature}.
+    {error, unsupported_hash}.

@@ -8,6 +8,9 @@
     add_new_element/2,
     find_path/2,
     single_text/1,
+    attr_value/2,
+    attr_value_or_undefined/2,
+    export_fragment/1,
     export/2,
     to_file/2
 ]).
@@ -21,18 +24,18 @@
     SimplifiedXml :: simplified_xml().
 parse_file(FileName) ->
     {Element, _} = xmerl_scan:file(FileName, [{space, normalize}]),
-    simplifie_xml_element(Element).
+    simplify_xml_element(Element).
 
 -spec parse_binary(Message) -> Result when
     Message :: binary(),
-    Result :: {ok, simplified_xml()} | {error, invalid_signature}.
+    Result :: {ok, simplified_xml()} | {error, invalid_xml}.
 parse_binary(Message) ->
     try
         {Element, _} = xmerl_scan:string(binary_to_list(Message)),
-        {ok, simplifie_xml_element(Element)}
+        {ok, simplify_xml_element(Element)}
     catch
         _:_ ->
-            {error, invalid_signature}
+            {error, invalid_xml}
     end.
 
 -spec parse_prolog(Message) -> Result when
@@ -54,10 +57,10 @@ parse_prolog(Message) when is_binary(Message) ->
     end.
 
 % private
--spec simplifie_xml_element(XmlElement) -> SimplifiedXml when
+-spec simplify_xml_element(XmlElement) -> SimplifiedXml when
     XmlElement :: term(),
     SimplifiedXml :: simplified_xml().
-simplifie_xml_element(XmlElement) ->
+simplify_xml_element(XmlElement) ->
     [Clean] = xmerl_lib:remove_whitespace([XmlElement]),
     xmerl_lib:simplify_element(Clean).
 
@@ -92,26 +95,50 @@ add_new_element(NewElement, {Tag, Attrs, Content}) ->
 -spec find_path(Path, Xml) -> Result when
     Path :: [atom(), ...],
     Xml :: simplified_xml(),
-    Result :: {ok, simplified_xml()} | error.
+    Result :: {ok, simplified_xml()} | {error, not_found}.
 find_path([Tag], Xml) ->
     find_unique_child(Tag, Xml);
 find_path([Tag | Rest], Xml) ->
     case find_unique_child(Tag, Xml) of
         {ok, Child} ->
             find_path(Rest, Child);
-        error ->
-            error
+        {error, not_found} ->
+            {error, not_found}
     end.
 
 -spec single_text(Xml) -> Result when
     Xml :: simplified_xml(),
-    Result :: {ok, binary()} | error.
+    Result :: {ok, binary()} | {error, not_found}.
 single_text({_, _, [Text]}) when is_binary(Text) ->
     {ok, Text};
 single_text({_, _, [Text]}) when is_list(Text) ->
     {ok, list_to_binary(Text)};
 single_text(_) ->
-    error.
+    {error, not_found}.
+
+-spec attr_value(Key, Attrs) -> Result when
+    Key :: atom(),
+    Attrs :: [{atom(), string() | number()}],
+    Result :: {ok, string() | number()} | {error, missing_attribute}.
+attr_value(Key, Attrs) ->
+    case lists:keyfind(Key, 1, Attrs) of
+        {Key, Value} ->
+            {ok, Value};
+        false ->
+            {error, missing_attribute}
+    end.
+
+-spec attr_value_or_undefined(Key, Attrs) -> Result when
+    Key :: atom(),
+    Attrs :: [{atom(), string() | number()}],
+    Result :: string() | number() | undefined.
+attr_value_or_undefined(Key, Attrs) ->
+    case lists:keyfind(Key, 1, Attrs) of
+        {Key, Value} ->
+            Value;
+        false ->
+            undefined
+    end.
 
 find_unique_child(Tag, {_, _, Content}) ->
     Children = [Element || Element = {TagValue, _, _} <- Content, TagValue =:= Tag],
@@ -119,5 +146,5 @@ find_unique_child(Tag, {_, _, Content}) ->
         [Child] ->
             {ok, Child};
         _ ->
-            error
+            {error, not_found}
     end.

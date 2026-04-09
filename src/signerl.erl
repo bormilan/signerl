@@ -3,20 +3,30 @@
 
 -export([sign/3, verify/3]).
 
-sign(Message, Hash, FilePath) when is_list(FilePath) ->
-    sign(
-        Message,
-        Hash,
-        signerl_utils:load_key_from_file(FilePath)
-    );
+-type hash() :: sha256 | sha384 | sha512.
+-export_type([hash/0]).
+
+-spec sign(Message, Hash, Key) -> SignedMessage | {error, Reason} when
+    Message :: binary() | string(),
+    Hash :: hash(),
+    Key :: public_key:private_key() | string(),
+    SignedMessage :: binary(),
+    Reason :: atom() | {file_error, term()}.
+sign(Message, Hash, FilePath) when is_binary(Message), is_list(FilePath) ->
+    case signerl_utils:load_key_from_file(FilePath) of
+        {ok, Key} ->
+            sign(Message, Hash, Key);
+        {error, _} = Err ->
+            Err
+    end;
 sign(FilePath, Hash, Key) when is_list(FilePath) ->
-    {ok, RawMessage} = file:read_file(FilePath),
-    sign(
-        RawMessage,
-        Hash,
-        Key
-    );
-sign(Message, Hash, Key) ->
+    case file:read_file(FilePath) of
+        {ok, RawMessage} ->
+            sign(RawMessage, Hash, Key);
+        {error, Reason} ->
+            {error, {file_error, Reason}}
+    end;
+sign(Message, Hash, Key) when is_binary(Message) ->
     maybe
         {ok, Prolog} ?= signerl_xml:parse_prolog(Message),
         {ok, ParsedMessage} ?= signerl_xml:parse_binary(Message),
@@ -29,19 +39,26 @@ sign(Message, Hash, Key) ->
             {error, Reason}
     end.
 
-verify(SignedMessage, Hash, FilePath) when is_list(FilePath) ->
-    {ok, KeyRaw} = file:read_file(FilePath),
-    [KeyDer] = public_key:pem_decode(KeyRaw),
-    Key = public_key:pem_entry_decode(KeyDer),
-    verify(SignedMessage, Hash, Key);
+-spec verify(SignedMessage, Hash, Key) -> boolean() | {error, Reason} when
+    SignedMessage :: binary() | string(),
+    Hash :: hash(),
+    Key :: public_key:public_key() | string(),
+    Reason :: atom() | {file_error, term()}.
+verify(SignedMessage, Hash, FilePath) when is_binary(SignedMessage), is_list(FilePath) ->
+    case signerl_utils:load_key_from_file(FilePath) of
+        {ok, Key} ->
+            verify(SignedMessage, Hash, Key);
+        {error, _} = Err ->
+            Err
+    end;
 verify(FilePath, Hash, Key) when is_list(FilePath) ->
-    {ok, RawMessage} = file:read_file(FilePath),
-    verify(
-        RawMessage,
-        Hash,
-        Key
-    );
-verify(SignedMessage, Hash, Key) ->
+    case file:read_file(FilePath) of
+        {ok, RawMessage} ->
+            verify(RawMessage, Hash, Key);
+        {error, Reason} ->
+            {error, {file_error, Reason}}
+    end;
+verify(SignedMessage, Hash, Key) when is_binary(SignedMessage) ->
     maybe
         {ok, ParsedMessage} ?= signerl_xml:parse_binary(SignedMessage),
         {ok, SignatureData} ?= signerl_verify:extract_signature_data(ParsedMessage),
