@@ -41,8 +41,10 @@ verify_reference_digests(
         ok ?= validate_signed_properties_reference(SignedPropertiesReference, DigestMethodUri),
         {ok, SignedPropertiesElement} ?=
             signerl_xades_xml:find_signed_properties_element(SignatureElement),
-        DocumentPayload = signerl_xml:export_fragment(UnsignedMessage),
-        SignedPropertiesPayload = signerl_xml:export_fragment(SignedPropertiesElement),
+        DocumentPayload = signerl_c14n:canonicalize(
+            signerl_c14n:remove_signature_elements(UnsignedMessage)
+        ),
+        SignedPropertiesPayload = signerl_c14n:canonicalize(SignedPropertiesElement),
         DocumentDigest = crypto:hash(Hash, DocumentPayload),
         SignedPropertiesDigest = crypto:hash(Hash, SignedPropertiesPayload),
         case

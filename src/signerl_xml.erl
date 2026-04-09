@@ -8,7 +8,6 @@
     add_new_element/2,
     find_path/2,
     single_text/1,
-    export_fragment/1,
     export/2,
     to_file/2
 ]).
@@ -75,13 +74,6 @@ valid_prolog(PrologBin) ->
 export(Prolog, XmlTerm) ->
     Exported = xmerl:export([xmerl_lib:normalize_element(XmlTerm)], xmerl_xml, [{prolog, Prolog}]),
     list_to_binary(Exported ++ "\n").
-
--spec export_fragment(XmlTerm) -> Result when
-    XmlTerm :: simplified_xml(),
-    Result :: binary().
-export_fragment(XmlTerm) ->
-    Exported = xmerl:export([xmerl_lib:normalize_element(XmlTerm)], xmerl_xml),
-    list_to_binary(Exported).
 
 -spec to_file(FileName, XmlBinary) -> Result when
     FileName :: string(),

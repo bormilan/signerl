@@ -48,7 +48,7 @@ verify(SignedMessage, Hash, Key) ->
         {ok, SignatureBytes} ?= maps:find(signature_bytes, SignatureData),
         {ok, SignedInfoElement} ?= maps:find(signed_info_element, SignatureData),
         true ?= signerl_verify:verify_reference_digests(SignatureData, Hash),
-        SignedInfoBytes = signerl_xml:export_fragment(SignedInfoElement),
+        SignedInfoBytes = signerl_c14n:canonicalize(SignedInfoElement),
         public_key:verify(SignedInfoBytes, Hash, SignatureBytes, Key)
     else
         false ->
