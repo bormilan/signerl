@@ -30,7 +30,8 @@ jobs:
                 -os-${{runner.os}}\
                 -otp-${{steps.setup-beam.outputs.otp-version}}\
                 -rebar3-${{steps.setup-beam.outputs.rebar3-version}}\
-                -hash-${{hashFiles('rebar.lock')}}"
+                -hash-${{hashFiles('rebar.lock')}}\
+                -src-${{hashFiles('src/**', 'include/**', 'test/**')}}"
       - name: Restore rebar3's cache
         uses: actions/cache@v4
         with:

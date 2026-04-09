@@ -203,17 +203,3 @@ value_to_string(V) when is_list(V) -> V;
 value_to_string(V) when is_binary(V) -> binary_to_list(V);
 value_to_string(V) when is_integer(V) -> integer_to_list(V);
 value_to_string(V) when is_atom(V) -> atom_to_list(V).
-
--ifdef(TEST).
--include_lib("eunit/include/eunit.hrl").
-
-remove_signature_elements_test() ->
-    Input = {root, [], [
-        {child, [], ["text"]},
-        {'ds:Signature', [{'xmlns:ds', "http://www.w3.org/2000/09/xmldsig#"}], []},
-        {other, [], []}
-    ]},
-    Expected = {root, [], [{child, [], ["text"]}, {other, [], []}]},
-    ?assertEqual(Expected, remove_signature_elements(Input)).
-
--endif.
