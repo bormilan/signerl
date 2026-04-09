@@ -40,6 +40,9 @@ jobs:
                 -otp-${{steps.setup-beam.outputs.otp-version}}\
                 -rebar3-${{steps.setup-beam.outputs.rebar3-version}}\
                 -hash-${{hashFiles('rebar.lock')}}"
+      - name: Install libxml2-utils (Linux)
+        if: runner.os == 'Linux'
+        run: sudo apt-get install -y --no-install-recommends libxml2-utils
       - name: Generate test certificates
         shell: bash
         run: scripts/gen_certs.sh
