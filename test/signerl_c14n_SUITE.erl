@@ -67,6 +67,17 @@ init_per_suite(Config) ->
 end_per_suite(_Config) ->
     ok.
 
+init_per_group(interop_group, Config) ->
+    case os:find_executable("xmllint") of
+        false -> {skip, "xmllint not available"};
+        _Path -> Config
+    end;
+init_per_group(_Group, Config) ->
+    Config.
+
+end_per_group(_Group, _Config) ->
+    ok.
+
 %% === Basic Group ===
 
 empty_element_expansion(_Config) ->
