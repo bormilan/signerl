@@ -1,5 +1,7 @@
 -module(signerl_utils).
 
+-feature(maybe_expr, enable).
+
 -export([
     file_path/1,
     load_key_from_file/1,
