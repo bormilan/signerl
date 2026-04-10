@@ -69,3 +69,9 @@ This completes all remaining Phase 1 roadmap items:
 ## Documentation
 
 No public-facing documentation updates required — `sign/4` follows the existing `sign/3` convention and the README already references the signing API. Exclusive C14N is an internal capability used by the verification pipeline.
+
+## CI Cover Fix
+
+**Root cause:** The `test` alias in `rebar.config` ran `erlfmt` (write mode) between `eunit` and `ct --cover`. This reformatted source files mid-run, causing eunit and ct to cover-compile different source versions. When the coverdata was merged, phantom uncovered lines appeared (e.g., `signerl_c14n` dropped to 82% on OTP 27/28).
+
+**Fix:** Moved `fmt` before `cover --reset` in both `test` and `tall` aliases, ensuring both eunit and ct instrument the same post-format source. Also removed temporary CI artifact upload step and let `erlfmt` normalize `render_element` formatting.

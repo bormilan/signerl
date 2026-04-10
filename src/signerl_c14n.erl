@@ -156,8 +156,17 @@ attr_sort_key(Name, NsMap) ->
 %% --- Rendering ---
 
 render_element(TagStr, NsDecls, Attrs, ChildrenIo) ->
-    ["<", TagStr, render_ns_decls(NsDecls), render_attributes(Attrs), ">",
-     ChildrenIo, "</", TagStr, ">"].
+    [
+        "<",
+        TagStr,
+        render_ns_decls(NsDecls),
+        render_attributes(Attrs),
+        ">",
+        ChildrenIo,
+        "</",
+        TagStr,
+        ">"
+    ].
 
 render_ns_decls([]) ->
     [];
