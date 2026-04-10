@@ -49,6 +49,12 @@ jobs:
         run: scripts/gen_certs.sh
       - name: Run test
         run: rebar3 test
+      - name: Upload cover report
+        if: always() && runner.os == 'Linux'
+        uses: actions/upload-artifact@v4
+        with:
+          name: cover-report-otp-${{matrix.otp_vsn}}
+          path: _build/test/cover/
       - name: Run lint
         run: rebar3 lint
       - name: Run dialyzer
