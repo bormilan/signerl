@@ -105,7 +105,7 @@ find_path_success_test() ->
 
 find_path_errors_on_missing_or_ambiguous_nodes_test() ->
     MissingRoot = {'ds:Signature', [], []},
-    ?assertEqual(error, signerl_xml:find_path(['ds:Object'], MissingRoot)),
+    ?assertEqual({error, not_found}, signerl_xml:find_path(['ds:Object'], MissingRoot)),
     AmbiguousRoot = {
         'ds:Signature',
         [],
@@ -114,13 +114,19 @@ find_path_errors_on_missing_or_ambiguous_nodes_test() ->
             {'ds:Object', [], []}
         ]
     },
-    ?assertEqual(error, signerl_xml:find_path(['ds:Object'], AmbiguousRoot)).
+    ?assertEqual({error, not_found}, signerl_xml:find_path(['ds:Object'], AmbiguousRoot)).
 
 single_text_handles_binary_list_and_invalid_shapes_test() ->
     ?assertEqual({ok, <<"abc">>}, signerl_xml:single_text({tag, [], [<<"abc">>]})),
     ?assertEqual({ok, <<"abc">>}, signerl_xml:single_text({tag, [], ["abc"]})),
-    ?assertEqual(error, signerl_xml:single_text({tag, [], []})),
-    ?assertEqual(error, signerl_xml:single_text({tag, [], ["a", "b"]})).
+    ?assertEqual({error, not_found}, signerl_xml:single_text({tag, [], []})),
+    ?assertEqual({error, not_found}, signerl_xml:single_text({tag, [], ["a", "b"]})).
+
+export_fragment_returns_binary_test() ->
+    Element = {tag, [], ["content"]},
+    Result = signerl_xml:export_fragment(Element),
+    ?assert(is_binary(Result)),
+    ?assertNotEqual(<<>>, Result).
 
 %% Utils
 

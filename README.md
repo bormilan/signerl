@@ -1,4 +1,4 @@
-# SignerL
+# SignErl
 
 SignerL is a small Erlang library for signing XML messages. It currently supports
 basic signing and verification over normalized XML. The project is early-stage

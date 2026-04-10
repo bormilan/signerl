@@ -4,20 +4,20 @@
 -export([build_signature_element/3]).
 
 -spec build_signature_element(Message, Hash, Key) ->
-    {ok, {atom(), [{atom(), string() | number()}], [any()]}} | {error, invalid_signature}
+    {ok, signerl_xml:simplified_xml()} | {error, unsupported_hash | unsupported_key}
 when
-    Message :: {atom(), [{atom(), string() | number()}], [any()]},
+    Message :: signerl_xml:simplified_xml(),
     Hash :: atom(),
-    Key :: term().
+    Key :: public_key:private_key().
 build_signature_element(Message, sha256, Key) ->
     case signerl_dsig_utils:signature_method_uri_for_key(Key) of
         {ok, SignatureMethodUri} ->
             build_signature_element_with_method_uri(Message, sha256, Key, SignatureMethodUri);
         error ->
-            {error, invalid_signature}
+            {error, unsupported_key}
     end;
 build_signature_element(_Message, _Hash, _Key) ->
-    {error, invalid_signature}.
+    {error, unsupported_hash}.
 
 build_signature_element_with_method_uri(Message, Hash, Key, SignatureMethodUri) ->
     {ok, SignatureElementWithoutValue, SignedInfo} =
@@ -83,11 +83,11 @@ signed_info(Message, SignedProperties, Hash, DigestMethodUri, SignatureMethodUri
 reference(Attrs, Content) ->
     {'ds:Reference', Attrs, Content}.
 
-add_signature_value({'ds:Signature', Attrs, Content}, SignatureValue) ->
+add_signature_value({'ds:Signature', Attrs, [SignedInfo, Object]}, SignatureValue) ->
     {'ds:Signature', Attrs, [
-        lists:nth(1, Content),
+        SignedInfo,
         {'ds:SignatureValue', [], [SignatureValue]},
-        lists:nth(2, Content)
+        Object
     ]}.
 
 signature_object(SignedProperties) ->

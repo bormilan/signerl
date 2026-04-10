@@ -1,4 +1,5 @@
 -module(signerl_utils).
+
 -feature(maybe_expr, enable).
 
 -export([
@@ -13,9 +14,23 @@ file_path(FileName) ->
     code:lib_dir(signerl) ++ "/" ++ FileName.
 
 load_key_from_file(FilePath) ->
-    {ok, KeyRaw} = file:read_file(FilePath),
-    [KeyDer] = public_key:pem_decode(KeyRaw),
-    public_key:pem_entry_decode(KeyDer).
+    maybe
+        {ok, KeyRaw} ?= read_key_file(FilePath),
+        {ok, KeyDer} ?= decode_pem(KeyRaw),
+        {ok, public_key:pem_entry_decode(KeyDer)}
+    end.
+
+read_key_file(FilePath) ->
+    case file:read_file(FilePath) of
+        {ok, _} = Ok -> Ok;
+        {error, Reason} -> {error, {file_error, Reason}}
+    end.
+
+decode_pem(KeyRaw) ->
+    case public_key:pem_decode(KeyRaw) of
+        [KeyDer] -> {ok, KeyDer};
+        _ -> {error, invalid_pem}
+    end.
 
 valid_utc_timestamp(
     <<Y1, Y2, Y3, Y4, $-, M1, M2, $-, D1, D2, $T, H1, H2, $:, Min1, Min2, $:, S1, S2, $Z>>

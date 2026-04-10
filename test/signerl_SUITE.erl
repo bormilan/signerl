@@ -39,7 +39,10 @@ groups() ->
             sign_missing_prolog_binary_returns_error,
             sign_invalid_prolog_file_returns_error,
             sign_returns_error_with_unsupported_hash,
-            sign_returns_error_with_unsupported_key
+            sign_returns_error_with_unsupported_key,
+            sign_returns_file_error_with_missing_message_file,
+            sign_returns_file_error_with_missing_key_file,
+            sign_returns_error_with_invalid_pem_key_file
         ]},
         {verify_fixture_error_group, [], [
             verify_missing_prolog_binary_returns_error,
@@ -56,7 +59,10 @@ groups() ->
             verify_returns_error_without_signing_time,
             verify_returns_error_with_invalid_signing_time,
             verify_returns_error_with_self_closing_signing_time,
-            verify_returns_error_with_unsupported_hash
+            verify_returns_error_with_unsupported_hash,
+            verify_returns_file_error_with_missing_signed_message_file,
+            verify_returns_file_error_with_missing_key_file,
+            verify_returns_error_with_invalid_pem_key_file
         ]},
         {verify_signed_info_error_group, [], [
             verify_returns_error_with_non_text_signature_value_in_signedinfo,
@@ -239,15 +245,15 @@ build_signature_element_returns_error_with_invalid_hash_or_key(Config) ->
     Message = ?config(message, Config),
     RsaKey = ?config(rsa_key, Config),
     ?assertEqual(
-        {error, invalid_signature},
+        {error, unsupported_hash},
         signerl_signature:build_signature_element(Message, sha512, RsaKey)
     ),
     ?assertEqual(
-        {error, invalid_signature},
+        {error, unsupported_key},
         signerl_signature:build_signature_element(Message, sha256, invalid_key)
     ),
     ?assertEqual(
-        {error, invalid_signature},
+        {error, unsupported_key},
         signerl_signature:build_signature_element(Message, sha256, {unsupported})
     ).
 
@@ -326,24 +332,41 @@ sign_invalid_prolog_file_returns_error(Config) ->
 sign_returns_error_with_unsupported_hash(Config) ->
     RawMessage = ?config(raw_message, Config),
     Key = ?config(rsa_key, Config),
-    ?assertEqual({error, invalid_signature}, signerl:sign(RawMessage, sha512, Key)).
+    ?assertEqual({error, unsupported_hash}, signerl:sign(RawMessage, sha512, Key)).
 
 sign_returns_error_with_unsupported_key(Config) ->
     RawMessage = ?config(raw_message, Config),
-    ?assertEqual({error, invalid_signature}, signerl:sign(RawMessage, sha256, invalid_key)).
+    ?assertEqual({error, unsupported_key}, signerl:sign(RawMessage, sha256, invalid_key)).
+
+sign_returns_file_error_with_missing_message_file(Config) ->
+    RsaKey = ?config(rsa_key, Config),
+    ?assertMatch(
+        {error, {file_error, enoent}}, signerl:sign("nonexistent_file.xml", sha256, RsaKey)
+    ).
+
+sign_returns_file_error_with_missing_key_file(Config) ->
+    RawMessage = ?config(raw_message, Config),
+    ?assertMatch(
+        {error, {file_error, enoent}}, signerl:sign(RawMessage, sha256, "nonexistent_key.pem")
+    ).
+
+sign_returns_error_with_invalid_pem_key_file(Config) ->
+    RawMessage = ?config(raw_message, Config),
+    InvalidPemPath = signerl_utils:file_path("test/examples/base/books.xml"),
+    ?assertEqual({error, invalid_pem}, signerl:sign(RawMessage, sha256, InvalidPemPath)).
 
 verify_missing_prolog_binary_returns_error(Config) ->
     PublicKey = ?config(rsa_public_key, Config),
     MissingPath = signerl_utils:file_path("test/examples/prolog/books_no_prolog.xml"),
     {ok, MissingRawMessage} = file:read_file(MissingPath),
 
-    ?assertEqual({error, invalid_signature}, signerl:verify(MissingRawMessage, sha256, PublicKey)).
+    ?assertEqual({error, missing_signature}, signerl:verify(MissingRawMessage, sha256, PublicKey)).
 
 verify_invalid_prolog_file_returns_error(Config) ->
     PublicKey = ?config(rsa_public_key, Config),
     InvalidPath = signerl_utils:file_path("test/examples/prolog/books_invalid_prolog.xml"),
 
-    ?assertEqual({error, invalid_signature}, signerl:verify(InvalidPath, sha256, PublicKey)).
+    ?assertEqual({error, invalid_xml}, signerl:verify(InvalidPath, sha256, PublicKey)).
 
 verify_returns_error_without_signature_element(Config) ->
     RsaKey = ?config(rsa_key, Config),
@@ -352,11 +375,11 @@ verify_returns_error_without_signature_element(Config) ->
     {ok, RawMessage} = file:read_file(UnsignedPath),
     SignKey = RsaKey,
 
-    ?assertEqual({error, invalid_signature}, signerl:verify(UnsignedPath, sha256, PublicKey)),
+    ?assertEqual({error, missing_signature}, signerl:verify(UnsignedPath, sha256, PublicKey)),
     SignedMessage = signerl:sign(RawMessage, sha256, SignKey),
     DoubleSignedMessage = signerl:sign(SignedMessage, sha256, SignKey),
     ?assertEqual(
-        {error, invalid_signature}, signerl:verify(DoubleSignedMessage, sha256, PublicKey)
+        {error, missing_signature}, signerl:verify(DoubleSignedMessage, sha256, PublicKey)
     ).
 
 verify_returns_error_without_signature_value(Config) ->
@@ -365,7 +388,7 @@ verify_returns_error_without_signature_value(Config) ->
         "test/examples/signed_properties/books_signature_no_value.xml"
     ),
 
-    ?assertEqual({error, invalid_signature}, signerl:verify(SignedPath, sha256, PublicKey)).
+    ?assertEqual({error, missing_signature_value}, signerl:verify(SignedPath, sha256, PublicKey)).
 
 verify_returns_error_with_empty_signature_value(Config) ->
     PublicKey = ?config(rsa_public_key, Config),
@@ -373,7 +396,9 @@ verify_returns_error_with_empty_signature_value(Config) ->
         "test/examples/signed_properties/books_signature_empty_value.xml"
     ),
 
-    ?assertEqual({error, invalid_signature}, signerl:verify(EmptyValuePath, sha256, PublicKey)).
+    ?assertEqual(
+        {error, missing_signature_value}, signerl:verify(EmptyValuePath, sha256, PublicKey)
+    ).
 
 verify_returns_error_with_invalid_base64_signature_value(Config) ->
     PublicKey = ?config(rsa_public_key, Config),
@@ -381,7 +406,7 @@ verify_returns_error_with_invalid_base64_signature_value(Config) ->
         "test/examples/signed_properties/books_signature_invalid_base64.xml"
     ),
 
-    ?assertEqual({error, invalid_signature}, signerl:verify(InvalidBase64Path, sha256, PublicKey)).
+    ?assertEqual({error, invalid_base64}, signerl:verify(InvalidBase64Path, sha256, PublicKey)).
 
 verify_returns_error_with_self_closing_signature_value(Config) ->
     PublicKey = ?config(rsa_public_key, Config),
@@ -390,7 +415,7 @@ verify_returns_error_with_self_closing_signature_value(Config) ->
     ),
 
     ?assertEqual(
-        {error, invalid_signature}, signerl:verify(SelfClosingValuePath, sha256, PublicKey)
+        {error, missing_signature_value}, signerl:verify(SelfClosingValuePath, sha256, PublicKey)
     ).
 
 verify_returns_error_with_non_text_signature_value_in_signedinfo(Config) ->
@@ -398,21 +423,21 @@ verify_returns_error_with_non_text_signature_value_in_signedinfo(Config) ->
     SignatureElement = maps:get(signature_element, SignatureData),
     BrokenSignature = replace_signature_value(SignatureElement, [{'invalid', [], []}]),
     Message = message_with_signature(BrokenSignature),
-    ?assertEqual({error, invalid_signature}, signerl_verify:extract_signature_data(Message)).
+    ?assertEqual({error, invalid_base64}, signerl_verify:extract_signature_data(Message)).
 
 verify_returns_error_with_non_byte_list_signature_value_in_signedinfo(Config) ->
     SignatureData = ?config(signature_data, Config),
     SignatureElement = maps:get(signature_element, SignatureData),
     BrokenSignature = replace_signature_value(SignatureElement, [[65, {invalid, [], []}]]),
     Message = message_with_signature(BrokenSignature),
-    ?assertEqual({error, invalid_signature}, signerl_verify:extract_signature_data(Message)).
+    ?assertEqual({error, invalid_base64}, signerl_verify:extract_signature_data(Message)).
 
 verify_returns_error_with_empty_binary_signature_value_in_signedinfo(Config) ->
     SignatureData = ?config(signature_data, Config),
     SignatureElement = maps:get(signature_element, SignatureData),
     BrokenSignature = replace_signature_value(SignatureElement, [<<>>]),
     Message = message_with_signature(BrokenSignature),
-    ?assertEqual({error, invalid_signature}, signerl_verify:extract_signature_data(Message)).
+    ?assertEqual({error, invalid_base64}, signerl_verify:extract_signature_data(Message)).
 
 verify_returns_error_without_object(Config) ->
     PublicKey = ?config(rsa_public_key, Config),
@@ -420,7 +445,7 @@ verify_returns_error_without_object(Config) ->
         "test/examples/signed_properties/books_signature_missing_object.xml"
     ),
 
-    ?assertEqual({error, invalid_signature}, signerl:verify(MissingObjectPath, sha256, PublicKey)).
+    ?assertEqual({error, missing_element}, signerl:verify(MissingObjectPath, sha256, PublicKey)).
 
 verify_returns_error_without_qualifying_properties(Config) ->
     PublicKey = ?config(rsa_public_key, Config),
@@ -429,7 +454,7 @@ verify_returns_error_without_qualifying_properties(Config) ->
     ),
 
     ?assertEqual(
-        {error, invalid_signature}, signerl:verify(MissingQualifyingPropsPath, sha256, PublicKey)
+        {error, missing_element}, signerl:verify(MissingQualifyingPropsPath, sha256, PublicKey)
     ).
 
 verify_returns_error_without_signed_properties(Config) ->
@@ -438,7 +463,7 @@ verify_returns_error_without_signed_properties(Config) ->
         "test/examples/signed_properties/books_signature_missing_signed_properties.xml"
     ),
 
-    ?assertEqual({error, invalid_signature}, signerl:verify(MissingPropsPath, sha256, PublicKey)).
+    ?assertEqual({error, missing_element}, signerl:verify(MissingPropsPath, sha256, PublicKey)).
 
 verify_returns_error_without_signed_signature_properties(Config) ->
     PublicKey = ?config(rsa_public_key, Config),
@@ -447,7 +472,7 @@ verify_returns_error_without_signed_signature_properties(Config) ->
     ),
 
     ?assertEqual(
-        {error, invalid_signature}, signerl:verify(MissingSignedSigPropsPath, sha256, PublicKey)
+        {error, missing_element}, signerl:verify(MissingSignedSigPropsPath, sha256, PublicKey)
     ).
 
 verify_returns_error_without_signed_info(Config) ->
@@ -455,7 +480,7 @@ verify_returns_error_without_signed_info(Config) ->
     SignatureElement = maps:get(signature_element, SignatureData),
     BrokenSignature = remove_signed_info_from_signature(SignatureElement),
     Message = message_with_signature(BrokenSignature),
-    ?assertEqual({error, invalid_signature}, signerl_verify:extract_signature_data(Message)).
+    ?assertEqual({error, missing_signed_info}, signerl_verify:extract_signature_data(Message)).
 
 verify_returns_error_without_signing_time(Config) ->
     PublicKey = ?config(rsa_public_key, Config),
@@ -464,7 +489,7 @@ verify_returns_error_without_signing_time(Config) ->
     ),
 
     ?assertEqual(
-        {error, invalid_signature}, signerl:verify(MissingSigningTimePath, sha256, PublicKey)
+        {error, missing_signing_time}, signerl:verify(MissingSigningTimePath, sha256, PublicKey)
     ).
 
 verify_returns_error_with_invalid_signing_time(Config) ->
@@ -474,7 +499,7 @@ verify_returns_error_with_invalid_signing_time(Config) ->
     ),
 
     ?assertEqual(
-        {error, invalid_signature}, signerl:verify(InvalidSigningTimePath, sha256, PublicKey)
+        {error, invalid_signing_time}, signerl:verify(InvalidSigningTimePath, sha256, PublicKey)
     ).
 
 verify_returns_error_with_self_closing_signing_time(Config) ->
@@ -484,7 +509,7 @@ verify_returns_error_with_self_closing_signing_time(Config) ->
     ),
 
     ?assertEqual(
-        {error, invalid_signature}, signerl:verify(SelfClosingSigningTimePath, sha256, PublicKey)
+        {error, invalid_signing_time}, signerl:verify(SelfClosingSigningTimePath, sha256, PublicKey)
     ).
 
 verify_returns_false_with_wrong_signature_value(Config) ->
@@ -543,18 +568,43 @@ verify_returns_error_with_unsupported_hash(Config) ->
     MessagePath = signerl_utils:file_path("test/examples/base/books.xml"),
     {ok, RawMessage} = file:read_file(MessagePath),
     SignedMessage = signerl:sign(RawMessage, sha256, RsaKey),
-    ?assertEqual({error, invalid_signature}, signerl:verify(SignedMessage, sha512, PublicKey)).
+    ?assertEqual(
+        {error, invalid_signature_structure}, signerl:verify(SignedMessage, sha512, PublicKey)
+    ).
+
+verify_returns_file_error_with_missing_signed_message_file(Config) ->
+    PublicKey = ?config(rsa_public_key, Config),
+    ?assertMatch(
+        {error, {file_error, enoent}}, signerl:verify("nonexistent_signed.xml", sha256, PublicKey)
+    ).
+
+verify_returns_file_error_with_missing_key_file(Config) ->
+    RsaKey = ?config(rsa_key, Config),
+    MessagePath = signerl_utils:file_path("test/examples/base/books.xml"),
+    {ok, RawMessage} = file:read_file(MessagePath),
+    SignedMessage = signerl:sign(RawMessage, sha256, RsaKey),
+    ?assertMatch(
+        {error, {file_error, enoent}}, signerl:verify(SignedMessage, sha256, "nonexistent_key.pem")
+    ).
+
+verify_returns_error_with_invalid_pem_key_file(Config) ->
+    RsaKey = ?config(rsa_key, Config),
+    MessagePath = signerl_utils:file_path("test/examples/base/books.xml"),
+    {ok, RawMessage} = file:read_file(MessagePath),
+    SignedMessage = signerl:sign(RawMessage, sha256, RsaKey),
+    InvalidPemPath = signerl_utils:file_path("test/examples/base/books.xml"),
+    ?assertEqual({error, invalid_pem}, signerl:verify(SignedMessage, sha256, InvalidPemPath)).
 
 extract_signature_returns_error_without_signature_element_direct(_Config) ->
     Message = signerl_xml:parse_file("test/examples/base/books.xml"),
-    ?assertEqual({error, invalid_signature}, signerl_verify:extract_signature_data(Message)).
+    ?assertEqual({error, missing_signature}, signerl_verify:extract_signature_data(Message)).
 
 extract_signature_data_returns_error_with_missing_c14n(Config) ->
     SignatureData = ?config(signature_data, Config),
     SignatureElement = maps:get(signature_element, SignatureData),
     BrokenSignature = remove_c14n_from_signature(SignatureElement),
     Message = message_with_signature(BrokenSignature),
-    ?assertEqual({error, invalid_signature}, signerl_verify:extract_signature_data(Message)).
+    ?assertEqual({error, invalid_signed_info}, signerl_verify:extract_signature_data(Message)).
 
 verify_reference_digests_returns_error_with_invalid_c14n_algorithm(Config) ->
     SignatureData = ?config(signature_data, Config),
@@ -563,7 +613,8 @@ verify_reference_digests_returns_error_with_invalid_c14n_algorithm(Config) ->
     Message = message_with_signature(BrokenSignature),
     {ok, BrokenData} = signerl_verify:extract_signature_data(Message),
     ?assertEqual(
-        {error, invalid_signature}, signerl_verify:verify_reference_digests(BrokenData, sha256)
+        {error, invalid_signature_structure},
+        signerl_verify:verify_reference_digests(BrokenData, sha256)
     ).
 
 verify_reference_digests_returns_error_with_invalid_signature_method_algorithm(Config) ->
@@ -575,7 +626,8 @@ verify_reference_digests_returns_error_with_invalid_signature_method_algorithm(C
     Message = message_with_signature(BrokenSignature),
     {ok, BrokenData} = signerl_verify:extract_signature_data(Message),
     ?assertEqual(
-        {error, invalid_signature}, signerl_verify:verify_reference_digests(BrokenData, sha256)
+        {error, invalid_signature_structure},
+        signerl_verify:verify_reference_digests(BrokenData, sha256)
     ).
 
 extract_signature_data_returns_error_with_missing_reference_uri(Config) ->
@@ -583,14 +635,14 @@ extract_signature_data_returns_error_with_missing_reference_uri(Config) ->
     SignatureElement = maps:get(signature_element, SignatureData),
     BrokenSignature = remove_document_reference_uri(SignatureElement),
     Message = message_with_signature(BrokenSignature),
-    ?assertEqual({error, invalid_signature}, signerl_verify:extract_signature_data(Message)).
+    ?assertEqual({error, invalid_signed_info}, signerl_verify:extract_signature_data(Message)).
 
 extract_signature_data_returns_error_with_invalid_reference_payload(Config) ->
     SignatureData = ?config(signature_data, Config),
     SignatureElement = maps:get(signature_element, SignatureData),
     BrokenSignature = remove_document_reference_digest_value(SignatureElement),
     Message = message_with_signature(BrokenSignature),
-    ?assertEqual({error, invalid_signature}, signerl_verify:extract_signature_data(Message)).
+    ?assertEqual({error, invalid_signed_info}, signerl_verify:extract_signature_data(Message)).
 
 verify_reference_digests_returns_error_with_missing_document_transforms(Config) ->
     SignatureData = ?config(signature_data, Config),
@@ -599,7 +651,8 @@ verify_reference_digests_returns_error_with_missing_document_transforms(Config) 
     Message = message_with_signature(BrokenSignature),
     {ok, BrokenData} = signerl_verify:extract_signature_data(Message),
     ?assertEqual(
-        {error, invalid_signature}, signerl_verify:verify_reference_digests(BrokenData, sha256)
+        {error, invalid_signature_structure},
+        signerl_verify:verify_reference_digests(BrokenData, sha256)
     ).
 
 verify_reference_digests_returns_error_with_invalid_document_transform_algorithm(Config) ->
@@ -610,7 +663,8 @@ verify_reference_digests_returns_error_with_invalid_document_transform_algorithm
     Message = message_with_signature(BrokenSignature),
     {ok, BrokenData} = signerl_verify:extract_signature_data(Message),
     ?assertEqual(
-        {error, invalid_signature}, signerl_verify:verify_reference_digests(BrokenData, sha256)
+        {error, invalid_signature_structure},
+        signerl_verify:verify_reference_digests(BrokenData, sha256)
     ).
 
 verify_reference_digests_returns_error_with_transform_without_algorithm(Config) ->
@@ -618,7 +672,7 @@ verify_reference_digests_returns_error_with_transform_without_algorithm(Config) 
     SignatureElement = maps:get(signature_element, SignatureData),
     BrokenSignature = replace_document_transforms(SignatureElement, [{'ds:Transform', [], []}]),
     Message = message_with_signature(BrokenSignature),
-    ?assertEqual({error, invalid_signature}, signerl_verify:extract_signature_data(Message)).
+    ?assertEqual({error, invalid_signed_info}, signerl_verify:extract_signature_data(Message)).
 
 verify_reference_digests_returns_error_with_invalid_transform_element(Config) ->
     SignatureData = ?config(signature_data, Config),
@@ -626,7 +680,7 @@ verify_reference_digests_returns_error_with_invalid_transform_element(Config) ->
     BrokenSignature =
         replace_document_transforms(SignatureElement, [{'ds:InvalidTransform', [], []}]),
     Message = message_with_signature(BrokenSignature),
-    ?assertEqual({error, invalid_signature}, signerl_verify:extract_signature_data(Message)).
+    ?assertEqual({error, invalid_signed_info}, signerl_verify:extract_signature_data(Message)).
 
 extract_signature_data_handles_duplicate_signed_properties_type_attribute(Config) ->
     SignatureData = ?config(signature_data, Config),
@@ -635,7 +689,7 @@ extract_signature_data_handles_duplicate_signed_properties_type_attribute(Config
     Message = message_with_signature(BrokenSignature),
     {ok, BrokenData} = signerl_verify:extract_signature_data(Message),
     ?assertEqual(
-        {error, invalid_signature}, signerl_verify:verify_reference_digests(BrokenData, sha256)
+        false, signerl_verify:verify_reference_digests(BrokenData, sha256)
     ).
 
 verify_reference_digests_returns_error_with_missing_signed_properties_element(Config) ->
@@ -644,7 +698,8 @@ verify_reference_digests_returns_error_with_missing_signed_properties_element(Co
     BrokenSignature = remove_signed_properties_from_signature(SignatureElement),
     BrokenData = maps:put(signature_element, BrokenSignature, SignatureData),
     ?assertEqual(
-        {error, invalid_signature}, signerl_verify:verify_reference_digests(BrokenData, sha256)
+        {error, invalid_signature_structure},
+        signerl_verify:verify_reference_digests(BrokenData, sha256)
     ).
 
 verify_reference_digests_returns_error_with_invalid_document_reference(Config) ->
@@ -655,7 +710,8 @@ verify_reference_digests_returns_error_with_invalid_document_reference(Config) -
     BrokenReferences = maps:put(document, BrokenDocumentReference, References),
     BrokenData = maps:put(references, BrokenReferences, SignatureData),
     ?assertEqual(
-        {error, invalid_signature}, signerl_verify:verify_reference_digests(BrokenData, sha256)
+        {error, invalid_signature_structure},
+        signerl_verify:verify_reference_digests(BrokenData, sha256)
     ).
 
 verify_reference_digests_returns_error_with_invalid_signed_properties_reference(Config) ->
@@ -666,22 +722,23 @@ verify_reference_digests_returns_error_with_invalid_signed_properties_reference(
     BrokenReferences = maps:put(signed_properties, BrokenSignedPropertiesReference, References),
     BrokenData = maps:put(references, BrokenReferences, SignatureData),
     ?assertEqual(
-        {error, invalid_signature}, signerl_verify:verify_reference_digests(BrokenData, sha256)
+        {error, invalid_signature_structure},
+        signerl_verify:verify_reference_digests(BrokenData, sha256)
     ).
 
 verify_reference_digests_returns_error_with_invalid_signature_data(_Config) ->
     ?assertEqual(
-        {error, invalid_signature}, signerl_verify:verify_reference_digests(#{}, sha256)
+        {error, invalid_signature_structure}, signerl_verify:verify_reference_digests(#{}, sha256)
     ).
 
 xades_xml_returns_error_with_non_signature_input(_Config) ->
     InvalidElement = {'root', [], []},
     ?assertEqual(
-        {error, invalid_signature},
+        {error, missing_element},
         signerl_xades_xml:find_signed_signature_properties(InvalidElement)
     ),
     ?assertEqual(
-        {error, invalid_signature},
+        {error, missing_element},
         signerl_xades_xml:find_signed_properties_element(InvalidElement)
     ).
 

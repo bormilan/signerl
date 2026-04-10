@@ -29,11 +29,11 @@ extract_accepts_optional_signed_signature_properties(_Config) ->
     ?assertEqual(
         {ok, #{
             signing_time => <<"2026-01-01T00:00:00Z">>,
-            signing_certificate => valid,
-            signing_certificate_v2 => valid,
-            signature_policy_identifier => valid,
-            signature_production_place => valid,
-            signer_role => valid
+            signing_certificate => present,
+            signing_certificate_v2 => present,
+            signature_policy_identifier => present,
+            signature_production_place => present,
+            signer_role => present
         }},
         signerl_signed_properties:extract(SignatureElement)
     ).
@@ -61,21 +61,27 @@ extract_returns_error_with_non_byte_list_signing_time(_Config) ->
     SignatureElement = test_helpers:signature_element([
         {'xades:SigningTime', [], [[65, {invalid, [], []}]]}
     ]),
-    ?assertEqual({error, invalid_signature}, signerl_signed_properties:extract(SignatureElement)).
+    ?assertEqual(
+        {error, invalid_signing_time}, signerl_signed_properties:extract(SignatureElement)
+    ).
 
 extract_returns_error_with_non_text_signing_time(_Config) ->
     SignatureElement = test_helpers:signature_element([
         {'xades:SigningTime', [], [123]}
     ]),
-    ?assertEqual({error, invalid_signature}, signerl_signed_properties:extract(SignatureElement)).
+    ?assertEqual(
+        {error, invalid_signing_time}, signerl_signed_properties:extract(SignatureElement)
+    ).
 
 extract_returns_error_with_duplicate_signing_time_property(_Config) ->
     SignatureElement = test_helpers:signature_element([
         {'xades:SigningTime', [], ["2026-01-01T00:00:00Z"]},
         {'xades:SigningTime', [], ["2026-01-01T00:00:00Z"]}
     ]),
-    ?assertEqual({error, invalid_signature}, signerl_signed_properties:extract(SignatureElement)).
+    ?assertEqual({error, duplicate_property}, signerl_signed_properties:extract(SignatureElement)).
 
 extract_returns_error_without_signing_time(_Config) ->
     SignatureElement = test_helpers:signature_element([{'xades:SignerRole', [], []}]),
-    ?assertEqual({error, invalid_signature}, signerl_signed_properties:extract(SignatureElement)).
+    ?assertEqual(
+        {error, missing_signing_time}, signerl_signed_properties:extract(SignatureElement)
+    ).
