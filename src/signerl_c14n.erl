@@ -65,21 +65,14 @@ exc_child(Text, _InputNs, _OutputNs) when is_binary(Text) -> escape_text(binary_
 %% (or has a different value), emit the declaration.
 exc_needed_decls(VisiblyUsedSet, InputNs, OutputParentNs) ->
     VisiblyUsed = sets:to_list(VisiblyUsedSet),
-    lists:filtermap(
-        fun(Prefix) ->
-            case maps:find(Prefix, InputNs) of
-                {ok, Uri} ->
-                    NeedEmit = maps:get(Prefix, OutputParentNs, undefined) =/= Uri,
-                    case NeedEmit of
-                        true -> {true, {prefix_to_ns_decl(Prefix), Uri}};
-                        false -> false
-                    end;
-                error ->
-                    false
-            end
-        end,
-        VisiblyUsed
-    ).
+    lists:filtermap(fun(Prefix) -> exc_need_emit(Prefix, InputNs, OutputParentNs) end, VisiblyUsed).
+
+exc_need_emit(Prefix, InputNs, OutputParentNs) ->
+    case {maps:find(Prefix, InputNs), maps:find(Prefix, OutputParentNs)} of
+        {{ok, Uri}, {ok, Uri}} -> false;
+        {{ok, Uri}, _} -> {true, {prefix_to_ns_decl(Prefix), Uri}};
+        {error, _} -> false
+    end.
 
 prefix_to_ns_decl("") -> "xmlns";
 prefix_to_ns_decl(Prefix) -> "xmlns:" ++ Prefix.
