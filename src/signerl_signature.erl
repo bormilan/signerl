@@ -40,11 +40,7 @@ construct_signature_without_value(Message, Hash, DigestMethodUri, SignatureMetho
     SignedInfo = signed_info(Message, SignedProperties, Hash, DigestMethodUri, SignatureMethodUri),
     KeyInfoElement = key_info(CertDer),
     SignatureElement =
-        {'ds:Signature',
-            [
-                {'xmlns:ds', ?DSIG_NAMESPACE_URI},
-                {'Id', ?SIGNATURE_ID}
-            ],
+        {'ds:Signature', [{'xmlns:ds', ?DSIG_NAMESPACE_URI}, {'Id', ?SIGNATURE_ID}],
             [SignedInfo] ++ KeyInfoElement ++ [signature_object(SignedProperties)]},
     {ok, SignatureElement, SignedInfo}.
 
@@ -52,13 +48,7 @@ key_info(undefined) ->
     [];
 key_info(CertDer) when is_binary(CertDer) ->
     CertB64 = binary_to_list(base64:encode(CertDer)),
-    [
-        {'ds:KeyInfo', [], [
-            {'ds:X509Data', [], [
-                {'ds:X509Certificate', [], [CertB64]}
-            ]}
-        ]}
-    ].
+    [{'ds:KeyInfo', [], [{'ds:X509Data', [], [{'ds:X509Certificate', [], [CertB64]}]}]}].
 
 signed_info(Message, SignedProperties, Hash, DigestMethodUri, SignatureMethodUri) ->
     MessageDigest = signerl_dsig_utils:digest_base64(Hash, signerl_c14n:canonicalize(Message)),
@@ -86,10 +76,7 @@ signed_info(Message, SignedProperties, Hash, DigestMethodUri, SignatureMethodUri
                 {'URI', "#" ++ ?SIGNED_PROPERTIES_ID},
                 {'Type', ?XADES_SIGNED_PROPERTIES_TYPE_URI}
             ],
-            [
-                DigestMethodElement,
-                SignedPropertiesDigestElement
-            ]
+            [DigestMethodElement, SignedPropertiesDigestElement]
         )
     ]}.
 
@@ -111,9 +98,7 @@ signature_object(SignedProperties) ->
                 {'xmlns:xades', ?XADES_NAMESPACE_URI},
                 {'Target', "#" ++ ?SIGNATURE_ID}
             ],
-            [
-                SignedProperties
-            ]}
+            [SignedProperties]}
     ]}.
 
 signed_properties(SigningTime) ->

@@ -31,17 +31,8 @@ c14n11_element({Tag, Attrs, Children}, ParentNs) ->
     NewNsDecls = new_namespace_decls(ParentNs, NsDecls),
     SortedNsDecls = sort_ns_decls(NewNsDecls),
     SortedAttrs = sort_attributes(RegularAttrs, CurrentNs),
-    [
-        "<",
-        TagStr,
-        render_ns_decls(SortedNsDecls),
-        render_attributes(SortedAttrs),
-        ">",
-        [c14n11_child(C, CurrentNs) || C <- Children],
-        "</",
-        TagStr,
-        ">"
-    ].
+    ChildrenIo = [c14n11_child(C, CurrentNs) || C <- Children],
+    render_element(TagStr, SortedNsDecls, SortedAttrs, ChildrenIo).
 
 c14n11_child({_, _, _} = Element, Ns) -> c14n11_element(Element, Ns);
 c14n11_child(Text, _Ns) when is_list(Text) -> escape_text(Text);
@@ -63,17 +54,8 @@ exc_element({Tag, Attrs, Children}, InputParentNs, OutputParentNs) ->
     OutputNs = merge_namespaces(OutputParentNs, EmittedNsDecls),
     SortedNsDecls = sort_ns_decls(EmittedNsDecls),
     SortedAttrs = sort_attributes(RegularAttrs, InputNs),
-    [
-        "<",
-        TagStr,
-        render_ns_decls(SortedNsDecls),
-        render_attributes(SortedAttrs),
-        ">",
-        [exc_child(C, InputNs, OutputNs) || C <- Children],
-        "</",
-        TagStr,
-        ">"
-    ].
+    ChildrenIo = [exc_child(C, InputNs, OutputNs) || C <- Children],
+    render_element(TagStr, SortedNsDecls, SortedAttrs, ChildrenIo).
 
 exc_child({_, _, _} = Element, InputNs, OutputNs) -> exc_element(Element, InputNs, OutputNs);
 exc_child(Text, _InputNs, _OutputNs) when is_list(Text) -> escape_text(Text);
@@ -135,11 +117,7 @@ merge_namespaces(ParentNs, NsDecls) ->
     ).
 
 new_namespace_decls(ParentNs, NsDecls) ->
-    [
-        {NameStr, Value}
-     || {NameStr, Value} <- NsDecls,
-        maps:get(ns_decl_prefix(NameStr), ParentNs, undefined) =/= Value
-    ].
+    [{N, V} || {N, V} <- NsDecls, maps:get(ns_decl_prefix(N), ParentNs, undefined) =/= V].
 
 ns_decl_prefix("xmlns") -> "";
 ns_decl_prefix("xmlns:" ++ Prefix) -> Prefix.
@@ -166,10 +144,7 @@ sort_ns_decls(NsDecls) ->
     ).
 
 sort_attributes(Attrs, NsMap) ->
-    Keyed = [
-        {attr_sort_key(Name, NsMap), Name, Value}
-     || {Name, Value} <- Attrs
-    ],
+    Keyed = [{attr_sort_key(Name, NsMap), Name, Value} || {Name, Value} <- Attrs],
     Sorted = lists:sort(
         fun({KeyA, _, _}, {KeyB, _, _}) -> KeyA =< KeyB end,
         Keyed
@@ -186,6 +161,19 @@ attr_sort_key(Name, NsMap) ->
     end.
 
 %% --- Rendering ---
+
+render_element(TagStr, NsDecls, Attrs, ChildrenIo) ->
+    [
+        "<",
+        TagStr,
+        render_ns_decls(NsDecls),
+        render_attributes(Attrs),
+        ">",
+        ChildrenIo,
+        "</",
+        TagStr,
+        ">"
+    ].
 
 render_ns_decls([]) ->
     [];
