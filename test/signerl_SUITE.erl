@@ -106,6 +106,13 @@ groups() ->
         {interop_smoke_group, [], [
             c14n_idempotent_after_sign,
             is_signature_element_shared
+        ]},
+        {xml_utils_group, [], [
+            export_fragment_returns_binary,
+            to_file_writes_and_reads_back,
+            parse_prolog_rejects_bom,
+            single_text_returns_binary_and_list,
+            single_text_returns_not_found
         ]}
     ].
 
@@ -118,6 +125,7 @@ all() ->
         {group, verify_tamper_group},
         {group, keyinfo_group},
         {group, interop_smoke_group},
+        {group, xml_utils_group},
         extract_signature_returns_error_without_signature_element_direct,
         xades_xml_returns_error_with_non_signature_input,
         c14n_mode_returns_exc_for_exc_c14n_algorithm,
@@ -1163,3 +1171,33 @@ corrupt_x509_certificate_child({'ds:X509Certificate', Attrs, _}, Replacement) ->
     {'ds:X509Certificate', Attrs, Replacement};
 corrupt_x509_certificate_child(Other, _Replacement) ->
     Other.
+
+%% xml_utils_group tests
+
+export_fragment_returns_binary(_Config) ->
+    Element = {tag, [], ["content"]},
+    Result = signerl_xml:export_fragment(Element),
+    ?assert(is_binary(Result)),
+    ?assertNotEqual(<<>>, Result).
+
+to_file_writes_and_reads_back(Config) ->
+    PrivDir = ?config(priv_dir, Config),
+    OutPath = filename:join(PrivDir, "to_file_test.xml"),
+    Prolog = ["<?xml version=\"1.0\" encoding=\"UTF-8\"?>"],
+    Root = signerl_xml:parse_file("test/examples/base/books.xml"),
+    Binary = signerl_xml:export(Prolog, Root),
+    ok = signerl_xml:to_file(OutPath, Binary),
+    ReadBack = signerl_xml:parse_file(OutPath),
+    ?assertEqual(Root, ReadBack).
+
+parse_prolog_rejects_bom(_Config) ->
+    Message = <<16#EF, 16#BB, 16#BF, "<?xml version=\"1.0\" encoding=\"UTF-8\"?><root/>">>,
+    ?assertEqual({error, invalid_prolog}, signerl_xml:parse_prolog(Message)).
+
+single_text_returns_binary_and_list(_Config) ->
+    ?assertEqual({ok, <<"abc">>}, signerl_xml:single_text({tag, [], [<<"abc">>]})),
+    ?assertEqual({ok, <<"abc">>}, signerl_xml:single_text({tag, [], ["abc"]})).
+
+single_text_returns_not_found(_Config) ->
+    ?assertEqual({error, not_found}, signerl_xml:single_text({tag, [], []})),
+    ?assertEqual({error, not_found}, signerl_xml:single_text({tag, [], ["a", "b"]})).
