@@ -1,4 +1,5 @@
 -define(DSIG_C14N11_ALGO_URI, "http://www.w3.org/2006/12/xml-c14n11").
+-define(DSIG_EXC_C14N_ALGO_URI, "http://www.w3.org/2001/10/xml-exc-c14n#").
 -define(DSIG_ENVELOPED_SIGNATURE_TRANSFORM_URI,
     "http://www.w3.org/2000/09/xmldsig#enveloped-signature"
 ).

@@ -10,6 +10,7 @@ all() ->
         {group, namespace_group},
         {group, escaping_group},
         {group, transform_group},
+        {group, exc_c14n_group},
         {group, interop_group}
     ].
 
@@ -49,6 +50,16 @@ groups() ->
             remove_signature_from_root,
             remove_signature_preserves_other_children,
             remove_signature_no_signature_present
+        ]},
+        {exc_c14n_group, [], [
+            exc_c14n_omits_unused_ns,
+            exc_c14n_keeps_visibly_used_ns,
+            exc_c14n_propagates_ns_to_children,
+            exc_c14n_binary_text_child,
+            exc_c14n_default_namespace,
+            exc_c14n_ns_already_in_output_scope,
+            c14n11_emits_all_ns_decls,
+            canonicalize_1_defaults_to_c14n11
         ]},
         {interop_group, [], [
             interop_simple_attrs,
@@ -297,6 +308,86 @@ remove_signature_no_signature_present(_Config) ->
     Input = {root, [], [{child, [], ["text"]}]},
     ?assertEqual(Input, signerl_c14n:remove_signature_elements(Input)).
 
+%% === Exclusive C14N Group ===
+
+exc_c14n_omits_unused_ns(_Config) ->
+    %% Parent declares ns1 and ns2, child only uses ns1 in tag.
+    %% Exc-C14N: root emits neither (not visibly used), child emits ns1.
+    Input = two_ns_input(),
+    Result = signerl_c14n:canonicalize(Input, exc_c14n),
+    ?assertEqual(
+        <<"<root><ns1:child xmlns:ns1=\"http://ns1\">text</ns1:child></root>">>,
+        Result
+    ).
+
+exc_c14n_keeps_visibly_used_ns(_Config) ->
+    %% Child uses ns1 in tag and ns2 in attribute — both should be emitted.
+    Input =
+        {root, [{'xmlns:ns1', "http://ns1"}, {'xmlns:ns2', "http://ns2"}], [
+            {'ns1:child', [{'ns2:attr', "val"}], ["text"]}
+        ]},
+    Result = signerl_c14n:canonicalize(Input, exc_c14n),
+    ?assertNotEqual(nomatch, binary:match(Result, <<"xmlns:ns1=\"http://ns1\"">>)),
+    ?assertNotEqual(nomatch, binary:match(Result, <<"xmlns:ns2=\"http://ns2\"">>)).
+
+exc_c14n_propagates_ns_to_children(_Config) ->
+    %% Grandchild uses ns1 but parent doesn't — exc-c14n should emit ns1 on grandchild.
+    Input =
+        {root, [{'xmlns:ns1', "http://ns1"}], [
+            {middle, [], [
+                {'ns1:leaf', [], ["deep"]}
+            ]}
+        ]},
+    Result = signerl_c14n:canonicalize(Input, exc_c14n),
+    ?assertNotEqual(
+        nomatch, binary:match(Result, <<"<ns1:leaf xmlns:ns1=\"http://ns1\">deep</ns1:leaf>">>)
+    ).
+
+c14n11_emits_all_ns_decls(_Config) ->
+    %% C14N 1.1 should emit ns2 on root even if only used by descendants.
+    Input = two_ns_input(),
+    C14N11 = signerl_c14n:canonicalize(Input, c14n11),
+    %% ns2 should appear on root but NOT re-emitted on child
+    ?assertNotEqual(nomatch, binary:match(C14N11, <<"xmlns:ns2=\"http://ns2\"">>)),
+    %% Verify ns2 is NOT on child element in C14N 1.1
+    ChildPart =
+        case binary:match(C14N11, <<"<ns1:child">>) of
+            {Start, _} -> binary:part(C14N11, Start, byte_size(C14N11) - Start);
+            nomatch -> <<>>
+        end,
+    ?assertEqual(nomatch, binary:match(ChildPart, <<"xmlns:ns2">>)).
+
+canonicalize_1_defaults_to_c14n11(_Config) ->
+    Input = {root, [{'xmlns:ns1', "http://ns1"}], [{'ns1:child', [], ["text"]}]},
+    ?assertEqual(
+        signerl_c14n:canonicalize(Input, c14n11),
+        signerl_c14n:canonicalize(Input)
+    ).
+
+exc_c14n_binary_text_child(_Config) ->
+    %% Binary text child should be handled the same as list text.
+    Input = {root, [], [<<"binary text">>]},
+    ?assertEqual(<<"<root>binary text</root>">>, signerl_c14n:canonicalize(Input, exc_c14n)).
+
+exc_c14n_default_namespace(_Config) ->
+    %% Element using default namespace (no prefix) should emit xmlns="...".
+    Input = {child, [{xmlns, "http://default"}], ["text"]},
+    Result = signerl_c14n:canonicalize(Input, exc_c14n),
+    ?assertEqual(<<"<child xmlns=\"http://default\">text</child>">>, Result).
+
+exc_c14n_ns_already_in_output_scope(_Config) ->
+    %% When parent already emitted ns1, child should not re-emit it (NeedEmit=false path).
+    Input =
+        {'ns1:parent', [{'xmlns:ns1', "http://ns1"}], [
+            {'ns1:child', [], ["text"]}
+        ]},
+    Result = signerl_c14n:canonicalize(Input, exc_c14n),
+    %% ns1 appears once on parent, not re-emitted on child
+    ?assertEqual(
+        <<"<ns1:parent xmlns:ns1=\"http://ns1\"><ns1:child>text</ns1:child></ns1:parent>">>,
+        Result
+    ).
+
 %% === Interop Group ===
 %% Compare our C14N 1.1 output against xmllint --c14n11
 
@@ -357,3 +448,8 @@ run_our_c14n(FilePath) ->
     {ParsedXml, _} = xmerl_scan:file(FilePath),
     Simplified = xmerl_lib:simplify_element(ParsedXml),
     signerl_c14n:canonicalize(Simplified).
+
+two_ns_input() ->
+    {root, [{'xmlns:ns1', "http://ns1"}, {'xmlns:ns2', "http://ns2"}], [
+        {'ns1:child', [], ["text"]}
+    ]}.

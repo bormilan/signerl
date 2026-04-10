@@ -1,43 +1,81 @@
 -module(signerl_c14n).
 
--export([canonicalize/1, remove_signature_elements/1]).
+-export([canonicalize/1, canonicalize/2, remove_signature_elements/1]).
+
+-type c14n_mode() :: c14n11 | exc_c14n.
+-export_type([c14n_mode/0]).
 
 -spec canonicalize(signerl_xml:simplified_xml()) -> binary().
 canonicalize(XmlTerm) ->
-    list_to_binary(canonicalize_element(XmlTerm, #{})).
+    canonicalize(XmlTerm, c14n11).
+
+-spec canonicalize(signerl_xml:simplified_xml(), c14n_mode()) -> binary().
+canonicalize(XmlTerm, c14n11) ->
+    list_to_binary(c14n11_element(XmlTerm, #{}));
+canonicalize(XmlTerm, exc_c14n) ->
+    list_to_binary(exc_element(XmlTerm, #{}, #{})).
 
 -spec remove_signature_elements(signerl_xml:simplified_xml()) -> signerl_xml:simplified_xml().
 remove_signature_elements({Tag, Attrs, Children}) ->
-    Filtered = [C || C <- Children, not is_signature_element(C)],
+    Filtered = [C || C <- Children, not signerl_xml:is_signature_element(C)],
     {Tag, Attrs, Filtered}.
 
-is_signature_element({'ds:Signature', _, _}) -> true;
-is_signature_element(_) -> false.
+%% ====================================================================
+%% C14N 1.1 — emit all new/changed ns decls, inherit everything
+%% ====================================================================
 
-%% --- Element serialization ---
-
--spec canonicalize_element(signerl_xml:simplified_xml(), map()) -> iolist().
-canonicalize_element({Tag, Attrs, Children}, ParentNs) ->
+c14n11_element({Tag, Attrs, Children}, ParentNs) ->
     TagStr = atom_to_list(Tag),
     {NsDecls, RegularAttrs} = partition_attrs(Attrs),
     CurrentNs = merge_namespaces(ParentNs, NsDecls),
     NewNsDecls = new_namespace_decls(ParentNs, NsDecls),
-    VisiblyUsed = visibly_used_prefixes(TagStr, RegularAttrs),
-    EmittedNsDecls = filter_visibly_used(NewNsDecls, VisiblyUsed, ParentNs),
-    SortedNsDecls = sort_ns_decls(EmittedNsDecls),
+    SortedNsDecls = sort_ns_decls(NewNsDecls),
     SortedAttrs = sort_attributes(RegularAttrs, CurrentNs),
-    Result = [
-        "<",
-        TagStr,
-        render_ns_decls(SortedNsDecls),
-        render_attributes(SortedAttrs),
-        ">",
-        render_children(Children, CurrentNs),
-        "</",
-        TagStr,
-        ">"
-    ],
-    Result.
+    ChildrenIo = [c14n11_child(C, CurrentNs) || C <- Children],
+    render_element(TagStr, SortedNsDecls, SortedAttrs, ChildrenIo).
+
+c14n11_child({_, _, _} = Element, Ns) -> c14n11_element(Element, Ns);
+c14n11_child(Text, _Ns) when is_list(Text) -> escape_text(Text);
+c14n11_child(Text, _Ns) when is_binary(Text) -> escape_text(binary_to_list(Text)).
+
+%% ====================================================================
+%% Exclusive C14N — only emit visibly utilized ns decls
+%% InputNs: all namespaces in scope from the input document
+%% OutputNs: namespaces emitted by output ancestors
+%% ====================================================================
+
+exc_element({Tag, Attrs, Children}, InputParentNs, OutputParentNs) ->
+    TagStr = atom_to_list(Tag),
+    {NsDecls, RegularAttrs} = partition_attrs(Attrs),
+    InputNs = merge_namespaces(InputParentNs, NsDecls),
+    VisiblyUsed = visibly_used_prefixes(TagStr, RegularAttrs),
+    %% Emit ns decls for visibly used prefixes not already in output scope
+    EmittedNsDecls = exc_needed_decls(VisiblyUsed, InputNs, OutputParentNs),
+    OutputNs = merge_namespaces(OutputParentNs, EmittedNsDecls),
+    SortedNsDecls = sort_ns_decls(EmittedNsDecls),
+    SortedAttrs = sort_attributes(RegularAttrs, InputNs),
+    ChildrenIo = [exc_child(C, InputNs, OutputNs) || C <- Children],
+    render_element(TagStr, SortedNsDecls, SortedAttrs, ChildrenIo).
+
+exc_child({_, _, _} = Element, InputNs, OutputNs) -> exc_element(Element, InputNs, OutputNs);
+exc_child(Text, _InputNs, _OutputNs) when is_list(Text) -> escape_text(Text);
+exc_child(Text, _InputNs, _OutputNs) when is_binary(Text) -> escape_text(binary_to_list(Text)).
+
+%% For each visibly used prefix, if it's in InputNs but not in OutputParentNs
+%% (or has a different value), emit the declaration.
+exc_needed_decls(VisiblyUsedSet, InputNs, OutputParentNs) ->
+    VisiblyUsed = sets:to_list(VisiblyUsedSet),
+    lists:filtermap(fun(Prefix) -> exc_need_emit(Prefix, InputNs, OutputParentNs) end, VisiblyUsed).
+
+exc_need_emit(Prefix, InputNs, OutputParentNs) ->
+    case {maps:find(Prefix, InputNs), maps:find(Prefix, OutputParentNs)} of
+        {{ok, Uri}, {ok, Uri}} -> false;
+        {{ok, Uri}, _} -> {true, {prefix_to_ns_decl(Prefix), Uri}};
+        {error, _} -> false
+    end.
+
+prefix_to_ns_decl("") -> "xmlns";
+prefix_to_ns_decl(Prefix) -> "xmlns:" ++ Prefix.
 
 %% --- Attribute partitioning ---
 
@@ -72,21 +110,10 @@ merge_namespaces(ParentNs, NsDecls) ->
     ).
 
 new_namespace_decls(ParentNs, NsDecls) ->
-    [
-        {NameStr, Value}
-     || {NameStr, Value} <- NsDecls,
-        maps:get(ns_decl_prefix(NameStr), ParentNs, undefined) =/= Value
-    ].
+    [{N, V} || {N, V} <- NsDecls, maps:get(ns_decl_prefix(N), ParentNs, undefined) =/= V].
 
 ns_decl_prefix("xmlns") -> "";
 ns_decl_prefix("xmlns:" ++ Prefix) -> Prefix.
-
-%% --- Visible use filtering ---
-%% C14N 1.1 §2.3: only emit namespace declarations for prefixes
-%% that are visibly utilized by the element or its attributes.
-%% For full-document canonicalization (not document subsets),
-%% we emit all new/changed declarations since they are needed
-%% by the element itself or its descendants.
 
 visibly_used_prefixes(TagStr, RegularAttrs) ->
     TagPrefix = extract_prefix(TagStr),
@@ -99,12 +126,6 @@ extract_prefix(Name) ->
         [_] -> ""
     end.
 
-filter_visibly_used(NewNsDecls, _VisiblyUsed, _ParentNs) ->
-    %% For full-document canonicalization, all new/changed namespace
-    %% declarations must be emitted (they may be needed by descendants).
-    %% Superfluous declarations are already filtered by new_namespace_decls/2.
-    NewNsDecls.
-
 %% --- Sorting ---
 
 sort_ns_decls(NsDecls) ->
@@ -116,10 +137,7 @@ sort_ns_decls(NsDecls) ->
     ).
 
 sort_attributes(Attrs, NsMap) ->
-    Keyed = [
-        {attr_sort_key(Name, NsMap), Name, Value}
-     || {Name, Value} <- Attrs
-    ],
+    Keyed = [{attr_sort_key(Name, NsMap), Name, Value} || {Name, Value} <- Attrs],
     Sorted = lists:sort(
         fun({KeyA, _, _}, {KeyB, _, _}) -> KeyA =< KeyB end,
         Keyed
@@ -137,6 +155,19 @@ attr_sort_key(Name, NsMap) ->
 
 %% --- Rendering ---
 
+render_element(TagStr, NsDecls, Attrs, ChildrenIo) ->
+    [
+        "<",
+        TagStr,
+        render_ns_decls(NsDecls),
+        render_attributes(Attrs),
+        ">",
+        ChildrenIo,
+        "</",
+        TagStr,
+        ">"
+    ].
+
 render_ns_decls([]) ->
     [];
 render_ns_decls([{NameStr, Value} | Rest]) ->
@@ -147,18 +178,6 @@ render_attributes([]) ->
 render_attributes([{Name, Value} | Rest]) ->
     StrValue = value_to_string(Value),
     [" ", Name, "=\"", escape_attr_value(StrValue), "\"" | render_attributes(Rest)].
-
-render_children([], _Ns) ->
-    [];
-render_children([Child | Rest], Ns) ->
-    [render_child(Child, Ns) | render_children(Rest, Ns)].
-
-render_child({_, _, _} = Element, Ns) ->
-    canonicalize_element(Element, Ns);
-render_child(Text, _Ns) when is_list(Text) ->
-    escape_text(Text);
-render_child(Text, _Ns) when is_binary(Text) ->
-    escape_text(binary_to_list(Text)).
 
 %% --- Escaping (C14N 1.1 §2.3) ---
 
