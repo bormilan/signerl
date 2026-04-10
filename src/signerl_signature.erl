@@ -3,11 +3,11 @@
 
 -export([build_signature_element/4]).
 
--spec build_signature_element(Message, Hash, Key, CertDer) ->
+-spec build_signature_element(Message, HashAlgorithm, Key, CertDer) ->
     {ok, signerl_xml:simplified_xml()} | {error, unsupported_hash | unsupported_key}
 when
     Message :: signerl_xml:simplified_xml(),
-    Hash :: atom(),
+    HashAlgorithm :: atom(),
     Key :: public_key:private_key(),
     CertDer :: binary() | undefined.
 build_signature_element(Message, sha256, Key, CertDer) ->
@@ -22,22 +22,26 @@ build_signature_element(Message, sha256, Key, CertDer) ->
 build_signature_element(_Message, _Hash, _Key, _CertDer) ->
     {error, unsupported_hash}.
 
-build_signature_element_with_method_uri(Message, Hash, Key, SignatureMethodUri, CertDer) ->
+build_signature_element_with_method_uri(Message, HashAlgorithm, Key, SignatureMethodUri, CertDer) ->
     {ok, SignatureElementWithoutValue, SignedInfo} =
         construct_signature_without_value(
-            Message, Hash, ?DSIG_DIGEST_SHA256_URI, SignatureMethodUri, CertDer
+            Message, HashAlgorithm, ?DSIG_DIGEST_SHA256_URI, SignatureMethodUri, CertDer
         ),
     SignedInfoBytes = signerl_c14n:canonicalize(SignedInfo),
-    SignatureBytes = public_key:sign(SignedInfoBytes, Hash, Key),
+    SignatureBytes = public_key:sign(SignedInfoBytes, HashAlgorithm, Key),
     SignatureValue = base64:encode(SignatureBytes),
     SignatureElement =
         add_signature_value(SignatureElementWithoutValue, binary_to_list(SignatureValue)),
     {ok, SignatureElement}.
 
-construct_signature_without_value(Message, Hash, DigestMethodUri, SignatureMethodUri, CertDer) ->
+construct_signature_without_value(
+    Message, HashAlgorithm, DigestMethodUri, SignatureMethodUri, CertDer
+) ->
     SigningTime = signerl_utils:current_utc_timestamp(),
     SignedProperties = signed_properties(SigningTime),
-    SignedInfo = signed_info(Message, SignedProperties, Hash, DigestMethodUri, SignatureMethodUri),
+    SignedInfo = signed_info(
+        Message, SignedProperties, HashAlgorithm, DigestMethodUri, SignatureMethodUri
+    ),
     KeyInfoElement = key_info(CertDer),
     SignatureElement =
         {'ds:Signature', [{'xmlns:ds', ?DSIG_NAMESPACE_URI}, {'Id', ?SIGNATURE_ID}],
@@ -50,10 +54,14 @@ key_info(CertDer) when is_binary(CertDer) ->
     CertB64 = binary_to_list(base64:encode(CertDer)),
     [{'ds:KeyInfo', [], [{'ds:X509Data', [], [{'ds:X509Certificate', [], [CertB64]}]}]}].
 
-signed_info(Message, SignedProperties, Hash, DigestMethodUri, SignatureMethodUri) ->
-    MessageDigest = signerl_dsig_utils:digest_base64(Hash, signerl_c14n:canonicalize(Message)),
+signed_info(Message, SignedProperties, HashAlgorithm, DigestMethodUri, SignatureMethodUri) ->
+    MessageDigest = signerl_dsig_utils:digest_base64(
+        HashAlgorithm, signerl_c14n:canonicalize(Message)
+    ),
     SignedPropertiesDigest =
-        signerl_dsig_utils:digest_base64(Hash, signerl_c14n:canonicalize(SignedProperties)),
+        signerl_dsig_utils:digest_base64(
+            HashAlgorithm, signerl_c14n:canonicalize(SignedProperties)
+        ),
     DigestMethodElement = {'ds:DigestMethod', [{'Algorithm', DigestMethodUri}], []},
     MessageDigestElement = {'ds:DigestValue', [], [binary_to_list(MessageDigest)]},
     SignedPropertiesDigestElement =

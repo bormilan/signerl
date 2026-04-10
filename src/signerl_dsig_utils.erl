@@ -3,8 +3,8 @@
 
 -export([digest_base64/2, signature_method_uri_for_key/1]).
 
-digest_base64(Hash, Payload) ->
-    base64:encode(crypto:hash(Hash, Payload)).
+digest_base64(HashAlgorithm, Payload) ->
+    base64:encode(crypto:hash(HashAlgorithm, Payload)).
 
 signature_method_uri_for_key(Key) when is_tuple(Key), tuple_size(Key) > 0 ->
     case element(1, Key) of

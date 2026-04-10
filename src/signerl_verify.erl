@@ -18,9 +18,9 @@ extract_signature_data({Tag, Attrs, Content}) ->
             {error, missing_signature}
     end.
 
--spec verify_reference_digests(SignatureData, Hash) -> Result when
+-spec verify_reference_digests(SignatureData, HashAlgorithm) -> Result when
     SignatureData :: map(),
-    Hash :: atom(),
+    HashAlgorithm :: atom(),
     Result :: true | false | {error, atom()}.
 verify_reference_digests(
     #{
@@ -33,10 +33,10 @@ verify_reference_digests(
             } = SignedPropertiesReference
         } = References
     },
-    Hash
+    HashAlgorithm
 ) ->
     maybe
-        {ok, DigestMethodUri} ?= digest_method_uri(Hash),
+        {ok, DigestMethodUri} ?= digest_method_uri(HashAlgorithm),
         SignatureMethodUris = [?DSIG_SIG_RSA_SHA256_URI, ?DSIG_SIG_ECDSA_SHA256_URI],
         ok ?= validate_signed_info_algorithms(References, SignatureMethodUris),
         ok ?= validate_document_reference(DocumentReference, DigestMethodUri),
@@ -47,8 +47,8 @@ verify_reference_digests(
             signerl_c14n:remove_signature_elements(UnsignedMessage)
         ),
         SignedPropertiesPayload = signerl_c14n:canonicalize(SignedPropertiesElement),
-        DocumentDigest = crypto:hash(Hash, DocumentPayload),
-        SignedPropertiesDigest = crypto:hash(Hash, SignedPropertiesPayload),
+        DocumentDigest = crypto:hash(HashAlgorithm, DocumentPayload),
+        SignedPropertiesDigest = crypto:hash(HashAlgorithm, SignedPropertiesPayload),
         case
             {
                 DocumentDigest =:= DocumentDigestValue,
@@ -276,12 +276,12 @@ extract_key_info(SignatureElement) ->
     end.
 
 extract_x509_certificate(KeyInfoElement) ->
-    case signerl_xml:find_path(['ds:X509Data', 'ds:X509Certificate'], KeyInfoElement) of
-        {ok, {_, _, [CertB64]}} when is_list(CertB64) ->
-            case decode_base64_binary(list_to_binary(CertB64)) of
-                {ok, CertDer} -> #{x509_certificate => CertDer};
-                {error, _} -> undefined
-            end;
-        _ ->
-            undefined
+    maybe
+        {ok, {_, _, [CertB64]}} ?=
+            signerl_xml:find_path(['ds:X509Data', 'ds:X509Certificate'], KeyInfoElement),
+        true ?= is_list(CertB64),
+        {ok, CertDer} ?= decode_base64_binary(list_to_binary(CertB64)),
+        #{x509_certificate => CertDer}
+    else
+        _ -> undefined
     end.
