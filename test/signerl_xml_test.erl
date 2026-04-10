@@ -122,6 +122,12 @@ single_text_handles_binary_list_and_invalid_shapes_test() ->
     ?assertEqual({error, not_found}, signerl_xml:single_text({tag, [], []})),
     ?assertEqual({error, not_found}, signerl_xml:single_text({tag, [], ["a", "b"]})).
 
+export_fragment_returns_binary_test() ->
+    Element = {tag, [], ["content"]},
+    Result = signerl_xml:export_fragment(Element),
+    ?assert(is_binary(Result)),
+    ?assertNotEqual(<<>>, Result).
+
 %% Utils
 
 new_test_element() ->

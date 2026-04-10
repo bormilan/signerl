@@ -12,16 +12,22 @@ file_path(FileName) ->
     code:lib_dir(signerl) ++ "/" ++ FileName.
 
 load_key_from_file(FilePath) ->
+    maybe
+        {ok, KeyRaw} ?= read_key_file(FilePath),
+        {ok, KeyDer} ?= decode_pem(KeyRaw),
+        {ok, public_key:pem_entry_decode(KeyDer)}
+    end.
+
+read_key_file(FilePath) ->
     case file:read_file(FilePath) of
-        {ok, KeyRaw} ->
-            case public_key:pem_decode(KeyRaw) of
-                [KeyDer] ->
-                    {ok, public_key:pem_entry_decode(KeyDer)};
-                _ ->
-                    {error, invalid_pem}
-            end;
-        {error, Reason} ->
-            {error, {file_error, Reason}}
+        {ok, _} = Ok -> Ok;
+        {error, Reason} -> {error, {file_error, Reason}}
+    end.
+
+decode_pem(KeyRaw) ->
+    case public_key:pem_decode(KeyRaw) of
+        [KeyDer] -> {ok, KeyDer};
+        _ -> {error, invalid_pem}
     end.
 
 valid_utc_timestamp(
