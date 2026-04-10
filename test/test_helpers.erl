@@ -3,6 +3,7 @@
 -export([
     rsa_public_key_from_cert/1,
     ecdsa_public_key_from_cert/1,
+    cert_der/1,
     signature_element/1
 ]).
 
@@ -34,6 +35,12 @@ ecdsa_public_key_from_cert(CertPath) ->
     Params = Alg#'PublicKeyAlgorithm'.parameters,
     PointRec = Spki#'OTPSubjectPublicKeyInfo'.subjectPublicKey,
     {PointRec, Params}.
+
+cert_der(CertPath) ->
+    {ok, CertRaw} = file:read_file(CertPath),
+    [PemEntry] = public_key:pem_decode(CertRaw),
+    {_, Der, _} = PemEntry,
+    Der.
 
 signature_element(SignedSignaturePropertiesElements) ->
     {'ds:Signature', [], [

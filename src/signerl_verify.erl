@@ -2,13 +2,15 @@
 -feature(maybe_expr, enable).
 -include("signerl_dsig.hrl").
 
--export([extract_signature_data/1, verify_reference_digests/2]).
+-export([extract_signature_data/1, verify_reference_digests/2, c14n_mode/1]).
 
 -spec extract_signature_data(Message) -> Result when
     Message :: signerl_xml:simplified_xml(),
     Result :: {ok, map()} | {error, atom()}.
 extract_signature_data({Tag, Attrs, Content}) ->
-    {SignatureElements, UnsignedContent} = lists:partition(fun is_signature_element/1, Content),
+    {SignatureElements, UnsignedContent} = lists:partition(
+        fun signerl_xml:is_signature_element/1, Content
+    ),
     case SignatureElements of
         [SignatureElement] ->
             decode_signature_data(SignatureElement, {Tag, Attrs, UnsignedContent});
@@ -71,20 +73,17 @@ decode_signature_data(SignatureElement, UnsignedMessage) ->
         {ok, SignedProperties} ?= signerl_signed_properties:extract(SignatureElement),
         {ok, SignedInfoElement} ?= signed_info_element(SignatureElement),
         {ok, References} ?= signed_info_references(SignedInfoElement),
+        KeyInfo = extract_key_info(SignatureElement),
         {ok, #{
             signature_bytes => SignatureBytes,
             unsigned_message => UnsignedMessage,
             signed_properties => SignedProperties,
             signature_element => SignatureElement,
             signed_info_element => SignedInfoElement,
-            references => References
+            references => References,
+            key_info => KeyInfo
         }}
     end.
-
-is_signature_element({'ds:Signature', _, _}) ->
-    true;
-is_signature_element(_) ->
-    false.
 
 signature_value({'ds:Signature', _, _} = SignatureElement) ->
     decode_signature_value(signerl_xml:find_path(['ds:SignatureValue'], SignatureElement)).
@@ -198,7 +197,8 @@ decode_transform_uris([_Other | _Rest], _Acc) ->
 
 validate_signed_info_algorithms(References, SignatureMethodUris) ->
     maybe
-        {ok, ?DSIG_C14N11_ALGO_URI} ?= maps:find(c14n_algorithm, References),
+        {ok, C14NAlgorithm} ?= maps:find(c14n_algorithm, References),
+        true ?= is_supported_c14n(C14NAlgorithm),
         {ok, SignatureMethodUri} ?= maps:find(signature_algorithm, References),
         true ?= lists:member(SignatureMethodUri, SignatureMethodUris),
         ok
@@ -206,6 +206,10 @@ validate_signed_info_algorithms(References, SignatureMethodUris) ->
         _ ->
             {error, unsupported_algorithm}
     end.
+
+is_supported_c14n(?DSIG_C14N11_ALGO_URI) -> true;
+is_supported_c14n(?DSIG_EXC_C14N_ALGO_URI) -> true;
+is_supported_c14n(_) -> false.
 
 validate_document_reference(Reference, DigestMethodUri) ->
     maybe
@@ -256,3 +260,28 @@ digest_method_uri(sha256) ->
     {ok, ?DSIG_DIGEST_SHA256_URI};
 digest_method_uri(_) ->
     {error, unsupported_hash}.
+
+-spec c14n_mode(map()) -> signerl_c14n:c14n_mode().
+c14n_mode(#{references := #{c14n_algorithm := ?DSIG_EXC_C14N_ALGO_URI}}) ->
+    exc_c14n;
+c14n_mode(_) ->
+    c14n11.
+
+extract_key_info(SignatureElement) ->
+    case signerl_xml:find_path(['ds:KeyInfo'], SignatureElement) of
+        {ok, KeyInfoElement} ->
+            extract_x509_certificate(KeyInfoElement);
+        {error, not_found} ->
+            undefined
+    end.
+
+extract_x509_certificate(KeyInfoElement) ->
+    case signerl_xml:find_path(['ds:X509Data', 'ds:X509Certificate'], KeyInfoElement) of
+        {ok, {_, _, [CertB64]}} when is_list(CertB64) ->
+            case decode_base64_binary(list_to_binary(CertB64)) of
+                {ok, CertDer} -> #{x509_certificate => CertDer};
+                {error, _} -> undefined
+            end;
+        _ ->
+            undefined
+    end.

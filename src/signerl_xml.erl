@@ -10,6 +10,7 @@
     single_text/1,
     attr_value/2,
     attr_value_or_undefined/2,
+    is_signature_element/1,
     export_fragment/1,
     export/2,
     to_file/2
@@ -146,6 +147,10 @@ attr_value_or_undefined(Key, Attrs) ->
         false ->
             undefined
     end.
+
+-spec is_signature_element(term()) -> boolean().
+is_signature_element({'ds:Signature', _, _}) -> true;
+is_signature_element(_) -> false.
 
 find_unique_child(Tag, {_, _, Content}) ->
     Children = [Element || Element = {TagValue, _, _} <- Content, TagValue =:= Tag],

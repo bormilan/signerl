@@ -42,7 +42,9 @@ groups() ->
             sign_returns_error_with_unsupported_key,
             sign_returns_file_error_with_missing_message_file,
             sign_returns_file_error_with_missing_key_file,
-            sign_returns_error_with_invalid_pem_key_file
+            sign_returns_error_with_invalid_pem_key_file,
+            sign4_returns_file_error_with_missing_message_file,
+            sign4_returns_file_error_with_missing_key_file
         ]},
         {verify_fixture_error_group, [], [
             verify_missing_prolog_binary_returns_error,
@@ -71,6 +73,7 @@ groups() ->
             verify_returns_error_without_signed_info,
             extract_signature_data_returns_error_with_missing_c14n,
             verify_reference_digests_returns_error_with_invalid_c14n_algorithm,
+            verify_reference_digests_accepts_exc_c14n_algorithm,
             verify_reference_digests_returns_error_with_invalid_signature_method_algorithm,
             extract_signature_data_returns_error_with_missing_reference_uri,
             extract_signature_data_returns_error_with_invalid_reference_payload,
@@ -89,6 +92,20 @@ groups() ->
             verify_fails_on_modified_message,
             verify_fails_on_modified_signing_time,
             verify_fails_with_wrong_keys
+        ]},
+        {keyinfo_group, [], [
+            sign_with_certificate_includes_keyinfo,
+            sign_without_certificate_omits_keyinfo,
+            sign_with_certificate_roundtrip_rsa,
+            sign_with_certificate_roundtrip_ecdsa,
+            sign_with_certificate_from_key_file,
+            sign_with_certificate_from_message_file,
+            verify_extracts_certificate_from_keyinfo,
+            verify_extracts_no_keyinfo_when_absent
+        ]},
+        {interop_smoke_group, [], [
+            c14n_idempotent_after_sign,
+            is_signature_element_shared
         ]}
     ].
 
@@ -99,8 +116,12 @@ all() ->
         {group, verify_fixture_error_group},
         {group, verify_signed_info_error_group},
         {group, verify_tamper_group},
+        {group, keyinfo_group},
+        {group, interop_smoke_group},
         extract_signature_returns_error_without_signature_element_direct,
-        xades_xml_returns_error_with_non_signature_input
+        xades_xml_returns_error_with_non_signature_input,
+        c14n_mode_returns_exc_for_exc_c14n_algorithm,
+        extract_x509_certificate_returns_undefined_for_invalid_cert
     ].
 
 %%%%%%%%%%%%%%%%%%%%%%%
@@ -166,6 +187,45 @@ init_per_group(verify_tamper_group, Config) ->
         {wrong_public_key, WrongPublicKey}
         | Config
     ];
+init_per_group(keyinfo_group, Config) ->
+    MessagePath = signerl_utils:file_path("test/examples/base/books.xml"),
+    {ok, RawMessage} = file:read_file(MessagePath),
+    RsaKey = signerl_cert_helpers:signer_rsa_key(),
+    EcdsaKey = signerl_cert_helpers:signer_ecdsa_key(),
+    RsaCertDer = test_helpers:cert_der(signerl_cert_helpers:signer_rsa_cert_path()),
+    EcdsaCertDer = test_helpers:cert_der(signerl_cert_helpers:signer_ecdsa_cert_path()),
+    RsaPublicKey = test_helpers:rsa_public_key_from_cert(
+        signerl_cert_helpers:signer_rsa_cert_path()
+    ),
+    EcdsaPublicKey = test_helpers:ecdsa_public_key_from_cert(
+        signerl_cert_helpers:signer_ecdsa_cert_path()
+    ),
+    RsaKeyPath = signerl_cert_helpers:signer_rsa_key_path(),
+    [
+        {message_path, MessagePath},
+        {raw_message, RawMessage},
+        {rsa_key, RsaKey},
+        {rsa_key_path, RsaKeyPath},
+        {ecdsa_key, EcdsaKey},
+        {rsa_cert_der, RsaCertDer},
+        {ecdsa_cert_der, EcdsaCertDer},
+        {rsa_public_key, RsaPublicKey},
+        {ecdsa_public_key, EcdsaPublicKey}
+        | Config
+    ];
+init_per_group(interop_smoke_group, Config) ->
+    MessagePath = signerl_utils:file_path("test/examples/base/books.xml"),
+    {ok, RawMessage} = file:read_file(MessagePath),
+    RsaKey = signerl_cert_helpers:signer_rsa_key(),
+    RsaPublicKey = test_helpers:rsa_public_key_from_cert(
+        signerl_cert_helpers:signer_rsa_cert_path()
+    ),
+    [
+        {raw_message, RawMessage},
+        {rsa_key, RsaKey},
+        {rsa_public_key, RsaPublicKey}
+        | Config
+    ];
 init_per_group(_, Config) ->
     Config.
 
@@ -175,7 +235,9 @@ end_per_group(_, _Config) ->
 add_signature_element_inserts_signature_value(Config) ->
     Message = ?config(message, Config),
     Key = ?config(rsa_key, Config),
-    {ok, SignatureElement} = signerl_signature:build_signature_element(Message, sha256, Key),
+    {ok, SignatureElement} = signerl_signature:build_signature_element(
+        Message, sha256, Key, undefined
+    ),
     SignedMessage = signerl_xml:add_new_element(SignatureElement, Message),
     ?assertMatch(
         {ok, {'ds:SignatureValue', [], [_]}},
@@ -191,7 +253,9 @@ add_signature_element_inserts_signature_value(Config) ->
 add_signature_element_inserts_signed_properties(Config) ->
     Message = ?config(message, Config),
     Key = ?config(rsa_key, Config),
-    {ok, SignatureElement} = signerl_signature:build_signature_element(Message, sha256, Key),
+    {ok, SignatureElement} = signerl_signature:build_signature_element(
+        Message, sha256, Key, undefined
+    ),
     SignedMessage = signerl_xml:add_new_element(SignatureElement, Message),
     SignedMessageBin = signerl_xml:export(
         ["<?xml version=\"1.0\" encoding=\"UTF-8\"?>"], SignedMessage
@@ -218,7 +282,9 @@ add_signature_element_inserts_signed_properties(Config) ->
 add_signature_element_extracts_signature_value(Config) ->
     Message = ?config(message, Config),
     Key = ?config(rsa_key, Config),
-    {ok, SignatureElement} = signerl_signature:build_signature_element(Message, sha256, Key),
+    {ok, SignatureElement} = signerl_signature:build_signature_element(
+        Message, sha256, Key, undefined
+    ),
     SignedMessage = signerl_xml:add_new_element(SignatureElement, Message),
     {ok, #{
         signature_bytes := SignatureBytes,
@@ -235,8 +301,12 @@ build_signature_element_rsa_and_ecdsa(Config) ->
     Message = ?config(message, Config),
     RsaKey = ?config(rsa_key, Config),
     EcdsaKey = ?config(ecdsa_key, Config),
-    {ok, RsaSignature} = signerl_signature:build_signature_element(Message, sha256, RsaKey),
-    {ok, EcdsaSignature} = signerl_signature:build_signature_element(Message, sha256, EcdsaKey),
+    {ok, RsaSignature} = signerl_signature:build_signature_element(
+        Message, sha256, RsaKey, undefined
+    ),
+    {ok, EcdsaSignature} = signerl_signature:build_signature_element(
+        Message, sha256, EcdsaKey, undefined
+    ),
 
     assert_has_signed_info(RsaSignature),
     assert_has_signed_info(EcdsaSignature).
@@ -246,15 +316,15 @@ build_signature_element_returns_error_with_invalid_hash_or_key(Config) ->
     RsaKey = ?config(rsa_key, Config),
     ?assertEqual(
         {error, unsupported_hash},
-        signerl_signature:build_signature_element(Message, sha512, RsaKey)
+        signerl_signature:build_signature_element(Message, sha512, RsaKey, undefined)
     ),
     ?assertEqual(
         {error, unsupported_key},
-        signerl_signature:build_signature_element(Message, sha256, invalid_key)
+        signerl_signature:build_signature_element(Message, sha256, invalid_key, undefined)
     ),
     ?assertEqual(
         {error, unsupported_key},
-        signerl_signature:build_signature_element(Message, sha256, {unsupported})
+        signerl_signature:build_signature_element(Message, sha256, {unsupported}, undefined)
     ).
 
 sign(_Config) ->
@@ -354,6 +424,20 @@ sign_returns_error_with_invalid_pem_key_file(Config) ->
     RawMessage = ?config(raw_message, Config),
     InvalidPemPath = signerl_utils:file_path("test/examples/base/books.xml"),
     ?assertEqual({error, invalid_pem}, signerl:sign(RawMessage, sha256, InvalidPemPath)).
+
+sign4_returns_file_error_with_missing_message_file(Config) ->
+    RsaKey = ?config(rsa_key, Config),
+    ?assertMatch(
+        {error, {file_error, enoent}},
+        signerl:sign("nonexistent_file.xml", sha256, RsaKey, <<"cert">>)
+    ).
+
+sign4_returns_file_error_with_missing_key_file(Config) ->
+    RawMessage = ?config(raw_message, Config),
+    ?assertMatch(
+        {error, {file_error, enoent}},
+        signerl:sign(RawMessage, sha256, "nonexistent_key.pem", <<"cert">>)
+    ).
 
 verify_missing_prolog_binary_returns_error(Config) ->
     PublicKey = ?config(rsa_public_key, Config),
@@ -617,6 +701,20 @@ verify_reference_digests_returns_error_with_invalid_c14n_algorithm(Config) ->
         signerl_verify:verify_reference_digests(BrokenData, sha256)
     ).
 
+verify_reference_digests_accepts_exc_c14n_algorithm(Config) ->
+    %% Exc-C14N is a supported algorithm — verify_reference_digests should not error
+    %% on the algorithm check (digests will mismatch since message was signed with c14n11).
+    SignatureData = ?config(signature_data, Config),
+    SignatureElement = maps:get(signature_element, SignatureData),
+    ExcSignature = replace_c14n_algorithm(
+        SignatureElement, "http://www.w3.org/2001/10/xml-exc-c14n#"
+    ),
+    Message = message_with_signature(ExcSignature),
+    {ok, ExcData} = signerl_verify:extract_signature_data(Message),
+    Result = signerl_verify:verify_reference_digests(ExcData, sha256),
+    %% Should return false (digest mismatch) not {error, ...} since exc_c14n is valid
+    ?assertEqual(false, Result).
+
 verify_reference_digests_returns_error_with_invalid_signature_method_algorithm(Config) ->
     SignatureData = ?config(signature_data, Config),
     SignatureElement = maps:get(signature_element, SignatureData),
@@ -741,6 +839,110 @@ xades_xml_returns_error_with_non_signature_input(_Config) ->
         {error, missing_element},
         signerl_xades_xml:find_signed_properties_element(InvalidElement)
     ).
+
+%%%%%%%%%%%%%%%%%%%%%%%
+%%% KEYINFO GROUP TESTS
+%%%%%%%%%%%%%%%%%%%%%%%
+
+sign_with_certificate_includes_keyinfo(Config) ->
+    RawMessage = ?config(raw_message, Config),
+    RsaKey = ?config(rsa_key, Config),
+    RsaCertDer = ?config(rsa_cert_der, Config),
+    SignedMessage = signerl:sign(RawMessage, sha256, RsaKey, RsaCertDer),
+    {ok, Parsed} = signerl_xml:parse_binary(SignedMessage),
+    ?assertMatch(
+        {ok, {'ds:KeyInfo', _, _}},
+        signerl_xml:find_path(['ds:Signature', 'ds:KeyInfo'], Parsed)
+    ),
+    ?assertMatch(
+        {ok, {'ds:X509Certificate', _, [_]}},
+        signerl_xml:find_path(
+            ['ds:Signature', 'ds:KeyInfo', 'ds:X509Data', 'ds:X509Certificate'], Parsed
+        )
+    ).
+
+sign_without_certificate_omits_keyinfo(Config) ->
+    RawMessage = ?config(raw_message, Config),
+    RsaKey = ?config(rsa_key, Config),
+    SignedMessage = signerl:sign(RawMessage, sha256, RsaKey),
+    {ok, Parsed} = signerl_xml:parse_binary(SignedMessage),
+    ?assertEqual(
+        {error, not_found},
+        signerl_xml:find_path(['ds:Signature', 'ds:KeyInfo'], Parsed)
+    ).
+
+sign_with_certificate_roundtrip_rsa(Config) ->
+    RawMessage = ?config(raw_message, Config),
+    RsaKey = ?config(rsa_key, Config),
+    RsaCertDer = ?config(rsa_cert_der, Config),
+    RsaPublicKey = ?config(rsa_public_key, Config),
+    SignedMessage = signerl:sign(RawMessage, sha256, RsaKey, RsaCertDer),
+    ?assertEqual(true, signerl:verify(SignedMessage, sha256, RsaPublicKey)).
+
+sign_with_certificate_roundtrip_ecdsa(Config) ->
+    RawMessage = ?config(raw_message, Config),
+    EcdsaKey = ?config(ecdsa_key, Config),
+    EcdsaCertDer = ?config(ecdsa_cert_der, Config),
+    EcdsaPublicKey = ?config(ecdsa_public_key, Config),
+    SignedMessage = signerl:sign(RawMessage, sha256, EcdsaKey, EcdsaCertDer),
+    ?assertEqual(true, signerl:verify(SignedMessage, sha256, EcdsaPublicKey)).
+
+verify_extracts_certificate_from_keyinfo(Config) ->
+    RawMessage = ?config(raw_message, Config),
+    RsaKey = ?config(rsa_key, Config),
+    RsaCertDer = ?config(rsa_cert_der, Config),
+    SignedMessage = signerl:sign(RawMessage, sha256, RsaKey, RsaCertDer),
+    {ok, Parsed} = signerl_xml:parse_binary(SignedMessage),
+    {ok, #{key_info := KeyInfo}} = signerl_verify:extract_signature_data(Parsed),
+    ?assertMatch(#{x509_certificate := RsaCertDer}, KeyInfo).
+
+sign_with_certificate_from_key_file(Config) ->
+    RawMessage = ?config(raw_message, Config),
+    RsaKeyPath = ?config(rsa_key_path, Config),
+    RsaCertDer = ?config(rsa_cert_der, Config),
+    RsaPublicKey = ?config(rsa_public_key, Config),
+    SignedMessage = signerl:sign(RawMessage, sha256, RsaKeyPath, RsaCertDer),
+    ?assertEqual(true, signerl:verify(SignedMessage, sha256, RsaPublicKey)).
+
+sign_with_certificate_from_message_file(Config) ->
+    MessagePath = ?config(message_path, Config),
+    RsaKey = ?config(rsa_key, Config),
+    RsaCertDer = ?config(rsa_cert_der, Config),
+    RsaPublicKey = ?config(rsa_public_key, Config),
+    SignedMessage = signerl:sign(MessagePath, sha256, RsaKey, RsaCertDer),
+    ?assertEqual(true, signerl:verify(SignedMessage, sha256, RsaPublicKey)).
+
+verify_extracts_no_keyinfo_when_absent(Config) ->
+    RawMessage = ?config(raw_message, Config),
+    RsaKey = ?config(rsa_key, Config),
+    SignedMessage = signerl:sign(RawMessage, sha256, RsaKey),
+    {ok, Parsed} = signerl_xml:parse_binary(SignedMessage),
+    {ok, #{key_info := KeyInfo}} = signerl_verify:extract_signature_data(Parsed),
+    ?assertEqual(undefined, KeyInfo).
+
+%%%%%%%%%%%%%%%%%%%%%%%
+%%% INTEROP SMOKE GROUP TESTS
+%%%%%%%%%%%%%%%%%%%%%%%
+
+c14n_idempotent_after_sign(Config) ->
+    RawMessage = ?config(raw_message, Config),
+    RsaKey = ?config(rsa_key, Config),
+    SignedMessage = signerl:sign(RawMessage, sha256, RsaKey),
+    {ok, ParsedSigned} = signerl_xml:parse_binary(SignedMessage),
+    {ok, SignedInfoElement} = signerl_xml:find_path(
+        ['ds:Signature', 'ds:SignedInfo'], ParsedSigned
+    ),
+    C14N1 = signerl_c14n:canonicalize(SignedInfoElement),
+    {ok, ReParsed} = signerl_xml:parse_binary(C14N1),
+    C14N2 = signerl_c14n:canonicalize(ReParsed),
+    ?assertEqual(C14N1, C14N2).
+
+is_signature_element_shared(_Config) ->
+    SigElement = {'ds:Signature', [], []},
+    NonSigElement = {'ds:SignedInfo', [], []},
+    ?assertEqual(true, signerl_xml:is_signature_element(SigElement)),
+    ?assertEqual(false, signerl_xml:is_signature_element(NonSigElement)),
+    ?assertEqual(false, signerl_xml:is_signature_element("text")).
 
 compute_valid_signature_data() ->
     MessagePath = signerl_utils:file_path("test/examples/base/books.xml"),
@@ -924,3 +1126,40 @@ assert_has_signed_info(SignatureElement) ->
     ?assertMatch(
         {ok, {'ds:SignedInfo', _, _}}, signerl_xml:find_path(['ds:SignedInfo'], SignatureElement)
     ).
+
+c14n_mode_returns_exc_for_exc_c14n_algorithm(_Config) ->
+    SigData = #{references => #{c14n_algorithm => "http://www.w3.org/2001/10/xml-exc-c14n#"}},
+    ?assertEqual(exc_c14n, signerl_verify:c14n_mode(SigData)),
+    SigDataC14N11 = #{references => #{c14n_algorithm => "http://www.w3.org/2006/12/xml-c14n11"}},
+    ?assertEqual(c14n11, signerl_verify:c14n_mode(SigDataC14N11)).
+
+extract_x509_certificate_returns_undefined_for_invalid_cert(_Config) ->
+    %% Sign a message with certificate, then corrupt the cert to test error paths.
+    MessagePath = signerl_utils:file_path("test/examples/base/books.xml"),
+    {ok, RawMessage} = file:read_file(MessagePath),
+    RsaKey = signerl_cert_helpers:signer_rsa_key(),
+    RsaCertDer = test_helpers:cert_der(signerl_cert_helpers:signer_rsa_cert_path()),
+    SignedMessage = signerl:sign(RawMessage, sha256, RsaKey, RsaCertDer),
+    {ok, Parsed} = signerl_xml:parse_binary(SignedMessage),
+    %% Test 1: Corrupt cert to invalid structure (multiple children → _ catch-all)
+    CorruptedStructure = corrupt_x509_certificate(Parsed, [<<"binary">>, <<"extra">>]),
+    {ok, #{key_info := KeyInfo1}} = signerl_verify:extract_signature_data(CorruptedStructure),
+    ?assertEqual(undefined, KeyInfo1),
+    %% Test 2: Corrupt cert to invalid base64 (single list child → decode error)
+    CorruptedBase64 = corrupt_x509_certificate(Parsed, ["!!!not-base64!!!"]),
+    {ok, #{key_info := KeyInfo2}} = signerl_verify:extract_signature_data(CorruptedBase64),
+    ?assertEqual(undefined, KeyInfo2).
+
+corrupt_x509_certificate({Tag, Attrs, Children}, Replacement) ->
+    {Tag, Attrs, [corrupt_x509_certificate_child(C, Replacement) || C <- Children]}.
+
+corrupt_x509_certificate_child({'ds:Signature', Attrs, Content}, Replacement) ->
+    {'ds:Signature', Attrs, [corrupt_x509_certificate_child(C, Replacement) || C <- Content]};
+corrupt_x509_certificate_child({'ds:KeyInfo', Attrs, Content}, Replacement) ->
+    {'ds:KeyInfo', Attrs, [corrupt_x509_certificate_child(C, Replacement) || C <- Content]};
+corrupt_x509_certificate_child({'ds:X509Data', Attrs, Content}, Replacement) ->
+    {'ds:X509Data', Attrs, [corrupt_x509_certificate_child(C, Replacement) || C <- Content]};
+corrupt_x509_certificate_child({'ds:X509Certificate', Attrs, _}, Replacement) ->
+    {'ds:X509Certificate', Attrs, Replacement};
+corrupt_x509_certificate_child(Other, _Replacement) ->
+    Other.
