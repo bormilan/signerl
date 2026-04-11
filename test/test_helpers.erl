@@ -4,7 +4,8 @@
     rsa_public_key_from_cert/1,
     ecdsa_public_key_from_cert/1,
     cert_der/1,
-    signature_element/1
+    signature_element/1,
+    signature_element/2
 ]).
 
 -include_lib("public_key/include/OTP-PUB-KEY.hrl").
@@ -49,6 +50,19 @@ signature_element(SignedSignaturePropertiesElements) ->
             {'xades:QualifyingProperties', [], [
                 {'xades:SignedProperties', [], [
                     {'xades:SignedSignatureProperties', [], SignedSignaturePropertiesElements}
+                ]}
+            ]}
+        ]}
+    ]}.
+
+signature_element(SignedSignaturePropertiesElements, SignedDataObjectPropertiesElements) ->
+    {'ds:Signature', [], [
+        {'ds:SignatureValue', [], ["AQID"]},
+        {'ds:Object', [], [
+            {'xades:QualifyingProperties', [], [
+                {'xades:SignedProperties', [], [
+                    {'xades:SignedSignatureProperties', [], SignedSignaturePropertiesElements},
+                    {'xades:SignedDataObjectProperties', [], SignedDataObjectPropertiesElements}
                 ]}
             ]}
         ]}
