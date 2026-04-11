@@ -38,7 +38,7 @@ construct_signature_without_value(
     Message, HashAlgorithm, DigestMethodUri, SignatureMethodUri, CertDer
 ) ->
     SigningTime = signerl_utils:current_utc_timestamp(),
-    SignedProperties = signed_properties(SigningTime),
+    SignedProperties = signed_properties(SigningTime, HashAlgorithm, DigestMethodUri, CertDer),
     SignedInfo = signed_info(
         Message, SignedProperties, HashAlgorithm, DigestMethodUri, SignatureMethodUri
     ),
@@ -109,9 +109,26 @@ signature_object(SignedProperties) ->
             [SignedProperties]}
     ]}.
 
-signed_properties(SigningTime) ->
+signed_properties(SigningTime, HashAlgorithm, DigestMethodUri, CertDer) ->
+    SigningTimeElement = {'xades:SigningTime', [], [binary_to_list(SigningTime)]},
+    CertElements = signing_certificate_v2_elements(HashAlgorithm, DigestMethodUri, CertDer),
     {'xades:SignedProperties', [{'Id', ?SIGNED_PROPERTIES_ID}], [
-        {'xades:SignedSignatureProperties', [], [
-            {'xades:SigningTime', [], [binary_to_list(SigningTime)]}
-        ]}
+        {'xades:SignedSignatureProperties', [], [SigningTimeElement | CertElements]}
     ]}.
+
+signing_certificate_v2_elements(_HashAlgorithm, _DigestMethodUri, undefined) ->
+    [];
+signing_certificate_v2_elements(HashAlgorithm, DigestMethodUri, CertDer) ->
+    CertDigestB64 = signerl_cert:cert_digest_base64(HashAlgorithm, CertDer),
+    IssuerSerialB64 = signerl_cert:issuer_serial_v2_base64(CertDer),
+    [
+        {'xades:SigningCertificateV2', [], [
+            {'xades:Cert', [], [
+                {'xades:CertDigest', [], [
+                    {'ds:DigestMethod', [{'Algorithm', DigestMethodUri}], []},
+                    {'ds:DigestValue', [], [binary_to_list(CertDigestB64)]}
+                ]},
+                {'xades:IssuerSerialV2', [], [binary_to_list(IssuerSerialB64)]}
+            ]}
+        ]}
+    ].

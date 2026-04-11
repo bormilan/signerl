@@ -13,6 +13,7 @@
     signer_rsa_cert_path/0,
     signer_ecdsa_key_path/0,
     signer_ecdsa_cert_path/0,
+    high_serial_cert_path/0,
     load_private_key/1,
     load_cert/1,
     load_cert_chain/0,
@@ -98,6 +99,7 @@ signer_rsa_key_path() -> path("signer_rsa.key.pem").
 signer_rsa_cert_path() -> path("signer_rsa.cert.pem").
 signer_ecdsa_key_path() -> path("signer_ecdsa.key.pem").
 signer_ecdsa_cert_path() -> path("signer_ecdsa.cert.pem").
+high_serial_cert_path() -> path("high_serial.cert.pem").
 
 load_private_key(Path) ->
     decode_single_pem_entry(Path).

@@ -101,7 +101,14 @@ groups() ->
             sign_with_certificate_from_key_file,
             sign_with_certificate_from_message_file,
             verify_extracts_certificate_from_keyinfo,
-            verify_extracts_no_keyinfo_when_absent
+            verify_extracts_no_keyinfo_when_absent,
+            sign_with_certificate_includes_signing_certificate_v2,
+            sign_without_certificate_omits_signing_certificate_v2,
+            sign_with_certificate_extracts_cert_digest,
+            sign_with_high_serial_cert_encodes_issuer_serial,
+            verify_fails_with_tampered_cert_digest,
+            verify_succeeds_with_cert_v2_but_no_keyinfo_cert,
+            verify_fails_with_mismatched_cert_digest_method
         ]},
         {interop_smoke_group, [], [
             c14n_idempotent_after_sign,
@@ -202,6 +209,7 @@ init_per_group(keyinfo_group, Config) ->
     EcdsaKey = signerl_cert_helpers:signer_ecdsa_key(),
     RsaCertDer = test_helpers:cert_der(signerl_cert_helpers:signer_rsa_cert_path()),
     EcdsaCertDer = test_helpers:cert_der(signerl_cert_helpers:signer_ecdsa_cert_path()),
+    HighSerialCertDer = test_helpers:cert_der(signerl_cert_helpers:high_serial_cert_path()),
     RsaPublicKey = test_helpers:rsa_public_key_from_cert(
         signerl_cert_helpers:signer_rsa_cert_path()
     ),
@@ -217,6 +225,7 @@ init_per_group(keyinfo_group, Config) ->
         {ecdsa_key, EcdsaKey},
         {rsa_cert_der, RsaCertDer},
         {ecdsa_cert_der, EcdsaCertDer},
+        {high_serial_cert_der, HighSerialCertDer},
         {rsa_public_key, RsaPublicKey},
         {ecdsa_public_key, EcdsaPublicKey}
         | Config
@@ -927,6 +936,165 @@ verify_extracts_no_keyinfo_when_absent(Config) ->
     {ok, Parsed} = signerl_xml:parse_binary(SignedMessage),
     {ok, #{key_info := KeyInfo}} = signerl_verify:extract_signature_data(Parsed),
     ?assertEqual(undefined, KeyInfo).
+
+signing_certificate_v2_path() ->
+    [
+        'ds:Signature',
+        'ds:Object',
+        'xades:QualifyingProperties',
+        'xades:SignedProperties',
+        'xades:SignedSignatureProperties',
+        'xades:SigningCertificateV2'
+    ].
+
+sign_with_certificate_includes_signing_certificate_v2(Config) ->
+    RawMessage = ?config(raw_message, Config),
+    RsaKey = ?config(rsa_key, Config),
+    RsaCertDer = ?config(rsa_cert_der, Config),
+    SignedMessage = signerl:sign(RawMessage, sha256, RsaKey, RsaCertDer),
+    {ok, Parsed} = signerl_xml:parse_binary(SignedMessage),
+    ?assertMatch(
+        {ok, {'xades:SigningCertificateV2', _, _}},
+        signerl_xml:find_path(signing_certificate_v2_path(), Parsed)
+    ).
+
+sign_without_certificate_omits_signing_certificate_v2(Config) ->
+    RawMessage = ?config(raw_message, Config),
+    RsaKey = ?config(rsa_key, Config),
+    SignedMessage = signerl:sign(RawMessage, sha256, RsaKey),
+    {ok, Parsed} = signerl_xml:parse_binary(SignedMessage),
+    ?assertEqual(
+        {error, not_found},
+        signerl_xml:find_path(signing_certificate_v2_path(), Parsed)
+    ).
+
+sign_with_certificate_extracts_cert_digest(Config) ->
+    RawMessage = ?config(raw_message, Config),
+    RsaKey = ?config(rsa_key, Config),
+    RsaCertDer = ?config(rsa_cert_der, Config),
+    SignedMessage = signerl:sign(RawMessage, sha256, RsaKey, RsaCertDer),
+    {ok, Parsed} = signerl_xml:parse_binary(SignedMessage),
+    {ok, #{signed_properties := SignedProps}} = signerl_verify:extract_signature_data(Parsed),
+    #{signing_certificate_v2 := CertV2} = SignedProps,
+    ExpectedDigest = crypto:hash(sha256, RsaCertDer),
+    ?assertEqual(ExpectedDigest, maps:get(digest_value, CertV2)),
+    ?assertEqual("http://www.w3.org/2001/04/xmlenc#sha256", maps:get(digest_method, CertV2)),
+    ?assert(maps:is_key(issuer_serial_v2, CertV2)).
+
+verify_fails_with_tampered_cert_digest(Config) ->
+    RawMessage = ?config(raw_message, Config),
+    RsaKey = ?config(rsa_key, Config),
+    RsaCertDer = ?config(rsa_cert_der, Config),
+    RsaPublicKey = ?config(rsa_public_key, Config),
+    SignedMessage = signerl:sign(RawMessage, sha256, RsaKey, RsaCertDer),
+    %% Tamper with the cert digest by replacing the certificate in KeyInfo
+    %% with a different one. The cert digest in SignedProperties won't match.
+    EcdsaCertDer = ?config(ecdsa_cert_der, Config),
+    TamperedMessage = tamper_keyinfo_certificate(SignedMessage, EcdsaCertDer),
+    ?assertEqual(
+        {error, cert_digest_mismatch},
+        signerl:verify(TamperedMessage, sha256, RsaPublicKey)
+    ).
+
+tamper_keyinfo_certificate(SignedMessage, NewCertDer) ->
+    NewCertB64 = binary_to_list(base64:encode(NewCertDer)),
+    {ok, Parsed} = signerl_xml:parse_binary(SignedMessage),
+    Tampered = replace_x509_certificate(Parsed, NewCertB64),
+    signerl_xml:export(<<"<?xml version=\"1.0\" encoding=\"UTF-8\"?>">>, Tampered).
+
+replace_x509_certificate({'ds:X509Certificate', Attrs, _}, NewCertB64) ->
+    {'ds:X509Certificate', Attrs, [NewCertB64]};
+replace_x509_certificate({Tag, Attrs, Content}, NewCertB64) when is_list(Content) ->
+    {Tag, Attrs, [replace_x509_certificate(Child, NewCertB64) || Child <- Content]};
+replace_x509_certificate(Other, _NewCertB64) ->
+    Other.
+
+sign_with_high_serial_cert_encodes_issuer_serial(Config) ->
+    HighSerialCertDer = ?config(high_serial_cert_der, Config),
+    Result = signerl_cert:issuer_serial_v2_base64(HighSerialCertDer),
+    ?assert(is_binary(Result)),
+    Decoded = base64:decode(Result),
+    %% Verify the DER is a SEQUENCE (tag 0x30)
+    ?assertMatch(<<16#30, _/binary>>, Decoded).
+
+verify_succeeds_with_cert_v2_but_no_keyinfo_cert(Config) ->
+    RawMessage = ?config(raw_message, Config),
+    RsaKey = ?config(rsa_key, Config),
+    RsaCertDer = ?config(rsa_cert_der, Config),
+    RsaPublicKey = ?config(rsa_public_key, Config),
+    SignedMessage = signerl:sign(RawMessage, sha256, RsaKey, RsaCertDer),
+    %% Remove the X509Certificate element from KeyInfo while keeping
+    %% SigningCertificateV2 — verify should still succeed
+    StrippedMessage = strip_keyinfo_certificate(SignedMessage),
+    ?assertEqual(true, signerl:verify(StrippedMessage, sha256, RsaPublicKey)).
+
+verify_fails_with_mismatched_cert_digest_method(Config) ->
+    RawMessage = ?config(raw_message, Config),
+    RsaKey = ?config(rsa_key, Config),
+    RsaCertDer = ?config(rsa_cert_der, Config),
+    RsaPublicKey = ?config(rsa_public_key, Config),
+    SignedMessage = signerl:sign(RawMessage, sha256, RsaKey, RsaCertDer),
+    %% Tamper with the DigestMethod URI inside SigningCertificateV2
+    TamperedMessage = tamper_cert_digest_method(SignedMessage),
+    ?assertEqual(
+        {error, cert_digest_mismatch},
+        signerl:verify(TamperedMessage, sha256, RsaPublicKey)
+    ).
+
+strip_keyinfo_certificate(SignedMessage) ->
+    {ok, Parsed} = signerl_xml:parse_binary(SignedMessage),
+    Stripped = remove_x509_data(Parsed),
+    signerl_xml:export(<<"<?xml version=\"1.0\" encoding=\"UTF-8\"?>">>, Stripped).
+
+remove_x509_data({'ds:X509Data', _Attrs, _Content}) ->
+    removed;
+remove_x509_data({Tag, Attrs, Content}) when is_list(Content) ->
+    Filtered = lists:filtermap(
+        fun(Child) ->
+            case remove_x509_data(Child) of
+                removed -> false;
+                Transformed -> {true, Transformed}
+            end
+        end,
+        Content
+    ),
+    {Tag, Attrs, Filtered};
+remove_x509_data(Other) ->
+    Other.
+
+tamper_cert_digest_method(SignedMessage) ->
+    {ok, Parsed} = signerl_xml:parse_binary(SignedMessage),
+    Tampered = replace_cert_digest_method(Parsed),
+    signerl_xml:export(<<"<?xml version=\"1.0\" encoding=\"UTF-8\"?>">>, Tampered).
+
+replace_cert_digest_method({'xades:SigningCertificateV2', Attrs, Content}) ->
+    {'xades:SigningCertificateV2', Attrs, replace_cert_digest_method_inner(Content)};
+replace_cert_digest_method({Tag, Attrs, Content}) when is_list(Content) ->
+    {Tag, Attrs, [replace_cert_digest_method(Child) || Child <- Content]};
+replace_cert_digest_method(Other) ->
+    Other.
+
+replace_cert_digest_method_inner([{'xades:Cert', CAttrs, CContent}]) ->
+    [{'xades:Cert', CAttrs, replace_digest_method_in_cert(CContent)}];
+replace_cert_digest_method_inner(Other) ->
+    Other.
+
+replace_digest_method_in_cert([]) ->
+    [];
+replace_digest_method_in_cert([{'xades:CertDigest', DAttrs, DContent} | Rest]) ->
+    [{'xades:CertDigest', DAttrs, replace_digest_method_elem(DContent)} | Rest];
+replace_digest_method_in_cert([H | T]) ->
+    [H | replace_digest_method_in_cert(T)].
+
+replace_digest_method_elem([]) ->
+    [];
+replace_digest_method_elem([{'ds:DigestMethod', _, DMContent} | Rest]) ->
+    [
+        {'ds:DigestMethod', [{'Algorithm', "http://www.w3.org/2001/04/xmlenc#sha512"}], DMContent}
+        | Rest
+    ];
+replace_digest_method_elem([H | T]) ->
+    [H | replace_digest_method_elem(T)].
 
 %%%%%%%%%%%%%%%%%%%%%%%
 %%% INTEROP SMOKE GROUP TESTS
