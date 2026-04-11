@@ -101,4 +101,12 @@ openssl req -new -x509 -days 825 -key signer_ecdsa.key.pem -out signer_ecdsa.cer
   -subj "/C=US/ST=State/L=City/O=SignerL Test/OU=Signer/CN=SignerL Self-Signed ECDSA" \
   -extensions v3_signer_only
 
+# 8) Self-signed RSA cert with high serial (0xFF) — tests DER integer padding
+openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048 -out high_serial.key.pem
+openssl req -new -x509 -days 36500 -key high_serial.key.pem -out high_serial.cert.pem \
+  -set_serial 255 \
+  -config openssl.cnf \
+  -subj "/C=US/ST=State/L=City/O=SignerL Test/OU=Signer/CN=HighSerial Test" \
+  -extensions v3_signer_only
+
 echo "Done. Generated test certs in $OUT_DIR"

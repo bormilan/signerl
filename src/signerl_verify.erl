@@ -26,12 +26,14 @@ verify_reference_digests(
     #{
         unsigned_message := UnsignedMessage,
         signature_element := SignatureElement,
+        signed_properties := SignedProperties,
         references := #{
             document := #{digest_value := DocumentDigestValue} = DocumentReference,
             signed_properties := #{
                 digest_value := SignedPropertiesDigestValue
             } = SignedPropertiesReference
-        } = References
+        } = References,
+        key_info := KeyInfo
     },
     HashAlgorithm
 ) ->
@@ -41,6 +43,7 @@ verify_reference_digests(
         ok ?= validate_signed_info_algorithms(References, SignatureMethodUris),
         ok ?= validate_document_reference(DocumentReference, DigestMethodUri),
         ok ?= validate_signed_properties_reference(SignedPropertiesReference, DigestMethodUri),
+        ok ?= verify_cert_digest(SignedProperties, KeyInfo, HashAlgorithm),
         {ok, SignedPropertiesElement} ?=
             signerl_xades_xml:find_signed_properties_element(SignatureElement),
         DocumentPayload = signerl_c14n:canonicalize(
@@ -61,6 +64,8 @@ verify_reference_digests(
                 false
         end
     else
+        {error, cert_digest_mismatch} ->
+            {error, cert_digest_mismatch};
         _ ->
             {error, invalid_signature_structure}
     end;
@@ -285,3 +290,27 @@ extract_x509_certificate(KeyInfoElement) ->
     else
         _ -> undefined
     end.
+
+verify_cert_digest(
+    #{
+        signing_certificate_v2 := #{
+            digest_method := DigestMethodUri, digest_value := ExpectedDigest
+        }
+    },
+    #{x509_certificate := CertDer},
+    HashAlgorithm
+) ->
+    case digest_method_uri(HashAlgorithm) of
+        {ok, DigestMethodUri} ->
+            ActualDigest = crypto:hash(HashAlgorithm, CertDer),
+            case ActualDigest =:= ExpectedDigest of
+                true -> ok;
+                false -> {error, cert_digest_mismatch}
+            end;
+        _ ->
+            {error, cert_digest_mismatch}
+    end;
+verify_cert_digest(#{signing_certificate_v2 := _}, undefined, _HashAlgorithm) ->
+    ok;
+verify_cert_digest(_SignedProperties, _KeyInfo, _HashAlgorithm) ->
+    ok.
