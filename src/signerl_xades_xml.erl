@@ -2,6 +2,7 @@
 
 -export([
     find_signed_signature_properties/1,
+    find_signed_data_object_properties/1,
     find_signed_properties_element/1
 ]).
 
@@ -26,6 +27,29 @@ find_signed_signature_properties({'ds:Signature', Attrs, SignatureContent}) ->
             {error, missing_element}
     end;
 find_signed_signature_properties(_) ->
+    {error, missing_element}.
+
+-spec find_signed_data_object_properties(SignatureElement) -> Result when
+    SignatureElement :: signerl_xml:simplified_xml(),
+    Result :: {ok, signerl_xml:simplified_xml()} | {error, missing_element}.
+find_signed_data_object_properties({'ds:Signature', Attrs, SignatureContent}) ->
+    case
+        signerl_xml:find_path(
+            [
+                'ds:Object',
+                'xades:QualifyingProperties',
+                'xades:SignedProperties',
+                'xades:SignedDataObjectProperties'
+            ],
+            {'ds:Signature', Attrs, SignatureContent}
+        )
+    of
+        {ok, _} = Ok ->
+            Ok;
+        {error, not_found} ->
+            {error, missing_element}
+    end;
+find_signed_data_object_properties(_) ->
     {error, missing_element}.
 
 -spec find_signed_properties_element(SignatureElement) -> Result when
