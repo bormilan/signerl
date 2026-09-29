@@ -43,13 +43,11 @@ jobs:
                 -hash-${{hashFiles('rebar.lock')}}"
       - name: Install libxml2-utils (Linux)
         if: runner.os == 'Linux'
-        run: sudo apt-get install -y --no-install-recommends libxml2-utils
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends libxml2-utils
       - name: Generate test certificates
         shell: bash
         run: scripts/gen_certs.sh
-      - name: Run test
-        run: rebar3 test
-      - name: Run lint
-        run: rebar3 lint
-      - name: Run dialyzer
-        run: rebar3 dialyzer
+      - name: Run all quality checks
+        run: rebar3 tall

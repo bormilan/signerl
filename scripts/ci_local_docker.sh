@@ -83,13 +83,16 @@ run_for_otp() {
     gid="$(id -g)"
     local rebar_vol="signerl_rebar3_cache_otp${otp}"
     local build_vol="signerl_build_cache_otp${otp}"
+    local test_image="signerl-ci:otp${otp}"
 
     echo
     echo "=== OTP ${otp} (${image}) ==="
 
+    docker build --build-arg "OTP_IMAGE=${image}" \
+        -t "$test_image" -f "$SCRIPT_DIR/ci.Dockerfile" "$SCRIPT_DIR"
     docker volume create "$rebar_vol" >/dev/null
     docker volume create "$build_vol" >/dev/null
-    prepare_volume_permissions "$image" "$uid" "$gid" "$rebar_vol" "$build_vol"
+    prepare_volume_permissions "$test_image" "$uid" "$gid" "$rebar_vol" "$build_vol"
 
     docker run --rm \
         --user "${uid}:${gid}" \
@@ -98,8 +101,8 @@ run_for_otp() {
         -v "${rebar_vol}:/home/runner/.cache/rebar3" \
         -v "${build_vol}:/workspace/_build" \
         -w /workspace \
-        "$image" \
-        bash -lc 'set -euo pipefail; scripts/gen_certs.sh; rebar3 test; rebar3 lint; rebar3 dialyzer'
+        "$test_image" \
+        bash -lc 'set -euo pipefail; scripts/gen_certs.sh; rebar3 tall'
 }
 
 for otp in "${selected[@]}"; do

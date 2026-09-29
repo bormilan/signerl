@@ -50,6 +50,18 @@ Run tests with rebar3:
 rebar3 test
 ```
 
+Run the complete quality gate before pushing:
+
+```bash
+rebar3 tall
+```
+
+`tall` runs the test alias (formatting, EUnit, Common Test, and a 100% coverage
+check), lint, Xref, and Dialyzer. Formatting runs once; `flint` remains available
+for standalone formatting and lint checks. GitHub CI and the local Docker matrix
+use this same gate. Generate the test certificates before the first run.
+Each test run resets collected coverage data before collecting fresh results.
+
 Run local Linux OTP matrix checks in Docker (OTP 26, 27, and 28):
 
 ```bash
@@ -63,7 +75,9 @@ Optional: run only one OTP version:
 ```
 
 Notes:
+
 - This workflow is Linux-OTP parity only; it does not emulate Windows CI.
+- The script builds a test image with `xmllint`, matching Linux CI's canonicalization test prerequisite.
 - Docker named volumes are used for `_build` and rebar3 cache to speed up repeated runs.
 
 ## Test Certificates
@@ -79,4 +93,8 @@ Docs for the generated artifacts:
 
 ## Contributing
 
-Issues and PRs are welcome. Keep changes small and focused.
+Issues and PRs are welcome. Keep changes small and focused, with one PR per issue
+targeting `dev`. Follow the validation-first workflow in [AGENTS.md](AGENTS.md):
+investigate, add behavioral validation, implement, test, review and simplify,
+then run all tests, coverage, lint, and Dialyzer. Push only after `rebar3 tall`
+and the required local matrix checks pass.
