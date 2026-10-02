@@ -29,17 +29,12 @@ add_new_test() ->
 
 export_test() ->
     Path = "test/examples/base/books.xml",
-    PathTo = "test/examples/xml/books_export_test.xml",
     Root = signerl_xml:parse_file(Path),
     Prolog = ["<?xml version=\"1.0\" encoding=\"UTF-8\"?>"],
     Binary = signerl_xml:export(Prolog, Root),
 
-    % TODO: make it to a temp file or delete it after
-    ok = signerl_xml:to_file(PathTo, Binary),
-    ?assertEqual(
-        Root,
-        signerl_xml:parse_file(PathTo)
-    ).
+    ?assertEqual({ok, Prolog}, signerl_xml:parse_prolog(Binary)),
+    ?assertEqual({ok, Root}, signerl_xml:parse_binary(Binary)).
 
 parse_prolog_valid_test() ->
     Message = <<"<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?><root/>">>,

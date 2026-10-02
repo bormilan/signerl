@@ -445,9 +445,9 @@ collect_port_output(Port, Acc) ->
     end.
 
 run_our_c14n(FilePath) ->
-    {ParsedXml, _} = xmerl_scan:file(FilePath),
-    Simplified = xmerl_lib:simplify_element(ParsedXml),
-    signerl_c14n:canonicalize(Simplified).
+    {ok, RawXml} = file:read_file(FilePath),
+    {ok, ParsedXml} = signerl_xml:parse_binary(RawXml),
+    signerl_c14n:canonicalize(ParsedXml).
 
 two_ns_input() ->
     {root, [{'xmlns:ns1', "http://ns1"}, {'xmlns:ns2', "http://ns2"}], [
