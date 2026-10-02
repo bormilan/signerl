@@ -3,6 +3,35 @@
 This document lists the current tests, why they exist, and what you should learn
 from each one.
 
+## Signature regression controls
+
+Mutation tests first verify the original signed message and an unchanged
+parse/export reconstruction using `signerl_xml:parse_binary/1`, the production
+verification path. SignedInfo tests retain the extracted unsigned tree rather
+than reparsing it with `parse_file/1` whitespace normalization. Every intended
+mutation must change its target; binary replacements must match exactly once.
+
+- `signature_reconstruction_preserves_valid_baseline/1` checks that extracting
+  and reinserting an unchanged signature preserves both reference digests.
+- `reference_digests_are_independent_of_signed_info_c14n/1` changes only
+  SignedInfo's canonicalization algorithm. Reference digests remain valid, but
+  the unchanged signature bytes no longer verify against the changed SignedInfo.
+- `verify_rejects_duplicate_reference_attributes/1` submits actual XML with a
+  duplicate Type attribute to `signerl:verify/3` and expects `{error, invalid_xml}`.
+- `verify_independent_c14n11_signature/1` and
+  `verify_independent_exc_c14n_signature/1` verify static RSA-SHA256 signatures
+  produced with `xmlsec1`, then reject altered document content and SigningTime.
+  See [fixture provenance and reproduction](examples/independent/README.md).
+
+Malformed certificate cases also serialize and parse real XML. Focused internal
+decoder tests remain where they check distinct Erlang input boundaries; these
+are not evidence of XML interoperability. The `xmllint` comparisons now use
+SignErl's production binary parser on the SignErl side of the comparison.
+
+`signerl_xml_test:export_test/0` checks the exported prolog and parsed tree in
+memory. `to_file_writes_and_reads_back/1` covers file output in Common Test's
+`priv_dir`; ordinary tests do not overwrite tracked XML fixtures.
+
 ## Test Suite: `signerl_SUITE.erl`
 
 - `add_signature_element_inserts_signature_value/1`
