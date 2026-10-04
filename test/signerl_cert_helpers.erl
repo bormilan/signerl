@@ -2,10 +2,11 @@
 
 -export([
     path/1,
-    root_ca_key_path/0,
-    root_ca_cert_path/0,
-    intermediate_ca_key_path/0,
-    intermediate_ca_cert_path/0,
+    cert_der/1,
+    rsa_public_key_from_cert/1,
+    ecdsa_public_key_from_cert/1,
+    rsa_public_key/1,
+    ecdsa_public_key/1,
     leaf_key_path/0,
     leaf_cert_path/0,
     chain_full_cert_path/0,
@@ -15,83 +16,16 @@
     signer_ecdsa_cert_path/0,
     high_serial_cert_path/0,
     load_private_key/1,
-    load_cert/1,
-    load_cert_chain/0,
-    root_ca_key/0,
-    intermediate_ca_key/0,
     leaf_key/0,
     signer_rsa_key/0,
     signer_ecdsa_key/0
 ]).
 
+-include_lib("public_key/include/OTP-PUB-KEY.hrl").
+
 path(RelPath) ->
-    Candidates = [
-        search_upwards_path(RelPath),
-        cwd_path(RelPath),
-        priv_dir_path(RelPath),
-        lib_dir_path(RelPath)
-    ],
-    pick_existing(Candidates, RelPath).
+    filename:join([code:priv_dir(signerl), "certs", RelPath]).
 
-cwd_path(RelPath) ->
-    base_dir_path(RelPath, file:get_cwd(), ["priv", "certs"], "priv/certs/").
-
-search_upwards_path(RelPath) ->
-    case file:get_cwd() of
-        {ok, Cwd} -> find_upwards(Cwd, RelPath, 5);
-        _ -> undefined
-    end.
-
-find_upwards(Dir, RelPath, Depth) when Depth >= 0 ->
-    CandidateDir = filename:join([Dir, "priv", "certs"]),
-    case filelib:is_dir(CandidateDir) of
-        true ->
-            filename:join([CandidateDir, RelPath]);
-        false ->
-            Parent = filename:dirname(Dir),
-            case Parent =:= Dir of
-                true -> undefined;
-                false -> find_upwards(Parent, RelPath, Depth - 1)
-            end
-    end;
-find_upwards(_, _, _) ->
-    undefined.
-
-priv_dir_path(RelPath) ->
-    case code:priv_dir(signerl) of
-        {error, _} -> undefined;
-        PrivDir -> filename:join([PrivDir, "certs", RelPath])
-    end.
-
-lib_dir_path(RelPath) ->
-    base_dir_path(RelPath, code:lib_dir(signerl), ["priv", "certs"], undefined).
-
-base_dir_path(RelPath, BaseDirResult, SuffixParts, Fallback) ->
-    case BaseDirResult of
-        {ok, BaseDir} ->
-            filename:join([BaseDir | SuffixParts] ++ [RelPath]);
-        {error, _} ->
-            Fallback;
-        BaseDir when is_list(BaseDir) ->
-            filename:join([BaseDir | SuffixParts] ++ [RelPath]);
-        _ ->
-            Fallback
-    end.
-
-pick_existing([undefined | Rest], RelPath) ->
-    pick_existing(Rest, RelPath);
-pick_existing([Path | Rest], RelPath) ->
-    case filelib:is_file(Path) of
-        true -> Path;
-        false -> pick_existing(Rest, RelPath)
-    end;
-pick_existing([], RelPath) ->
-    "priv/certs/" ++ RelPath.
-
-root_ca_key_path() -> path("root_ca.key.pem").
-root_ca_cert_path() -> path("root_ca.cert.pem").
-intermediate_ca_key_path() -> path("intermediate_ca.key.pem").
-intermediate_ca_cert_path() -> path("intermediate_ca.cert.pem").
 leaf_key_path() -> path("leaf.key.pem").
 leaf_cert_path() -> path("leaf.cert.pem").
 chain_full_cert_path() -> path("chain_full.cert.pem").
@@ -102,23 +36,57 @@ signer_ecdsa_cert_path() -> path("signer_ecdsa.cert.pem").
 high_serial_cert_path() -> path("high_serial.cert.pem").
 
 load_private_key(Path) ->
-    decode_single_pem_entry(Path).
+    PemEntry = single_pem_entry(Path),
+    try public_key:pem_entry_decode(PemEntry) of
+        Decoded -> Decoded
+    catch
+        error:_ -> error({invalid_pem_fixture, Path})
+    end.
 
-load_cert(Path) ->
-    decode_single_pem_entry(Path).
+single_pem_entry(Path) ->
+    PemRaw =
+        case file:read_file(Path) of
+            {ok, Raw} -> Raw;
+            {error, Reason} -> error({fixture_read_failed, Path, Reason})
+        end,
+    try public_key:pem_decode(PemRaw) of
+        [Entry] -> Entry;
+        _ -> error({invalid_pem_fixture, Path})
+    catch
+        error:_ -> error({invalid_pem_fixture, Path})
+    end.
 
-load_cert_chain() ->
-    {ok, CertRaw} = file:read_file(chain_full_cert_path()),
-    CertDers = public_key:pem_decode(CertRaw),
-    [public_key:pem_entry_decode(CertDer) || CertDer <- CertDers].
-
-decode_single_pem_entry(Path) ->
-    {ok, PemRaw} = file:read_file(Path),
-    [PemDer] = public_key:pem_decode(PemRaw),
-    public_key:pem_entry_decode(PemDer).
-
-root_ca_key() -> load_private_key(root_ca_key_path()).
-intermediate_ca_key() -> load_private_key(intermediate_ca_key_path()).
 leaf_key() -> load_private_key(leaf_key_path()).
 signer_rsa_key() -> load_private_key(signer_rsa_key_path()).
 signer_ecdsa_key() -> load_private_key(signer_ecdsa_key_path()).
+
+rsa_public_key_from_cert(CertPath) ->
+    rsa_public_key(cert_der(CertPath)).
+
+rsa_public_key(Der) ->
+    Cert = public_key:pkix_decode_cert(Der, otp),
+    Tbs = Cert#'OTPCertificate'.tbsCertificate,
+    Spki = Tbs#'OTPTBSCertificate'.subjectPublicKeyInfo,
+    KeyBits = Spki#'OTPSubjectPublicKeyInfo'.subjectPublicKey,
+    case KeyBits of
+        #'RSAPublicKey'{} -> KeyBits;
+        _ when is_binary(KeyBits) -> public_key:der_decode('RSAPublicKey', KeyBits)
+    end.
+
+ecdsa_public_key_from_cert(CertPath) ->
+    ecdsa_public_key(cert_der(CertPath)).
+
+ecdsa_public_key(Der) ->
+    Cert = public_key:pkix_decode_cert(Der, otp),
+    Tbs = Cert#'OTPCertificate'.tbsCertificate,
+    Spki = Tbs#'OTPTBSCertificate'.subjectPublicKeyInfo,
+    Alg = Spki#'OTPSubjectPublicKeyInfo'.algorithm,
+    Params = Alg#'PublicKeyAlgorithm'.parameters,
+    PointRec = Spki#'OTPSubjectPublicKeyInfo'.subjectPublicKey,
+    {PointRec, Params}.
+
+cert_der(CertPath) ->
+    case single_pem_entry(CertPath) of
+        {'Certificate', Der, not_encrypted} -> Der;
+        _ -> error({invalid_certificate_fixture, CertPath})
+    end.

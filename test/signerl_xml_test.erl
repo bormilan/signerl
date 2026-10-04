@@ -69,21 +69,9 @@ parse_prolog_only_extracts_declaration_test() ->
     ?assertEqual("<?xml version=\"1.0\" encoding=\"UTF-8\"?>", Prolog).
 
 find_path_success_test() ->
-    Root = {
-        'ds:Signature',
-        [],
-        [
-            {'ds:Object', [], [
-                {'xades:QualifyingProperties', [], [
-                    {'xades:SignedProperties', [], [
-                        {'xades:SignedSignatureProperties', [], [
-                            {'xades:SigningTime', [], ["2026-01-01T00:00:00Z"]}
-                        ]}
-                    ]}
-                ]}
-            ]}
-        ]
-    },
+    Root = test_helpers:signature_element([
+        {'xades:SigningTime', [], ["2026-01-01T00:00:00Z"]}
+    ]),
     ?assertMatch(
         {ok, {'xades:SigningTime', _, _}},
         signerl_xml:find_path(
@@ -111,17 +99,28 @@ find_path_errors_on_missing_or_ambiguous_nodes_test() ->
     },
     ?assertEqual({error, not_found}, signerl_xml:find_path(['ds:Object'], AmbiguousRoot)).
 
-single_text_handles_binary_list_and_invalid_shapes_test() ->
-    ?assertEqual({ok, <<"abc">>}, signerl_xml:single_text({tag, [], [<<"abc">>]})),
-    ?assertEqual({ok, <<"abc">>}, signerl_xml:single_text({tag, [], ["abc"]})),
-    ?assertEqual({error, not_found}, signerl_xml:single_text({tag, [], []})),
-    ?assertEqual({error, not_found}, signerl_xml:single_text({tag, [], ["a", "b"]})).
+single_text_test_() ->
+    [
+        {Name, ?_assertEqual(Expected, signerl_xml:single_text({tag, [], Content}))}
+     || {Name, Content, Expected} <- [
+            {"binary", [<<"abc">>], {ok, <<"abc">>}},
+            {"byte list", ["abc"], {ok, <<"abc">>}},
+            {"empty", [], {error, not_found}},
+            {"multiple text nodes", ["a", "b"], {error, not_found}}
+        ]
+    ].
 
-export_fragment_returns_binary_test() ->
-    Element = {tag, [], ["content"]},
-    Result = signerl_xml:export_fragment(Element),
-    ?assert(is_binary(Result)),
-    ?assertNotEqual(<<>>, Result).
+export_fragment_exact_xml_test_() ->
+    [
+        {Name, ?_assertEqual(Expected, signerl_xml:export_fragment(Element))}
+     || {Name, Element, Expected} <- [
+            {"text content", {tag, [], ["content"]},
+                <<"<?xml version=\"1.0\"?><tag>content</tag>">>},
+            {"empty element", {tag, [], []}, <<"<?xml version=\"1.0\"?><tag/>">>},
+            {"escaped attribute and text", {tag, [{id, "a&b"}], ["<value>"]},
+                <<"<?xml version=\"1.0\"?><tag id=\"a&amp;b\">&lt;value&gt;</tag>">>}
+        ]
+    ].
 
 %% Utils
 

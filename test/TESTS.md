@@ -12,21 +12,27 @@ rebar3; there is no custom runner or manually maintained suite list.
 | `signerl_signed_properties_test.erl` | 66 | XAdES property extraction and malformed Erlang/XML value boundaries. |
 | `signerl_signature_test.erl` | 5 | Signature construction contracts for RSA and ECDSA. |
 | `signerl_verify_test.erl` | 23 | Signature extraction, reference validation, algorithm selection, and malformed signature contracts. |
-| `signerl_xml_test.erl` | 15 | XML parsing, prologs, export, tree lookup, text values, and signature-element recognition. |
+| `signerl_xml_test.erl` | 20 | XML parsing, prologs, export, tree lookup, text values, and signature-element recognition. |
 | `signerl_xades_xml_test.erl` | 1 | XAdES tree lookup rejects a non-signature root. |
-| `signerl_cert_test.erl` | 1 | High-serial certificate issuer/serial encoding. |
+| `signerl_cert_test.erl` | 1 | Exact issuer/serial DER against OTP ASN.1, including positive integer padding. |
+| `signerl_cert_helpers_test.erl` | 6 | Application fixture paths and clear missing/malformed PEM failures. |
 | `signerl_api_SUITE.erl` | 54 | Full public signing/verification, binary/file/key inputs, RSA/ECDSA certificate wiring, tampering, and independent signature fixtures. |
 | `signerl_c14n_interop_SUITE.erl` | 7 | Compare production parsing/canonicalization with `xmllint --c14n11`. |
 | `signerl_xml_SUITE.erl` | 1 | A real file export/read-back using CT's isolated `priv_dir`. |
 
-Total: **146 EUnit + 62 Common Test = 208 cases**. Four duplicate XML checks
-were consolidated into the existing EUnit assertions; no distinct behavior was
-removed. See the [migration log and case map](../docs/implementations/test_organization_2026-10-04.md)
-for the old locations.
+Total: **157 EUnit + 62 Common Test = 219 cases**. See the
+[migration log and case map](../docs/implementations/test_organization_2026-10-04.md)
+for the earlier suite locations and the
+[fixture cleanup log](../docs/implementations/test_fixtures_2026-10-04.md)
+for the named-case and fixture changes.
 
-Pure EUnit cases keep their descriptive names with a `_test` suffix. Builder
-and verifier fixtures use ordinary EUnit setup descriptors with an explicit
-name for every case, so failures still identify the original scenario.
+Add a pure contract case as a descriptive `_test` function. When several inputs
+exercise the same operation and assertion, use a small `_test_` generator with
+one `{Name, ?_assertEqual(...)}` descriptor per input. Keep literal inputs visible
+and names specific; do not hide different contracts in a generic test runner.
+Builder and verifier fixtures use ordinary EUnit setup descriptors with an
+explicit name for every case. Public API/file workflows belong in the relevant
+CT group; share immutable input bytes, keys, and certificates in `init_per_group`.
 
 ## Run the tests
 
@@ -87,9 +93,19 @@ and skipped cases as well as the final case count and exit status.
 
 ## Fixtures and controls
 
-- `signerl_cert_helpers.erl` locates the generated keys/certificates.
-- `test_helpers.erl` contains shared certificate/tree fixtures and the baseline
-  and replacement assertions introduced in #57.
+- `signerl_cert_helpers.erl` owns PEM loading, certificate decoding, and public
+  key extraction. Generated fixtures come only from `code:priv_dir(signerl)/certs`;
+  there is no working-directory or parent-directory search. Run `gen_certs.sh`
+  before testing. Missing files and invalid PEM report the fixture path.
+- Load keys/certificates once per relevant CT group. When both DER and the public
+  key are needed, decode the loaded DER with `rsa_public_key/1` or
+  `ecdsa_public_key/1` rather than reading the same certificate again.
+- `test_helpers.erl` owns small XML builders and the baseline/replacement
+  assertions introduced in #57. Its minimal signature wrappers are suitable for
+  extraction tests only. Sign a real document before end-to-end tampering.
+- Keep mutation helpers next to their tests. Preserve literal XML for prologs,
+  namespaces, encodings, whitespace, and self-closing syntax; use small builders
+  only when the relevant input is an Erlang tree.
 - Signature mutation tests verify the original and unchanged parse/export
   reconstruction before the mutation. Binary replacements must match once;
   tree mutations must change their target.
@@ -103,6 +119,5 @@ and skipped cases as well as the final case count and exit status.
 - Export unit tests run in memory. The file round-trip writes only to CT's
   temporary directory. No test overwrites a tracked XML fixture.
 
-Fixture construction and assertion semantics are preserved in this migration.
-Further fixture/assertion cleanup is #68; clock behavior is #56 and bidirectional
-Python/Java interoperability CI remains post-1.0 work in #40.
+Production behavior is unchanged by the test cleanup. Clock behavior is #56;
+bidirectional Python/Java interoperability CI remains post-1.0 work in #40.

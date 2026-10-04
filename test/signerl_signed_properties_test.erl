@@ -94,22 +94,21 @@ extract_returns_error_with_missing_cert_digest_test() ->
         signerl_signed_properties:extract(SignatureElement)
     ).
 
-extract_returns_error_with_invalid_digest_value_test() ->
-    SignatureElement = sig_element([
-        {'xades:SigningCertificateV2', [], [
-            {'xades:Cert', [], [
-                {'xades:CertDigest', [], [
-                    {'ds:DigestMethod', [{'Algorithm', "http://www.w3.org/2001/04/xmlenc#sha256"}],
-                        []},
-                    {'ds:DigestValue', [], []}
-                ]}
-            ]}
-        ]}
-    ]),
-    ?assertEqual(
-        {error, invalid_signing_certificate_v2},
-        signerl_signed_properties:extract(SignatureElement)
-    ).
+extract_rejects_malformed_certificate_digest_test_() ->
+    [
+        {Name,
+            ?_assertEqual(
+                {error, invalid_signing_certificate_v2},
+                signerl_signed_properties:extract(sig_element([cert_v2_with_digest_value(Content)]))
+            )}
+     || {Name, Content} <- [
+            {"invalid_digest_value", []},
+            {"non_byte_list_digest_value", [[65, {invalid}]]},
+            {"non_text_digest_value", [12345]},
+            {"empty_binary_digest_value", [<<>>]},
+            {"invalid_base64_digest_value", ["not valid base64!!!"]}
+        ]
+    ].
 
 extract_returns_error_with_duplicate_signing_certificate_v2_test() ->
     CertV2 = valid_signing_certificate_v2_element(),
@@ -144,74 +143,6 @@ extract_accepts_binary_digest_value_test() ->
     CertV2Props = maps:get(signing_certificate_v2, Props),
     ?assertEqual(crypto:hash(sha256, <<"test">>), maps:get(digest_value, CertV2Props)),
     ?assertEqual(<<"fake-issuer-serial">>, maps:get(issuer_serial_v2, CertV2Props)).
-
-extract_returns_error_with_non_byte_list_digest_value_test() ->
-    SignatureElement = sig_element([
-        {'xades:SigningCertificateV2', [], [
-            {'xades:Cert', [], [
-                {'xades:CertDigest', [], [
-                    {'ds:DigestMethod', [{'Algorithm', "http://www.w3.org/2001/04/xmlenc#sha256"}],
-                        []},
-                    {'ds:DigestValue', [], [[65, {invalid}]]}
-                ]}
-            ]}
-        ]}
-    ]),
-    ?assertEqual(
-        {error, invalid_signing_certificate_v2},
-        signerl_signed_properties:extract(SignatureElement)
-    ).
-
-extract_returns_error_with_non_text_digest_value_test() ->
-    SignatureElement = sig_element([
-        {'xades:SigningCertificateV2', [], [
-            {'xades:Cert', [], [
-                {'xades:CertDigest', [], [
-                    {'ds:DigestMethod', [{'Algorithm', "http://www.w3.org/2001/04/xmlenc#sha256"}],
-                        []},
-                    {'ds:DigestValue', [], [12345]}
-                ]}
-            ]}
-        ]}
-    ]),
-    ?assertEqual(
-        {error, invalid_signing_certificate_v2},
-        signerl_signed_properties:extract(SignatureElement)
-    ).
-
-extract_returns_error_with_empty_binary_digest_value_test() ->
-    SignatureElement = sig_element([
-        {'xades:SigningCertificateV2', [], [
-            {'xades:Cert', [], [
-                {'xades:CertDigest', [], [
-                    {'ds:DigestMethod', [{'Algorithm', "http://www.w3.org/2001/04/xmlenc#sha256"}],
-                        []},
-                    {'ds:DigestValue', [], [<<>>]}
-                ]}
-            ]}
-        ]}
-    ]),
-    ?assertEqual(
-        {error, invalid_signing_certificate_v2},
-        signerl_signed_properties:extract(SignatureElement)
-    ).
-
-extract_returns_error_with_invalid_base64_digest_value_test() ->
-    SignatureElement = sig_element([
-        {'xades:SigningCertificateV2', [], [
-            {'xades:Cert', [], [
-                {'xades:CertDigest', [], [
-                    {'ds:DigestMethod', [{'Algorithm', "http://www.w3.org/2001/04/xmlenc#sha256"}],
-                        []},
-                    {'ds:DigestValue', [], ["not valid base64!!!"]}
-                ]}
-            ]}
-        ]}
-    ]),
-    ?assertEqual(
-        {error, invalid_signing_certificate_v2},
-        signerl_signed_properties:extract(SignatureElement)
-    ).
 
 extract_ignores_invalid_base64_issuer_serial_v2_test() ->
     DigestB64 = binary_to_list(base64:encode(crypto:hash(sha256, <<"test">>))),
@@ -743,12 +674,17 @@ valid_signing_certificate_v2_element() ->
 
 valid_signing_certificate_v2_no_issuer() ->
     DigestB64 = binary_to_list(base64:encode(crypto:hash(sha256, <<"test-cert-der">>))),
+    cert_v2_with_digest_value([DigestB64]).
+
+cert_v2_with_digest_value(ValueContent) ->
     {'xades:SigningCertificateV2', [], [
-        {'xades:Cert', [], [cert_digest_element(DigestB64)]}
+        {'xades:Cert', [], [
+            {'xades:CertDigest', [], digest_elements(ValueContent)}
+        ]}
     ]}.
 
 cert_digest_element(DigestB64) ->
-    {'xades:CertDigest', [], digest_elements(DigestB64)}.
+    {'xades:CertDigest', [], digest_elements([DigestB64])}.
 
 cert_v2_with_issuer(DigestB64, IssuerSerialB64) ->
     {'xades:SigningCertificateV2', [], [
@@ -792,12 +728,12 @@ policy_element_with_id(IdentifierContent) ->
     ]}.
 
 policy_hash_element(HashB64) ->
-    {'xades:SigPolicyHash', [], digest_elements(HashB64)}.
+    {'xades:SigPolicyHash', [], digest_elements([HashB64])}.
 
-digest_elements(B64Value) ->
+digest_elements(ValueContent) ->
     [
         {'ds:DigestMethod', [{'Algorithm', "http://www.w3.org/2001/04/xmlenc#sha256"}], []},
-        {'ds:DigestValue', [], [B64Value]}
+        {'ds:DigestValue', [], ValueContent}
     ].
 
 policy_id_element(Identifier) ->
