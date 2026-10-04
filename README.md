@@ -60,7 +60,10 @@ rebar3 tall
 check), lint, Xref, and Dialyzer. Formatting runs once; `flint` remains available
 for standalone formatting and lint checks. GitHub CI and the local Docker matrix
 use this same gate. Generate the test certificates before the first run.
-Each test run resets collected coverage data before collecting fresh results.
+Each `rebar3 test` run resets collected coverage once, then combines fresh EUnit
+and Common Test coverage for the 100% threshold. Focused runs of either framework
+are useful during development but do not replace that combined gate. See the
+[test responsibility map and focused commands](test/TESTS.md).
 
 Run local Linux OTP matrix checks in Docker (OTP 26, 27, and 28):
 

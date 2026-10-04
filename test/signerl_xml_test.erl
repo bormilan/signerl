@@ -130,3 +130,10 @@ new_test_element() ->
     NewAttrs = [{id, "4"}],
     NewContent = [{title, [], ["My new book"]}],
     {NewTag, NewAttrs, NewContent}.
+
+is_signature_element_shared_test() ->
+    SigElement = {'ds:Signature', [], []},
+    NonSigElement = {'ds:SignedInfo', [], []},
+    ?assertEqual(true, signerl_xml:is_signature_element(SigElement)),
+    ?assertEqual(false, signerl_xml:is_signature_element(NonSigElement)),
+    ?assertEqual(false, signerl_xml:is_signature_element("text")).

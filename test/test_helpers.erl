@@ -5,10 +5,13 @@
     ecdsa_public_key_from_cert/1,
     cert_der/1,
     signature_element/1,
-    signature_element/2
+    signature_element/2,
+    parse_verified_message/2,
+    replace_once/3
 ]).
 
 -include_lib("public_key/include/OTP-PUB-KEY.hrl").
+-include_lib("eunit/include/eunit.hrl").
 
 rsa_public_key_from_cert(CertPath) ->
     % Use pkix_decode_cert/2 for typed, future-proof access to the SPKI.
@@ -67,3 +70,17 @@ signature_element(SignedSignaturePropertiesElements, SignedDataObjectPropertiesE
             ]}
         ]}
     ]}.
+
+parse_verified_message(SignedMessage, PublicKey) ->
+    ?assertEqual(true, signerl:verify(SignedMessage, sha256, PublicKey)),
+    {ok, Parsed} = signerl_xml:parse_binary(SignedMessage),
+    %% Verification accepts XML without a declaration, as do the reconstruction tests.
+    Rebuilt = signerl_xml:export([], Parsed),
+    ?assertEqual(true, signerl:verify(Rebuilt, sha256, PublicKey)),
+    Parsed.
+
+replace_once(Message, Before, After) ->
+    ?assertMatch([_], binary:matches(Message, Before)),
+    Replaced = binary:replace(Message, Before, After),
+    ?assertNotEqual(Message, Replaced),
+    Replaced.
