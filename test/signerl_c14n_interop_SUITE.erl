@@ -1,0 +1,94 @@
+-module(signerl_c14n_interop_SUITE).
+
+-include_lib("eunit/include/eunit.hrl").
+-include_lib("common_test/include/ct.hrl").
+-compile([export_all, nowarn_export_all]).
+
+all() ->
+    [{group, interop_group}].
+
+groups() ->
+    [
+        {interop_group, [], [
+            interop_simple_attrs,
+            interop_namespaces,
+            interop_nested_ns,
+            interop_escaping,
+            interop_default_ns,
+            interop_mixed_content,
+            interop_dsig_like
+        ]}
+    ].
+
+init_per_suite(Config) ->
+    Config.
+
+end_per_suite(_Config) ->
+    ok.
+
+init_per_group(interop_group, Config) ->
+    case os:find_executable("xmllint") of
+        false -> {skip, "xmllint not available"};
+        _Path -> Config
+    end;
+init_per_group(_Group, Config) ->
+    Config.
+
+end_per_group(_Group, _Config) ->
+    ok.
+
+interop_simple_attrs(Config) ->
+    assert_matches_xmllint("simple_attrs.xml", Config).
+
+interop_namespaces(Config) ->
+    assert_matches_xmllint("namespaces.xml", Config).
+
+interop_nested_ns(Config) ->
+    assert_matches_xmllint("nested_ns.xml", Config).
+
+interop_escaping(Config) ->
+    assert_matches_xmllint("escaping.xml", Config).
+
+interop_default_ns(Config) ->
+    assert_matches_xmllint("default_ns.xml", Config).
+
+interop_mixed_content(Config) ->
+    assert_matches_xmllint("mixed_content.xml", Config).
+
+interop_dsig_like(Config) ->
+    assert_matches_xmllint("dsig_like.xml", Config).
+
+assert_matches_xmllint(FileName, _Config) ->
+    FilePath = filename:join([test_examples_dir(), "c14n", FileName]),
+    XmllintOutput = run_xmllint_c14n11(FilePath),
+    OurOutput = run_our_c14n(FilePath),
+    ?assertEqual(XmllintOutput, OurOutput).
+
+test_examples_dir() ->
+    SuiteFile = code:which(?MODULE),
+    TestDir = filename:dirname(SuiteFile),
+    filename:join(TestDir, "examples").
+
+run_xmllint_c14n11(FilePath) ->
+    Port = open_port(
+        {spawn_executable, os:find_executable("xmllint")},
+        [{args, ["--c14n11", FilePath]}, binary, exit_status, stderr_to_stdout]
+    ),
+    collect_port_output(Port, <<>>).
+
+collect_port_output(Port, Acc) ->
+    receive
+        {Port, {data, Data}} ->
+            collect_port_output(Port, <<Acc/binary, Data/binary>>);
+        {Port, {exit_status, 0}} ->
+            Acc;
+        {Port, {exit_status, Code}} ->
+            error({xmllint_failed, Code, Acc})
+    after 5000 ->
+        error(xmllint_timeout)
+    end.
+
+run_our_c14n(FilePath) ->
+    {ok, RawXml} = file:read_file(FilePath),
+    {ok, ParsedXml} = signerl_xml:parse_binary(RawXml),
+    signerl_c14n:canonicalize(ParsedXml).

@@ -1,204 +1,108 @@
-# Test Overview
+# Test responsibilities
 
-This document lists the current tests, why they exist, and what you should learn
-from each one.
+Use EUnit for module contracts and Common Test for public API workflows, real
+file output, and the external `xmllint` comparison. Tests are discovered by
+rebar3; there is no custom runner or manually maintained suite list.
 
-## Signature regression controls
+## Where to put a test
 
-Mutation tests first verify the original signed message and an unchanged
-parse/export reconstruction using `signerl_xml:parse_binary/1`, the production
-verification path. SignedInfo tests retain the extracted unsigned tree rather
-than reparsing it with `parse_file/1` whitespace normalization. Every intended
-mutation must change its target; binary replacements must match exactly once.
+| File | Cases | Responsibility |
+| --- | ---: | --- |
+| `signerl_c14n_test.erl` | 35 | Canonicalization, namespace ordering, escaping, Exclusive C14N, and signature-removal transforms. |
+| `signerl_signed_properties_test.erl` | 66 | XAdES property extraction and malformed Erlang/XML value boundaries. |
+| `signerl_signature_test.erl` | 5 | Signature construction contracts for RSA and ECDSA. |
+| `signerl_verify_test.erl` | 23 | Signature extraction, reference validation, algorithm selection, and malformed signature contracts. |
+| `signerl_xml_test.erl` | 15 | XML parsing, prologs, export, tree lookup, text values, and signature-element recognition. |
+| `signerl_xades_xml_test.erl` | 1 | XAdES tree lookup rejects a non-signature root. |
+| `signerl_cert_test.erl` | 1 | High-serial certificate issuer/serial encoding. |
+| `signerl_api_SUITE.erl` | 54 | Full public signing/verification, binary/file/key inputs, RSA/ECDSA certificate wiring, tampering, and independent signature fixtures. |
+| `signerl_c14n_interop_SUITE.erl` | 7 | Compare production parsing/canonicalization with `xmllint --c14n11`. |
+| `signerl_xml_SUITE.erl` | 1 | A real file export/read-back using CT's isolated `priv_dir`. |
 
-- `signature_reconstruction_preserves_valid_baseline/1` checks that extracting
-  and reinserting an unchanged signature preserves both reference digests.
-- `reference_digests_are_independent_of_signed_info_c14n/1` changes only
-  SignedInfo's canonicalization algorithm. Reference digests remain valid, but
-  the unchanged signature bytes no longer verify against the changed SignedInfo.
-- `verify_rejects_duplicate_reference_attributes/1` submits actual XML with a
-  duplicate Type attribute to `signerl:verify/3` and expects `{error, invalid_xml}`.
-- `verify_independent_c14n11_signature/1` and
-  `verify_independent_exc_c14n_signature/1` verify static RSA-SHA256 signatures
-  produced with `xmlsec1`, then reject altered document content and SigningTime.
-  See [fixture provenance and reproduction](examples/independent/README.md).
+Total: **146 EUnit + 62 Common Test = 208 cases**. Four duplicate XML checks
+were consolidated into the existing EUnit assertions; no distinct behavior was
+removed. See the [migration log and case map](../docs/implementations/test_organization_2026-10-04.md)
+for the old locations.
 
-Malformed certificate cases also serialize and parse real XML. Focused internal
-decoder tests remain where they check distinct Erlang input boundaries; these
-are not evidence of XML interoperability. The `xmllint` comparisons now use
-SignErl's production binary parser on the SignErl side of the comparison.
+Pure EUnit cases keep their descriptive names with a `_test` suffix. Builder
+and verifier fixtures use ordinary EUnit setup descriptors with an explicit
+name for every case, so failures still identify the original scenario.
 
-`signerl_xml_test:export_test/0` checks the exported prolog and parsed tree in
-memory. `to_file_writes_and_reads_back/1` covers file output in Common Test's
-`priv_dir`; ordinary tests do not overwrite tracked XML fixtures.
+## Run the tests
 
-## Test Suite: `signerl_SUITE.erl`
+Generate the test-only certificates before running the complete suite:
 
-- `add_signature_element_inserts_signature_value/1`
-  Why: Validates signature insertion on the XML tree.
-  Learn: Signature bytes are stored as base64 under `ds:SignatureValue`.
+```sh
+scripts/gen_certs.sh
+rebar3 test
+```
 
-- `add_signature_element_inserts_signed_properties/1`
-  Why: Validates that signing metadata is present in signature XML.
-  Learn: Signed output includes `ds:Object/xades:QualifyingProperties/xades:SignedProperties` with `xades:SigningTime`.
+`test` formats the code, resets coverage once, runs EUnit and CT with coverage,
+then checks **100% combined production-module coverage**. Both
+`eunit.coverdata` and `ct.coverdata` contribute. Neither framework alone is
+expected to cover all production modules after the split.
 
-- `add_signature_element_extracts_signature_value/1`
-  Why: Validates extraction after insertion.
-  Learn: Extractor returns original signature bytes and unsigned message.
+Run a focused module or suite while working:
 
-- `build_signature_element_rsa_and_ecdsa/1`
-  Why: Validates SignedInfo-based signature element construction for both key types.
-  Learn: `build_signature_element/3` emits `ds:SignedInfo` for RSA and ECDSA keys.
+```sh
+rebar3 eunit --module signerl_verify_test
+rebar3 ct --suite test/signerl_api_SUITE
+rebar3 ct --suite test/signerl_c14n_interop_SUITE
+```
 
-- `build_signature_element_returns_error_with_invalid_hash_or_key/1`
-  Why: Enforces current profile constraints at constructor level.
-  Learn: Unsupported hash/key inputs return `{error, invalid_signature}`.
+Run all unit or integration cases with `rebar3 eunit` or `rebar3 ct`. These
+standalone commands do not replace the fresh combined coverage gate. Use
+`rebar3 as test cover` to inspect the most recently collected results.
 
-- `sign/1`
-  Why: Basic sign/verify loop using an explicitly loaded private key.
-  Learn: `sign/3` now emits `ds:SignedInfo` and `verify/3` validates reference digests before signature bytes.
+Before pushing, run `rebar3 flint`, `rebar3 dialyzer`, `rebar3 tall`, and
+`make ci-local` as required by [AGENTS.md](../AGENTS.md). `tall` includes `test`,
+lint, Xref, and Dialyzer. GitHub CI and the Docker OTP 26/27/28 matrix run it.
+`xmllint` is required for the seven interoperability comparisons; an unavailable
+tool skips that group, which is not a complete validation run. Linux CI and the
+local Docker images install it.
 
-- `sign_with_chain_leaf_rsa/1`
-  Why: Sign using the leaf RSA key from a certificate chain and verify with the
-  public key extracted from the leaf certificate.
-  Learn: Leaf certificates can be used for signing, and certificate parsing
-  yields a valid RSA public key for verification.
+## Existing build caches after the suite moves
 
-- `sign_with_self_signed_rsa/1`
-  Why: Sign using a self-signed RSA certificate and verify with its public key.
-  Learn: Self-signed certificates work for local testing without a CA chain.
+When updating a checkout or Docker build volume from the old suite layout,
+reset its generated test profile once. Rebar's `clean` command removes compiled
+BEAM files but can leave copied sources for deleted suites. Common Test can then
+print suite-loading failures even while reporting that all current cases passed.
 
-- `sign_with_self_signed_ecdsa/1`
-  Why: Sign using an ECDSA key and verify with the public key extracted from its
-  certificate.
-  Learn: Non-RSA keys work with the same sign/verify APIs.
+For a local checkout, run `rm -rf _build/test`, then `rebar3 test`. This resets
+only generated test artifacts; it retains the default-profile dependency builds
+and Dialyzer PLT. Do not edit copied test sources to repair a cached build.
 
-- `sign_deterministic/1`
-  Why: Signs the same XML twice with the same RSA key and compares outputs.
-  Learn: The signed XML output is deterministic (important for repeatable tests).
+For existing local Docker volumes/images, reset the same generated profile:
 
-- `verify_returns_error_without_signature_element/1`
-  Why: Verify should reject invalid signature structure.
-  Learn: Missing and duplicated `ds:Signature` are mapped to `{error, invalid_signature}`.
+```sh
+for otp in 26 27 28; do
+    docker run --rm -v "signerl_build_cache_otp${otp}:/build" \
+        "signerl-ci:otp${otp}" sh -c 'rm -rf /build/test'
+done
+make ci-local
+```
 
-- `verify_returns_error_without_signature_value/1`
-  Why: Verify should reject signatures without `ds:SignatureValue`.
-  Learn: Missing signature value maps to `{error, invalid_signature}`.
+Ordinary repeated runs reuse the rebuilt caches. Check for suite-loading errors
+and skipped cases as well as the final case count and exit status.
 
-- `verify_returns_error_with_empty_signature_value/1`
-  Why: Verify should reject empty signature values.
-  Learn: Empty signature value maps to `{error, invalid_signature}`.
+## Fixtures and controls
 
-- `verify_returns_error_with_invalid_base64_signature_value/1`
-  Why: Verify should reject non-base64 signature values.
-  Learn: Invalid base64 maps to `{error, invalid_signature}`.
+- `signerl_cert_helpers.erl` locates the generated keys/certificates.
+- `test_helpers.erl` contains shared certificate/tree fixtures and the baseline
+  and replacement assertions introduced in #57.
+- Signature mutation tests verify the original and unchanged parse/export
+  reconstruction before the mutation. Binary replacements must match once;
+  tree mutations must change their target.
+- Verifier tests retain the original unsigned tree rather than reparsing it
+  with `parse_file/1` whitespace normalization. Changing SignedInfo's
+  canonicalization leaves reference digests valid but invalidates the existing
+  signature bytes; a separate fixture tests genuine Exclusive C14N signing.
+- `examples/independent/` contains signatures created by `xmlsec1`, alongside
+  their public key and templates. See [provenance and scope](examples/independent/README.md).
+  Ordinary tests read these fixtures and do not require `xmlsec1`.
+- Export unit tests run in memory. The file round-trip writes only to CT's
+  temporary directory. No test overwrites a tracked XML fixture.
 
-- `verify_returns_error_with_self_closing_signature_value/1`
-  Why: Verify should reject self-closing `ds:SignatureValue`.
-  Learn: Self-closing value maps to `{error, invalid_signature}`.
-
-- `verify_returns_error_with_non_text_signature_value_in_signedinfo/1`, `verify_returns_error_with_non_byte_list_signature_value_in_signedinfo/1`, `verify_returns_error_with_empty_binary_signature_value_in_signedinfo/1`
-  Why: SignedInfo-era extraction still validates malformed `ds:SignatureValue` payload shapes.
-  Learn: Non-text, invalid byte-list, and empty-binary signature values map to `{error, invalid_signature}`.
-
-- `verify_returns_error_without_signed_properties/1`
-  Why: Signed-properties are mandatory in current profile.
-  Learn: Missing `xades:SignedProperties` maps to `{error, invalid_signature}`.
-
-- `verify_returns_error_without_object/1`
-  Why: XAdES properties wrapper object is required.
-  Learn: Missing `ds:Object` maps to `{error, invalid_signature}`.
-
-- `verify_returns_error_without_qualifying_properties/1`
-  Why: Qualifying-properties wrapper is required.
-  Learn: Missing `xades:QualifyingProperties` maps to `{error, invalid_signature}`.
-
-- `verify_returns_error_without_signed_signature_properties/1`
-  Why: Nested signed-signature-properties container is required.
-  Learn: Missing `xades:SignedSignatureProperties` maps to `{error, invalid_signature}`.
-
-- `verify_returns_error_without_signed_info/1`
-  Why: SignedInfo is mandatory in current profile.
-  Learn: Missing `ds:SignedInfo` maps to `{error, invalid_signature}`.
-
-- `verify_returns_error_without_signing_time/1`
-  Why: Signing time must be present.
-  Learn: Missing `xades:SigningTime` maps to `{error, invalid_signature}`.
-
-- `verify_returns_error_with_invalid_signing_time/1`
-  Why: Signing time format must be strict UTC.
-  Learn: Invalid timestamp format maps to `{error, invalid_signature}`.
-
-- `verify_returns_error_with_self_closing_signing_time/1`
-  Why: Self-closing signing-time element is malformed.
-  Learn: Self-closing `xades:SigningTime` maps to `{error, invalid_signature}`.
-
-- `verify_returns_false_with_wrong_signature_value/1`
-  Why: Verify should return `false` for present-but-wrong signature bytes.
-  Learn: Cryptographic mismatch is distinct from malformed signature structure.
-
-- `verify_fails_on_modified_message/1`
-  Why: Verify fails when the signed XML is modified.
-  Learn: Signatures are bound to the exact message content.
-
-- `verify_fails_on_modified_signing_time/1`
-  Why: Verify fails when `xades:SigningTime` is changed.
-  Learn: Signed-properties are cryptographically bound to the signature payload.
-
-- `verify_fails_with_wrong_keys/1`
-  Why: Verify fails with both wrong RSA public key and wrong key type for ECDSA signatures.
-  Learn: Verification is correctly tied to both key identity and key algorithm compatibility.
-
-- `sign_returns_error_with_unsupported_hash/1`, `sign_returns_error_with_unsupported_key/1`, `verify_returns_error_with_unsupported_hash/1`
-  Why: Profile currently supports deterministic SHA-256 signing/verification only.
-  Learn: Unsupported hash/key combinations return `{error, invalid_signature}`.
-
-- `extract_signature_data_returns_error_with_missing_c14n/1`, `extract_signature_data_returns_error_with_missing_reference_uri/1`, `extract_signature_data_returns_error_with_invalid_reference_payload/1`
-  Why: `ds:SignedInfo` structure and reference nodes are required.
-  Learn: Malformed SignedInfo/reference layouts map to `{error, invalid_signature}`.
-
-- `verify_reference_digests_returns_error_with_missing_signed_properties_element/1`, `verify_reference_digests_returns_error_with_invalid_document_reference/1`, `verify_reference_digests_returns_error_with_invalid_signed_properties_reference/1`
-  Why: Reference metadata must match expected URI/type contract.
-  Learn: Invalid reference metadata is rejected before cryptographic verification.
-
-- `verify_reference_digests_returns_error_with_invalid_signature_data/1`
-  Why: Verifier must reject malformed signature-data maps defensively.
-  Learn: Non-conforming signature-data input returns `{error, invalid_signature}`.
-
-- `xades_xml_returns_error_with_non_signature_input/1`
-  Why: XAdES XML extractors should reject non-`ds:Signature` roots.
-  Learn: Non-signature input returns `{error, invalid_signature}` from both extractor helpers.
-
-## Test Suite: `signerl_signed_properties_SUITE.erl`
-
-- `extract_accepts_optional_signed_signature_properties/1`
-  Why: Validates the dedicated signed-properties module accepts optional known XAdES properties.
-  Learn: Known optional signed-signature properties are parsed into the properties map and preserved.
-
-- `extract_ignores_unknown_signed_signature_properties/1`
-  Why: Validates forward-compatible behavior for unknown properties.
-  Learn: Unknown signed-signature properties are ignored rather than causing verification failure.
-
-- `extract_accepts_binary_signing_time/1`, `extract_returns_error_with_non_byte_list_signing_time/1`, `extract_returns_error_with_non_text_signing_time/1`
-  Why: Validates accepted and rejected SigningTime value representations.
-  Learn: Binary SigningTime is accepted; invalid list/non-text forms return `{error, invalid_signature}`.
-
-- `extract_returns_error_with_duplicate_signing_time_property/1`
-  Why: Ensures required known properties are unique.
-  Learn: Duplicate `xades:SigningTime` is treated as invalid.
-
-- `extract_returns_error_without_signing_time/1`
-  Why: Confirms required-property enforcement in the dedicated module.
-  Learn: Missing `xades:SigningTime` returns `{error, invalid_signature}`.
-
-## Helpers: `test_helpers.erl`
-
-These are not tests, but they are used by the suite:
-
-- `rsa_public_key_from_cert/1`
-  Why: Extracts the RSA public key from a certificate using PKIX decoding.
-  Learn: How to safely parse RSA public keys from X.509 certs.
-
-- `ecdsa_public_key_from_cert/1`
-  Why: Extracts the EC public key and curve parameters from a certificate.
-  Learn: How ECDSA public keys are represented in OTP records.
+Fixture construction and assertion semantics are preserved in this migration.
+Further fixture/assertion cleanup is #68; clock behavior is #56 and bidirectional
+Python/Java interoperability CI remains post-1.0 work in #40.
