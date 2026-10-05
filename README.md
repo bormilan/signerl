@@ -69,10 +69,13 @@ retained OTP 26–28 matrix and includes Windows fixes for OTP 28. The
 [OTP 28.5.0.7 release notes](https://github.com/erlang/otp/releases/tag/OTP-28.5.0.7)
 record the selected patch's fixes and compatibility notes.
 
-Lint is pinned to **rebar3_lint 5.0.4 / Elvis 5.0.4**. This release supports the
+Formatting is pinned to **erlfmt 1.8.0**; lint is pinned to
+**rebar3_lint 5.0.4 / Elvis 5.0.4**. This release supports the
 retained OTP 26 target; [6.0.0 requires OTP 27 or newer](https://github.com/project-fifo/rebar3_lint/blob/6.0.0/rebar.config).
-See the [lint upgrade instructions](test/TESTS.md#lint-plugin-upgrades) for existing
-checkouts with cached plugins.
+Tool updates are deliberate: change the exact pins, review compatibility, and
+pass the full supported CI matrix. See the
+[tooling and cache instructions](test/TESTS.md#tooling-versions-and-clean-builds)
+for cached plugin upgrades and isolated clean builds.
 
 ## Tests
 
@@ -89,9 +92,10 @@ Run the complete quality gate before pushing:
 rebar3 tall
 ```
 
-`tall` runs the test alias (formatting, EUnit, Common Test, and a 100% coverage
-check), lint, Xref, and Dialyzer. Formatting runs once; `flint` remains available
-for standalone formatting and lint checks. Run it natively before pushing.
+`tall` runs the test alias (format checking, EUnit, Common Test, and a 100%
+coverage check), lint, Xref, and Dialyzer. Formatting is checked once without
+rewriting files; `flint` also checks formatting and lint without rewriting files.
+Run it natively before pushing.
 GitHub Actions runs the same gate on OTP 26/27/28 across Ubuntu and Windows;
 all six jobs must pass on the latest PR commit before merging. CI runs for pull
 requests and pushes to `dev` and `main`.
@@ -100,6 +104,18 @@ Each `rebar3 test` run resets collected coverage once, then combines fresh EUnit
 and Common Test coverage for the 100% threshold. Focused runs of either framework
 are useful during development but do not replace that combined gate. See the
 [test responsibility map and focused commands](test/TESTS.md).
+
+Apply formatting explicitly, then review the diff before rerunning the checks:
+
+```bash
+rebar3 fmt
+```
+
+For a formatting-only check that leaves source files unchanged:
+
+```bash
+rebar3 fmt --check
+```
 
 ## Test Certificates
 

@@ -1,0 +1,4 @@
+# erlfmt emits LF on every platform; keep its source inputs consistent at checkout.
+*.erl text eol=lf
+*.hrl text eol=lf
+*.app.src text eol=lf

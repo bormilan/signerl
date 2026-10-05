@@ -46,8 +46,8 @@ scripts/gen_certs.sh
 rebar3 test
 ```
 
-`test` formats the code, resets coverage once, runs EUnit and CT with coverage,
-then checks **100% combined production-module coverage**. Both
+`test` checks formatting without rewriting source, resets coverage once, runs
+EUnit and CT with coverage, then checks **100% combined production-module coverage**. Both
 `eunit.coverdata` and `ct.coverdata` contribute. Neither framework alone is
 expected to cover all production modules after the split.
 
@@ -84,6 +84,62 @@ and Dialyzer PLT. Do not edit copied test sources to repair a cached build.
 
 Ordinary repeated runs reuse the rebuilt caches. Check for suite-loading errors
 and skipped cases as well as the final case count and exit status.
+
+## Tooling versions and clean builds
+
+Use the runtime/rebar3 pins in `.tool-versions` and the project plugin pins in
+`rebar.config`: rebar3 3.25.1, erlfmt 1.8.0, rebar3_lint 5.0.4 / Elvis 5.0.4.
+Change these deliberately after reviewing upstream compatibility; validate the
+new versions from clean and warm builds and across all six GitHub jobs.
+
+`rebar3 fmt` is the developer command that writes formatting changes.
+`rebar3 fmt --check`, `test`, `flint`, and `tall` fail on formatting drift without
+rewriting source files. Run `fmt`, review the resulting diff, then rerun the gate.
+`.gitattributes` keeps Erlang sources, headers, and application files at LF line
+endings even when Git uses `core.autocrlf=true`; XML fixtures keep their existing
+checkout behavior.
+
+Start a cache investigation with `rebar3 version` and `rebar3 plugins list`.
+The plugin list should show `erlfmt (1.8.0)` and `rebar3_lint (5.0.4)`. A changed
+pin can leave an existing plugin build stale. Upgrade only the affected plugin:
+
+```sh
+rebar3 plugins upgrade erlfmt
+rebar3 plugins upgrade rebar3_lint
+rebar3 plugins list
+rebar3 flint
+```
+
+The linter migration example below explains the 4.x configuration transition.
+Do not repair caches by editing generated plugin sources or BEAM files.
+
+To separate project failures from stale builds or user-global plugins, run this
+from the repository root in a POSIX shell with the pinned tools on `PATH`:
+
+```sh
+tooling_diag_dir="$(mktemp -d)"
+(
+    set -e
+    mkdir -p "$tooling_diag_dir/global-config"
+    scripts/gen_certs.sh
+    export REBAR_GLOBAL_CONFIG_DIR="$tooling_diag_dir/global-config"
+    export REBAR_BASE_DIR="$tooling_diag_dir/build"
+    export REBAR_CACHE_DIR="$tooling_diag_dir/cache"
+    rebar3 tall
+    rebar3 plugins list
+)
+```
+
+This uses a new build directory, package cache, and empty global configuration;
+it leaves the normal `_build` and user-global settings intact. Reuse the same
+directory for a warm comparison or create a new one for another clean run.
+The subshell stops on a failed command, preserving its exit status. A failure
+that occurs only with the normal global configuration points to user tooling, not a new project dependency.
+
+CI cache keys include `rebar.lock`, `rebar.config`, and `elvis.config`, plus the
+resolved OTP/rebar3 versions and operating system. The build cache also includes
+source, header, and test paths. Updating a tool pin or its configuration therefore
+invalidates the relevant CI caches. GitHub runs the same non-mutating `tall` gate.
 
 ## Lint plugin upgrades
 
