@@ -9,9 +9,9 @@
   `test`, once per invocation. Keep `rebar3 fmt` as the explicit developer
   write command. Formatting drift now fails validation without being repaired
   by a passing gate; tests, coverage, lint, Xref, and Dialyzer remain required.
-- `.gitattributes` checks out `.erl`, `.hrl`, and `.app.src` files with LF, matching
-  erlfmt output even under `core.autocrlf=true`. Scope is limited to formatter
-  inputs; XML fixtures are not normalized by this change.
+- `.gitattributes` checks out `.erl`, `.hrl`, `.app.src`, and `rebar.config` files
+  with LF, matching erlfmt output even under `core.autocrlf=true`. Scope is limited
+  to formatter inputs; XML fixtures are not normalized by this change.
 - README and `test/TESTS.md` describe the exact tool pins, deliberate update
   policy, developer/check commands, plugin cache upgrades, and a clean diagnostic
   build using separate build/cache directories plus empty global configuration.
@@ -36,7 +36,8 @@ the original defect without changing the implementation worktree.
 
 After the configuration change:
 - `fmt --check`, `test`, `flint`, and `tall` each reject that drift with nonzero
-  status. Hashes confirm every Erlang source/header/application file is unchanged.
+  status. A separate configuration-drift probe verifies the same behavior for
+  `rebar.config`. Hashes confirm every formatter input is unchanged.
 - Explicit `fmt` repairs the drift and a subsequent check passes.
 - A real cached erlfmt 1.7.0 build remains at 1.7.0 after changing its declared
   pin. `plugins upgrade erlfmt` resolves 1.8.0; immediate and warm checks pass.
@@ -52,6 +53,15 @@ After the configuration change:
   `core.autocrlf=true` reproduces CRLF checkout before the attributes; with the
   new attributes it checks out LF and passes. Header/app patterns also resolve
   to LF; the XML fixture pattern remains unspecified.
+- The first GitHub run exposed one missing LF rule: Windows checked out
+  `rebar.config` with CRLF and `tall` correctly rejected it. erlfmt 1.8.0's
+  default input list includes that file alongside sources/headers/application
+  files. Extending the checkout probe to `rebar.config` reproduced the failure
+  before adding the missing rule. The updated attributes cover every default
+  formatter input; the checkout probe passes and checks both source and
+  configuration with `fmt --check`. After this fix, native `test`, coverage,
+  `flint`, Dialyzer, and final `tall` pass again: all 219 cases, no skips,
+  100% coverage, and unchanged formatter input hashes.
 
 Native runtime: installed OTP 28.4.2 with pinned rebar3 3.25.1. GitHub uses pinned
 OTP 28.5.0.7 for OTP 28 and retains OTP 26/27 on Ubuntu and Windows. No Docker

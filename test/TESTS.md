@@ -95,9 +95,9 @@ new versions from clean and warm builds and across all six GitHub jobs.
 `rebar3 fmt` is the developer command that writes formatting changes.
 `rebar3 fmt --check`, `test`, `flint`, and `tall` fail on formatting drift without
 rewriting source files. Run `fmt`, review the resulting diff, then rerun the gate.
-`.gitattributes` keeps Erlang sources, headers, and application files at LF line
-endings even when Git uses `core.autocrlf=true`; XML fixtures keep their existing
-checkout behavior.
+`.gitattributes` keeps all default formatter inputs (Erlang sources, headers,
+application files, and `rebar.config`) at LF line endings even when Git uses
+`core.autocrlf=true`; XML fixtures keep their existing checkout behavior.
 
 Start a cache investigation with `rebar3 version` and `rebar3 plugins list`.
 The plugin list should show `erlfmt (1.8.0)` and `rebar3_lint (5.0.4)`. A changed
