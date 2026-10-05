@@ -69,6 +69,11 @@ retained OTP 26–28 matrix and includes Windows fixes for OTP 28. The
 [OTP 28.5.0.7 release notes](https://github.com/erlang/otp/releases/tag/OTP-28.5.0.7)
 record the selected patch's fixes and compatibility notes.
 
+Lint is pinned to **rebar3_lint 5.0.4 / Elvis 5.0.4**. This release supports the
+retained OTP 26 target; [6.0.0 requires OTP 27 or newer](https://github.com/project-fifo/rebar3_lint/blob/6.0.0/rebar.config).
+See the [lint upgrade instructions](test/TESTS.md#lint-plugin-upgrades) for existing
+checkouts with cached plugins.
+
 ## Tests
 
 Run tests with rebar3:

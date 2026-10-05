@@ -85,6 +85,34 @@ and Dialyzer PLT. Do not edit copied test sources to repair a cached build.
 Ordinary repeated runs reuse the rebuilt caches. Check for suite-loading errors
 and skipped cases as well as the final case count and exit status.
 
+## Lint plugin upgrades
+
+`rebar.config` pins `rebar3_lint` 5.0.4, which selects Elvis 5.0.4. Both support
+OTP 26 and newer. `elvis.config` uses the 5.x top-level `config` list and `files`
+globs; both source and test modules retain the `erl_files` ruleset. Configuration
+validation is built into Elvis rather than a separate `elvis_config` ruleset.
+
+When updating a checkout that already built the 4.x plugin, changing the declared
+version alone can leave the old plugin in `_build`. Use Rebar's plugin upgrade
+command, then verify and lint:
+
+```sh
+rebar3 plugins upgrade rebar3_lint
+rebar3 plugins list
+rebar3 flint
+```
+
+The plugin list must report `rebar3_lint (5.0.4)`. The upgrade command refreshes
+its Elvis dependency as well. Do not edit generated plugin files by hand.
+CI's build and package-cache keys include `rebar.config` and `elvis.config`, so
+this migration gets fresh caches and subsequent runs reuse the matching versions.
+
+The existing exceptions remain limited to the transparent simplified XML tree
+type and OTP ASN.1 record/field spelling in the certificate modules. Their reasons
+are documented beside the rules in `elvis.config`; no new rule is disabled for
+this upgrade. See the [implementation log](../docs/implementations/lint_upgrade_2026-10-05.md)
+for the clean/warm checks and lint failure probes.
+
 ## Fixtures and controls
 
 - `signerl_cert_helpers.erl` owns PEM loading, certificate decoding, and public

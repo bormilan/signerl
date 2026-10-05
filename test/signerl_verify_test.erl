@@ -179,7 +179,7 @@ extract_signature_data_returns_error_with_missing_reference_uri(Config) ->
 extract_signature_data_returns_error_with_invalid_reference_payload(Config) ->
     SignatureData = validated_signature_data(Config),
     SignatureElement = maps:get(signature_element, SignatureData),
-    BrokenSignature = remove_document_reference_digest_value(SignatureElement),
+    BrokenSignature = remove_document_reference_element(SignatureElement, 'ds:DigestValue'),
     ?assertNotEqual(SignatureElement, BrokenSignature),
     Message = message_with_signature(SignatureData, BrokenSignature),
     ?assertEqual({error, invalid_signed_info}, signerl_verify:extract_signature_data(Message)).
@@ -187,7 +187,7 @@ extract_signature_data_returns_error_with_invalid_reference_payload(Config) ->
 verify_reference_digests_returns_error_with_missing_document_transforms(Config) ->
     SignatureData = validated_signature_data(Config),
     SignatureElement = maps:get(signature_element, SignatureData),
-    BrokenSignature = remove_document_reference_transforms(SignatureElement),
+    BrokenSignature = remove_document_reference_element(SignatureElement, 'ds:Transforms'),
     ?assertNotEqual(SignatureElement, BrokenSignature),
     Message = message_with_signature(SignatureData, BrokenSignature),
     {ok, BrokenData} = signerl_verify:extract_signature_data(Message),
@@ -411,19 +411,12 @@ remove_document_reference_uri(
         SignatureObject
     ]}.
 
-remove_document_reference_digest_value(Signature) ->
+remove_document_reference_element(Signature, Tag) ->
     with_document_reference(
         Signature,
-        fun({'ds:Reference', DocAttrs, [Transforms, DigestMethod, _DigestValue]}) ->
-            {'ds:Reference', DocAttrs, [Transforms, DigestMethod]}
-        end
-    ).
-
-remove_document_reference_transforms(Signature) ->
-    with_document_reference(
-        Signature,
-        fun({'ds:Reference', DocAttrs, [_Transforms, DigestMethod, DigestValue]}) ->
-            {'ds:Reference', DocAttrs, [DigestMethod, DigestValue]}
+        fun({'ds:Reference', DocAttrs, Content}) ->
+            {value, _Removed, Remaining} = lists:keytake(Tag, 1, Content),
+            {'ds:Reference', DocAttrs, Remaining}
         end
     ).
 

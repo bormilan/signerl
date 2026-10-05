@@ -245,11 +245,7 @@ validate_policy_hash(HashContent) ->
 %%--- SignatureProductionPlace ---
 
 validate_signature_production_place(Content) ->
-    lists:foldl(
-        fun(Element, Acc) -> extract_place_field(Element, Acc) end,
-        #{},
-        Content
-    ).
+    lists:foldl(fun extract_place_field/2, #{}, Content).
 
 extract_place_field({'xades:City', _, [Text]}, Acc) ->
     put_text_field(city, Text, Acc);
