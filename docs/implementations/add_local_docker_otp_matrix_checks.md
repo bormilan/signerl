@@ -1,5 +1,9 @@
 # Implementation Log: add_local_docker_otp_matrix_checks
 
+> Historical record: the local Docker tooling was retired on 2026-10-05.
+> Follow [AGENTS.md](../../AGENTS.md) for the current native checks and GitHub
+> Actions merge gate. See the [replacement workflow](../implementations/otp28_toolchain_2026-10-05.md).
+
 ## Linked Task Spec
 - `docs/tasks/add_local_docker_otp_matrix_checks.md`
 

@@ -44,7 +44,8 @@ Use this skill when the user asks for a full post-implementation code review (fo
    - `rebar3 test`
    - `rebar3 flint`
    - `rebar3 dialyzer`
-   - `make ci-local` (before commit/push gate)
+   - native `rebar3 tall` (before commit/push gate)
+   - all six GitHub Actions jobs for OTP 26/27/28 on Ubuntu and Windows (latest PR commit, before merge; no skipped tests)
 5. Report findings with file references and concrete fixes.
 6. Include a small "simplification candidates" section for non-blocking cleanups:
    - function-head pattern matching opportunities.
