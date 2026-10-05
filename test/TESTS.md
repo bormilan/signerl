@@ -36,6 +36,9 @@ CT group; share immutable input bytes, keys, and certificates in `init_per_group
 
 ## Run the tests
 
+Use the [pinned development toolchain](../README.md#development-toolchain):
+OTP 28.5.0.7 and rebar3 3.25.1. OTP 26/27 remain CI compatibility targets.
+
 Generate the test-only certificates before running the complete suite:
 
 ```sh
@@ -60,16 +63,17 @@ Run all unit or integration cases with `rebar3 eunit` or `rebar3 ct`. These
 standalone commands do not replace the fresh combined coverage gate. Use
 `rebar3 as test cover` to inspect the most recently collected results.
 
-Before pushing, run `rebar3 flint`, `rebar3 dialyzer`, `rebar3 tall`, and
-`make ci-local` as required by [AGENTS.md](../AGENTS.md). `tall` includes `test`,
-lint, Xref, and Dialyzer. GitHub CI and the Docker OTP 26/27/28 matrix run it.
+Before pushing, run native `rebar3 flint`, `rebar3 dialyzer`, and `rebar3 tall`
+as required by [AGENTS.md](../AGENTS.md). `tall` includes `test`, lint, Xref, and
+Dialyzer. GitHub Actions runs the same gate on OTP 26/27/28 across Ubuntu and
+Windows. All six jobs must pass on the latest PR commit before merging.
 `xmllint` is required for the seven interoperability comparisons; an unavailable
-tool skips that group, which is not a complete validation run. Linux CI and the
-local Docker images install it.
+tool skips that group, which is not a complete validation run. Install it locally;
+Linux CI installs it automatically.
 
 ## Existing build caches after the suite moves
 
-When updating a checkout or Docker build volume from the old suite layout,
+When updating a checkout from the old suite layout,
 reset its generated test profile once. Rebar's `clean` command removes compiled
 BEAM files but can leave copied sources for deleted suites. Common Test can then
 print suite-loading failures even while reporting that all current cases passed.
@@ -77,16 +81,6 @@ print suite-loading failures even while reporting that all current cases passed.
 For a local checkout, run `rm -rf _build/test`, then `rebar3 test`. This resets
 only generated test artifacts; it retains the default-profile dependency builds
 and Dialyzer PLT. Do not edit copied test sources to repair a cached build.
-
-For existing local Docker volumes/images, reset the same generated profile:
-
-```sh
-for otp in 26 27 28; do
-    docker run --rm -v "signerl_build_cache_otp${otp}:/build" \
-        "signerl-ci:otp${otp}" sh -c 'rm -rf /build/test'
-done
-make ci-local
-```
 
 Ordinary repeated runs reuse the rebuilt caches. Check for suite-loading errors
 and skipped cases as well as the final case count and exit status.

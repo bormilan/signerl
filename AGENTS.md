@@ -19,8 +19,10 @@ Applies to the entire repository unless a nested `AGENTS.md` overrides it.
 5. Run the complete test suite. If total coverage is below 100%, add meaningful missing tests and repeat until all tests pass and coverage is 100%; do not weaken assertions or add contrived tests solely to execute lines.
 6. Run `rebar3 flint` and fix lint/format findings. Rerun affected tests after implementation changes.
 7. Run `rebar3 dialyzer` and fix its findings. Rerun affected tests and earlier gates after changes that can invalidate their results.
-8. Run `rebar3 tall` on the final implementation as the mandatory aggregate gate. It must include all tests, 100% coverage, formatting/lint checks, and Dialyzer. A failed or skipped required check is not a pass. Also run the required local Docker matrix before commit/push.
-9. Only after the required gates pass, create a focused commit with a clear message, push the branch, and open a ready-for-review PR targeting `dev`. Use one PR per issue. Include the problem, resulting behavior, issue link, validation results, and any material limitations in the PR description. Do not merge the PR automatically.
+8. Run `rebar3 tall` on the final implementation as the mandatory aggregate gate. It must include all tests, 100% coverage, formatting/lint checks, and Dialyzer. A failed or skipped required check is not a pass. Run this gate natively before commit/push.
+9. Only after the required local gates pass, create a focused commit with a clear message, push the branch, and open a ready-for-review PR targeting `dev`. Use one PR per issue. Include the issue key (`#N`) in the PR title and a standalone `Closes #N` line in the PR description for the issue fully resolved by that PR. Include the problem, resulting behavior, validation results, and any material limitations. Use `Refs #N` for partial or related work; do not claim closure while acceptance criteria remain unmet. Verify the saved PR title/body after creation. Do not merge the PR automatically.
+10. Before merging, require all six GitHub Actions jobs (OTP 26/27/28 on Ubuntu and Windows) to pass on the latest PR commit. Each job must run `rebar3 tall` with no skipped tests or failed checks. Fix CI failures and revalidate before declaring the PR ready to merge.
+11. After a merge is confirmed, verify the linked issue's actual state. GitHub closing keywords only automatically close issues when merged into the default branch; this repository currently targets `dev` while its default is `main`. For completed work merged into `dev`, close the issue as completed after checking the merged implementation and acceptance criteria. Do not change the default branch to work around issue closure.
 
 If a required gate is unavailable, continue independent work, record the exact blocker, and ask the user how to resolve it. Do not push while claiming an unavailable gate passed. These workflow and PR defaults persist across tasks unless the user changes them.
 
@@ -29,6 +31,8 @@ If a required gate is unavailable, continue independent work, record the exact b
 - Keep Erlang functions focused and avoid unnecessary nesting.
 - Preserve existing module/function naming patterns unless there is a strong reason to change.
 - When switching to a new branch with local uncommitted changes, stash first (`git stash -u`), switch branch, then restore (`git stash pop`) to avoid carrying accidental branch state.
+- Keep source worktrees in persistent storage, using a managed worktree or a persistent project directory. Never use `/tmp`, `/private/tmp`, or another temporary directory as the only location for implementation work.
+- Preserve unfinished changes before yielding or moving work: keep the persistent worktree and save a recovery copy of tracked diffs and untracked source files outside temporary storage. Record its path in the implementation log. This does not waive the required gates before commit/push.
 - Put static/long constants (for example validation regex patterns) into named macros in a shared `.hrl` file instead of inline literals.
 - Do not manually edit generated artifacts under `_build/`.
 - Keep docs in sync when public behavior changes.
@@ -39,7 +43,7 @@ If a required gate is unavailable, continue independent work, record the exact b
 - Run `rebar3 as test cover` and keep total coverage at `100%`.
 - Run `rebar3 flint` after task implementation is complete (final quality gate).
 - Run `rebar3 dialyzer` after task implementation is complete (final quality gate).
-- Run `make ci-local` once before commit/push to validate `tall` across the Linux OTP matrix in Docker.
+- Run `rebar3 tall` natively before commit/push. GitHub Actions provides the OTP 26/27/28 compatibility matrix on Ubuntu and Windows; all six jobs must pass on the latest PR commit before merge.
 - If coverage drops below `100%`, add or update tests until it is restored and document the result.
 - If `rebar3 flint` reports issues, fix them and rerun until clean. Document blockers; do not treat a deferred finding as a passing push gate.
 - If `rebar3 dialyzer` reports issues, fix them and rerun until clean. Document blockers; do not treat a deferred finding as a passing push gate.

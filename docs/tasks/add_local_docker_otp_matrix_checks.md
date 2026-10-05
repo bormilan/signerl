@@ -1,5 +1,9 @@
 # Task: add_local_docker_otp_matrix_checks
 
+> Historical record: the local Docker tooling was retired on 2026-10-05.
+> Follow [AGENTS.md](../../AGENTS.md) for the current native checks and GitHub
+> Actions merge gate. See the [replacement workflow](../implementations/otp28_toolchain_2026-10-05.md).
+
 ## 1. Goal
 Provide a local Docker-based workflow to run CI-equivalent checks for Linux OTP versions (26 and 27): tests, lint, and dialyzer.
 
