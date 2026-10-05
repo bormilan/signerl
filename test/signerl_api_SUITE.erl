@@ -91,13 +91,13 @@ init_per_group(sign_group, Config) ->
     RsaKey = signerl_cert_helpers:signer_rsa_key(),
     EcdsaKey = signerl_cert_helpers:signer_ecdsa_key(),
     LeafKey = signerl_cert_helpers:leaf_key(),
-    RsaPublicKey = test_helpers:rsa_public_key_from_cert(
+    RsaPublicKey = signerl_cert_helpers:rsa_public_key_from_cert(
         signerl_cert_helpers:signer_rsa_cert_path()
     ),
-    EcdsaPublicKey = test_helpers:ecdsa_public_key_from_cert(
+    EcdsaPublicKey = signerl_cert_helpers:ecdsa_public_key_from_cert(
         signerl_cert_helpers:signer_ecdsa_cert_path()
     ),
-    LeafPublicKey = test_helpers:rsa_public_key_from_cert(
+    LeafPublicKey = signerl_cert_helpers:rsa_public_key_from_cert(
         signerl_cert_helpers:leaf_cert_path()
     ),
     [
@@ -111,24 +111,28 @@ init_per_group(sign_group, Config) ->
         {leaf_public_key, LeafPublicKey}
         | Config
     ];
-init_per_group(verify_fixture_error_group, Config) ->
+init_per_group(Group, Config) when
+    Group =:= verify_fixture_error_group; Group =:= interop_smoke_group
+->
+    MessagePath = signerl_utils:file_path("test/examples/base/books.xml"),
+    {ok, RawMessage} = file:read_file(MessagePath),
     RsaKey = signerl_cert_helpers:signer_rsa_key(),
-    RsaPublicKey = test_helpers:rsa_public_key_from_cert(
+    RsaPublicKey = signerl_cert_helpers:rsa_public_key_from_cert(
         signerl_cert_helpers:signer_rsa_cert_path()
     ),
-    [{rsa_key, RsaKey}, {rsa_public_key, RsaPublicKey} | Config];
+    [{raw_message, RawMessage}, {rsa_key, RsaKey}, {rsa_public_key, RsaPublicKey} | Config];
 init_per_group(verify_tamper_group, Config) ->
     MessagePath = signerl_utils:file_path("test/examples/base/books.xml"),
     {ok, RawMessage} = file:read_file(MessagePath),
     RsaKey = signerl_cert_helpers:signer_rsa_key(),
     EcdsaKey = signerl_cert_helpers:signer_ecdsa_key(),
-    RsaPublicKey = test_helpers:rsa_public_key_from_cert(
+    RsaPublicKey = signerl_cert_helpers:rsa_public_key_from_cert(
         signerl_cert_helpers:signer_rsa_cert_path()
     ),
-    EcdsaPublicKey = test_helpers:ecdsa_public_key_from_cert(
+    EcdsaPublicKey = signerl_cert_helpers:ecdsa_public_key_from_cert(
         signerl_cert_helpers:signer_ecdsa_cert_path()
     ),
-    WrongPublicKey = test_helpers:rsa_public_key_from_cert(
+    WrongPublicKey = signerl_cert_helpers:rsa_public_key_from_cert(
         signerl_cert_helpers:leaf_cert_path()
     ),
     [
@@ -145,14 +149,10 @@ init_per_group(keyinfo_group, Config) ->
     {ok, RawMessage} = file:read_file(MessagePath),
     RsaKey = signerl_cert_helpers:signer_rsa_key(),
     EcdsaKey = signerl_cert_helpers:signer_ecdsa_key(),
-    RsaCertDer = test_helpers:cert_der(signerl_cert_helpers:signer_rsa_cert_path()),
-    EcdsaCertDer = test_helpers:cert_der(signerl_cert_helpers:signer_ecdsa_cert_path()),
-    RsaPublicKey = test_helpers:rsa_public_key_from_cert(
-        signerl_cert_helpers:signer_rsa_cert_path()
-    ),
-    EcdsaPublicKey = test_helpers:ecdsa_public_key_from_cert(
-        signerl_cert_helpers:signer_ecdsa_cert_path()
-    ),
+    RsaCertDer = signerl_cert_helpers:cert_der(signerl_cert_helpers:signer_rsa_cert_path()),
+    EcdsaCertDer = signerl_cert_helpers:cert_der(signerl_cert_helpers:signer_ecdsa_cert_path()),
+    RsaPublicKey = signerl_cert_helpers:rsa_public_key(RsaCertDer),
+    EcdsaPublicKey = signerl_cert_helpers:ecdsa_public_key(EcdsaCertDer),
     RsaKeyPath = signerl_cert_helpers:signer_rsa_key_path(),
     [
         {message_path, MessagePath},
@@ -164,19 +164,6 @@ init_per_group(keyinfo_group, Config) ->
         {ecdsa_cert_der, EcdsaCertDer},
         {rsa_public_key, RsaPublicKey},
         {ecdsa_public_key, EcdsaPublicKey}
-        | Config
-    ];
-init_per_group(interop_smoke_group, Config) ->
-    MessagePath = signerl_utils:file_path("test/examples/base/books.xml"),
-    {ok, RawMessage} = file:read_file(MessagePath),
-    RsaKey = signerl_cert_helpers:signer_rsa_key(),
-    RsaPublicKey = test_helpers:rsa_public_key_from_cert(
-        signerl_cert_helpers:signer_rsa_cert_path()
-    ),
-    [
-        {raw_message, RawMessage},
-        {rsa_key, RsaKey},
-        {rsa_public_key, RsaPublicKey}
         | Config
     ];
 init_per_group(_, Config) ->
@@ -430,8 +417,7 @@ verify_returns_error_with_self_closing_signing_time(Config) ->
 verify_returns_error_with_unsupported_hash(Config) ->
     PublicKey = ?config(rsa_public_key, Config),
     RsaKey = ?config(rsa_key, Config),
-    MessagePath = signerl_utils:file_path("test/examples/base/books.xml"),
-    {ok, RawMessage} = file:read_file(MessagePath),
+    RawMessage = ?config(raw_message, Config),
     SignedMessage = signerl:sign(RawMessage, sha256, RsaKey),
     ?assertEqual(
         {error, invalid_signature_structure}, signerl:verify(SignedMessage, sha512, PublicKey)
@@ -445,8 +431,7 @@ verify_returns_file_error_with_missing_signed_message_file(Config) ->
 
 verify_returns_file_error_with_missing_key_file(Config) ->
     RsaKey = ?config(rsa_key, Config),
-    MessagePath = signerl_utils:file_path("test/examples/base/books.xml"),
-    {ok, RawMessage} = file:read_file(MessagePath),
+    RawMessage = ?config(raw_message, Config),
     SignedMessage = signerl:sign(RawMessage, sha256, RsaKey),
     ?assertMatch(
         {error, {file_error, enoent}}, signerl:verify(SignedMessage, sha256, "nonexistent_key.pem")
@@ -454,8 +439,7 @@ verify_returns_file_error_with_missing_key_file(Config) ->
 
 verify_returns_error_with_invalid_pem_key_file(Config) ->
     RsaKey = ?config(rsa_key, Config),
-    MessagePath = signerl_utils:file_path("test/examples/base/books.xml"),
-    {ok, RawMessage} = file:read_file(MessagePath),
+    RawMessage = ?config(raw_message, Config),
     SignedMessage = signerl:sign(RawMessage, sha256, RsaKey),
     InvalidPemPath = signerl_utils:file_path("test/examples/base/books.xml"),
     ?assertEqual({error, invalid_pem}, signerl:verify(SignedMessage, sha256, InvalidPemPath)).

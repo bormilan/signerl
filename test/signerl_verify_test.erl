@@ -297,11 +297,9 @@ extract_x509_certificate_returns_undefined_for_invalid_cert_test() ->
     MessagePath = signerl_utils:file_path("test/examples/base/books.xml"),
     {ok, RawMessage} = file:read_file(MessagePath),
     RsaKey = signerl_cert_helpers:signer_rsa_key(),
-    RsaCertDer = test_helpers:cert_der(signerl_cert_helpers:signer_rsa_cert_path()),
+    RsaCertDer = signerl_cert_helpers:cert_der(signerl_cert_helpers:signer_rsa_cert_path()),
     SignedMessage = signerl:sign(RawMessage, sha256, RsaKey, RsaCertDer),
-    PublicKey = test_helpers:rsa_public_key_from_cert(
-        signerl_cert_helpers:signer_rsa_cert_path()
-    ),
+    PublicKey = signerl_cert_helpers:rsa_public_key(RsaCertDer),
     Parsed = test_helpers:parse_verified_message(SignedMessage, PublicKey),
     {ok, #{key_info := #{x509_certificate := RsaCertDer}}} =
         signerl_verify:extract_signature_data(Parsed),
@@ -321,10 +319,10 @@ extract_x509_certificate_returns_undefined_for_invalid_cert_test() ->
 %% Fixture setup and mutation helpers
 
 signature_fixture() ->
-    SignatureData = compute_valid_signature_data(),
-    PublicKey = test_helpers:rsa_public_key_from_cert(
+    PublicKey = signerl_cert_helpers:rsa_public_key_from_cert(
         signerl_cert_helpers:signer_rsa_cert_path()
     ),
+    SignatureData = compute_valid_signature_data(PublicKey),
     [{signature_data, SignatureData}, {rsa_public_key, PublicKey}].
 
 validated_signature_data(Config) ->
@@ -337,14 +335,11 @@ validated_signature_data(Config) ->
     ),
     SignatureData.
 
-compute_valid_signature_data() ->
+compute_valid_signature_data(PublicKey) ->
     MessagePath = signerl_utils:file_path("test/examples/base/books.xml"),
     {ok, RawMessage} = file:read_file(MessagePath),
     Key = signerl_cert_helpers:signer_rsa_key(),
     SignedMessage = signerl:sign(RawMessage, sha256, Key),
-    PublicKey = test_helpers:rsa_public_key_from_cert(
-        signerl_cert_helpers:signer_rsa_cert_path()
-    ),
     ParsedSignedMessage = test_helpers:parse_verified_message(SignedMessage, PublicKey),
     {ok, SignatureData} = signerl_verify:extract_signature_data(ParsedSignedMessage),
     SignatureData.
