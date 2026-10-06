@@ -56,6 +56,25 @@ Tests were added before implementation:
 - GitHub's six-job OTP 26/27/28 × Ubuntu/Windows matrix must pass on the published
   head before the PR is declared ready to merge; results are recorded in the PR.
 
+## Windows comparison follow-up
+
+The first matrix run passed all three Linux jobs but exposed CRLF in `xmllint`'s
+Windows stdout where the canonicalizer emits LF. All public API cases passed;
+the sole failed assertion was the new multiline interoperability comparison.
+This is C stdio's [text-mode translation](https://learn.microsoft.com/en-us/cpp/c-runtime-library/reference/setmode):
+LF becomes CRLF on output. A local probe confirmed `xmllint --c14n11 --output`
+still emits canonical bytes to stdout rather than the requested file; its
+[CLI documentation](https://gnome.pages.gitlab.gnome.org/libxml2/xmllint.html)
+also specifies stdout for canonicalization.
+
+The interop helper now reverses only Windows stdout CRLF translation. It does not
+rewrite fixture XML, production output, or character references (`&#xD;` remains
+literal canonical bytes). Comparisons remain exact after that transport step.
+The first failing CI logs and subsequent validation are saved in the recovery
+folder. The nine affected CT cases, `flint`, `dialyzer`, and final native `tall`
+passed again (267 cases, no skips, 100% coverage). All six GitHub jobs must pass
+on the follow-up head before merge.
+
 ## Review and limits
 
 Production changes are confined to `signerl_xml`. Existing signature builders,

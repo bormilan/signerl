@@ -83,7 +83,7 @@ collect_port_output(Port, Acc) ->
         {Port, {data, Data}} ->
             collect_port_output(Port, <<Acc/binary, Data/binary>>);
         {Port, {exit_status, 0}} ->
-            Acc;
+            canonical_stdout(Acc);
         {Port, {exit_status, Code}} ->
             error({xmllint_failed, Code, Acc})
     after 5000 ->
@@ -116,3 +116,12 @@ interop_preserved_content(Config) ->
         end,
         [{c14n11, "--c14n11"}, {exc_c14n, "--exc-c14n"}]
     ).
+
+% xmllint's C14N mode writes stdout even with --output. Windows C stdio
+% translates LF to CRLF. Undo that transport conversion only; XML CR values
+% remain the literal bytes "&#xD;" and fixture/production bytes are untouched.
+canonical_stdout(Output) ->
+    case os:type() of
+        {win32, _} -> binary:replace(Output, <<"\r\n">>, <<"\n">>, [global]);
+        _ -> Output
+    end.

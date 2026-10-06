@@ -47,7 +47,9 @@ and file inputs before mutating separating whitespace, mixed text, attribute
 controls, and a text CR. Processing instructions are rejected before, inside,
 and after the root; PI-looking CDATA/comment text is not mistaken for an instruction.
 The interoperability fixture compares original and exported bytes through
-`xmllint` in both supported canonicalization modes.
+`xmllint` in both supported canonicalization modes. On Windows, the helper undoes
+only C stdio's LF-to-CRLF output translation before comparing bytes; fixture and
+production output bytes are untouched, and XML CR values remain `&#xD;`.
 
 ## Run the tests
 
