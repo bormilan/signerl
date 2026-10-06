@@ -297,3 +297,17 @@ two_ns_input() ->
     {root, [{'xmlns:ns1', "http://ns1"}, {'xmlns:ns2', "http://ns2"}], [
         {'ns1:child', [], ["text"]}
     ]}.
+
+utf8_canonical_bytes_test_() ->
+    Text = "café árvíztűrő 東京 😀",
+    Utf8 = unicode:characters_to_binary(Text),
+    Expected = <<"<ár érték=\"café árvíztűrő 東京 😀\">café árvíztűrő 東京 😀</ár>"/utf8>>,
+    [
+        {
+            atom_to_list(Mode) ++ " " ++ Kind,
+            ?_assertEqual(
+                Expected, signerl_c14n:canonicalize({'ár', [{'érték', Value}], [Value]}, Mode)
+            )
+        }
+     || Mode <- [c14n11, exc_c14n], {Kind, Value} <- [{"characters", Text}, {"UTF-8 bytes", Utf8}]
+    ].

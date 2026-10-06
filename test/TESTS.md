@@ -8,19 +8,19 @@ rebar3; there is no custom runner or manually maintained suite list.
 
 | File | Cases | Responsibility |
 | --- | ---: | --- |
-| `signerl_c14n_test.erl` | 35 | Canonicalization, namespace ordering, escaping, Exclusive C14N, and signature-removal transforms. |
+| `signerl_c14n_test.erl` | 39 | Canonicalization, namespace ordering, escaping, Exclusive C14N, and signature-removal transforms. |
 | `signerl_signed_properties_test.erl` | 66 | XAdES property extraction and malformed Erlang/XML value boundaries. |
 | `signerl_signature_test.erl` | 5 | Signature construction contracts for RSA and ECDSA. |
 | `signerl_verify_test.erl` | 23 | Signature extraction, reference validation, algorithm selection, and malformed signature contracts. |
-| `signerl_xml_test.erl` | 20 | XML parsing, prologs, export, tree lookup, text values, and signature-element recognition. |
+| `signerl_xml_test.erl` | 33 | XML parsing, prologs, export, tree lookup, text values, and signature-element recognition. |
 | `signerl_xades_xml_test.erl` | 1 | XAdES tree lookup rejects a non-signature root. |
 | `signerl_cert_test.erl` | 1 | Exact issuer/serial DER against OTP ASN.1, including positive integer padding. |
 | `signerl_cert_helpers_test.erl` | 6 | Application fixture paths and clear missing/malformed PEM failures. |
-| `signerl_api_SUITE.erl` | 54 | Full public signing/verification, binary/file/key inputs, RSA/ECDSA certificate wiring, tampering, and independent signature fixtures. |
-| `signerl_c14n_interop_SUITE.erl` | 7 | Compare production parsing/canonicalization with `xmllint --c14n11`. |
-| `signerl_xml_SUITE.erl` | 1 | A real file export/read-back using CT's isolated `priv_dir`. |
+| `signerl_api_SUITE.erl` | 57 | Full public signing/verification, binary/file/key inputs, RSA/ECDSA certificate wiring, tampering, and independent signature fixtures. |
+| `signerl_c14n_interop_SUITE.erl` | 8 | Compare production parsing/canonicalization with `xmllint --c14n11`; Unicode also covers `--exc-c14n`. |
+| `signerl_xml_SUITE.erl` | 4 | Real file export/read-back, Unicode, unsupported encodings, and missing files using CT's isolated `priv_dir`. |
 
-Total: **157 EUnit + 62 Common Test = 219 cases**. See the
+Total: **174 EUnit + 69 Common Test = 243 cases**. See the
 [migration log and case map](../docs/implementations/test_organization_2026-10-04.md)
 for the earlier suite locations and the
 [fixture cleanup log](../docs/implementations/test_fixtures_2026-10-04.md)
@@ -33,6 +33,12 @@ and names specific; do not hide different contracts in a generic test runner.
 Builder and verifier fixtures use ordinary EUnit setup descriptors with an
 explicit name for every case. Public API/file workflows belong in the relevant
 CT group; share immutable input bytes, keys, and certificates in `init_per_group`.
+
+The UTF-8 regressions cover character-list and binary canonicalization, multilingual
+text/attributes, Unicode XML names, direct export, public `sign/3`/`sign/4` with
+binary/file inputs, verification with and without a declaration/BOM, and a
+Unicode mutation after successful verification. Encoding rejection covers
+unsupported declarations, UTF-16 bytes, and malformed UTF-8 sequences.
 
 ## Run the tests
 

@@ -27,7 +27,7 @@ true = signerl:verify(SignedMessage, sha256, PublicKey).
 ```
 
 `sign/3` returns signed XML with:
-- `<ds:SignedInfo>` (deterministic internal profile, canonicalization deferred)
+- `<ds:SignedInfo>` (deterministic internal profile)
 - `<ds:SignatureValue>` containing base64 signature bytes over `ds:SignedInfo`
 - `<ds:Object>/<xades:QualifyingProperties>/<xades:SignedProperties Id="SignedProperties-1">`
 - `<xades:QualifyingProperties Target="#Signature-1">`
@@ -41,6 +41,33 @@ true = signerl:verify(SignedMessage, sha256, PublicKey).
 
 `verify/3` validates `ds:Reference` digest values (document + signed properties) before verifying
 `ds:SignatureValue`.
+
+## XML encoding
+
+XML input and output use **UTF-8**. Text and attributes may contain Unicode,
+including Hungarian accents, non-Latin scripts, and supplementary characters.
+Canonicalization always emits UTF-8 bytes for both C14N 1.1 and Exclusive C14N.
+Internally, parsed text and attribute values are Unicode character lists;
+binary text/attribute values supplied to the canonicalizer must contain UTF-8.
+
+`sign/3` and `sign/4` require an XML declaration at the start of the input,
+without a byte-order mark (BOM). Its encoding may be omitted or specify UTF-8
+(case-insensitively). The accepted declaration is preserved in the signed output.
+Other declared encodings, including Latin-1 and UTF-16/32, return
+`{error, invalid_prolog}`. Invalid UTF-8 after a valid declaration returns
+`{error, invalid_xml}`.
+
+`verify/3` accepts UTF-8 with or without an XML declaration or UTF-8 BOM. It
+returns `{error, invalid_xml}` for malformed UTF-8 or unsupported encoding
+labels. Binary and file public API inputs follow the same encoding policy.
+There is no automatic transcoding of other input encodings.
+
+The lower-level XML exporters also emit UTF-8; `export/2` raises if supplied
+an incompatible encoding declaration. `parse_file/1` raises for missing files
+or invalid input, while `parse_binary/1` returns `{error, invalid_xml}`.
+The existing file-parser whitespace normalization and XML simplification remain;
+content preservation, complete-document parsing, and namespace/resource
+hardening are tracked separately in #50, #51, #41, #39, and #61.
 
 ## Development toolchain
 

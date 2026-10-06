@@ -25,6 +25,9 @@ groups() ->
             sign_with_self_signed_rsa,
             sign_with_self_signed_ecdsa,
             sign_deterministic,
+            sign_utf8_binary_and_file,
+            reject_unsupported_encoding,
+            reject_invalid_utf8,
             sign_uses_input_prolog_binary_and_file,
             sign_missing_prolog_binary_returns_error,
             sign_invalid_prolog_file_returns_error,
@@ -769,3 +772,74 @@ verify_independent_signature(FileName, Algorithm) ->
         SignedMessage, <<"2026-01-01T00:00:00Z">>, <<"2000-01-01T00:00:00Z">>
     ),
     ?assertEqual(false, signerl:verify(ChangedTime, sha256, PublicKey)).
+
+sign_utf8_binary_and_file(Config) ->
+    Key = ?config(rsa_key, Config),
+    PublicKey = ?config(rsa_public_key, Config),
+    Path = signerl_utils:file_path("test/examples/c14n/utf8.xml"),
+    {ok, Raw} = file:read_file(Path),
+    {ok, ExpectedTree} = signerl_xml:parse_binary(Raw),
+    Cert = signerl_cert_helpers:cert_der(signerl_cert_helpers:signer_rsa_cert_path()),
+    DefaultEncoding = test_helpers:replace_once(Raw, <<" encoding=\"UTF-8\"">>, <<>>),
+    lists:foreach(
+        fun(Signed) ->
+            ?assert(is_binary(Signed)),
+            ?assertEqual(true, signerl:verify(Signed, sha256, PublicKey)),
+            {ok, Parsed} = signerl_xml:parse_binary(Signed),
+            ?assertEqual(ExpectedTree, signerl_c14n:remove_signature_elements(Parsed)),
+            Tampered = test_helpers:replace_once(Signed, <<">café"/utf8>>, <<">cafè"/utf8>>),
+            ?assertEqual(false, signerl:verify(Tampered, sha256, PublicKey))
+        end,
+        [
+            signerl:sign(Raw, sha256, Key),
+            signerl:sign(Path, sha256, Key),
+            signerl:sign(Raw, sha256, Key, Cert),
+            signerl:sign(Path, sha256, Key, Cert),
+            signerl:sign(DefaultEncoding, sha256, Key)
+        ]
+    ),
+    Signed = signerl:sign(Raw, sha256, Key),
+    OutPath = filename:join(?config(priv_dir, Config), "signed-utf8.xml"),
+    ok = file:write_file(OutPath, Signed),
+    ?assertEqual(true, signerl:verify(OutPath, sha256, PublicKey)),
+    NoDeclaration = test_helpers:replace_once(
+        Signed, <<"<?xml version=\"1.0\" encoding=\"UTF-8\"?>">>, <<>>
+    ),
+    ?assertEqual(true, signerl:verify(NoDeclaration, sha256, PublicKey)),
+    ?assertEqual(true, signerl:verify(<<239, 187, 191, Signed/binary>>, sha256, PublicKey)).
+
+reject_unsupported_encoding(Config) ->
+    Key = ?config(rsa_key, Config),
+    PublicKey = ?config(rsa_public_key, Config),
+    Raw = ?config(raw_message, Config),
+    Signed = signerl:sign(Raw, sha256, Key),
+    ?assertEqual(true, signerl:verify(Signed, sha256, PublicKey)),
+    lists:foreach(
+        fun(Encoding) ->
+            InvalidInput = test_helpers:replace_once(Raw, <<"UTF-8">>, Encoding),
+            ?assertEqual({error, invalid_prolog}, signerl:sign(InvalidInput, sha256, Key)),
+            InvalidSigned = test_helpers:replace_once(Signed, <<"UTF-8">>, Encoding),
+            ?assertEqual({error, invalid_xml}, signerl:verify(InvalidSigned, sha256, PublicKey))
+        end,
+        [<<"ISO-8859-1">>, <<"UTF-16">>, <<"UTF-32">>]
+    ).
+
+reject_invalid_utf8(Config) ->
+    Key = ?config(rsa_key, Config),
+    PublicKey = ?config(rsa_public_key, Config),
+    Raw = <<"<?xml version=\"1.0\" encoding=\"UTF-8\"?><root>valid</root>">>,
+    Signed = signerl:sign(Raw, sha256, Key),
+    ?assertEqual(true, signerl:verify(Signed, sha256, PublicKey)),
+    lists:foreach(
+        fun(Bytes) ->
+            InvalidInput = test_helpers:replace_once(
+                Raw, <<">valid<">>, <<">", Bytes/binary, "<">>
+            ),
+            ?assertEqual({error, invalid_xml}, signerl:sign(InvalidInput, sha256, Key)),
+            InvalidSigned = test_helpers:replace_once(
+                Signed, <<">valid<">>, <<">", Bytes/binary, "<">>
+            ),
+            ?assertEqual({error, invalid_xml}, signerl:verify(InvalidSigned, sha256, PublicKey))
+        end,
+        [<<16#80>>, <<16#C0, 16#AF>>, <<16#ED, 16#A0, 16#80>>, <<16#F0, 16#9F>>]
+    ).

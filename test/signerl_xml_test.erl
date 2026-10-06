@@ -136,3 +136,57 @@ is_signature_element_shared_test() ->
     ?assertEqual(true, signerl_xml:is_signature_element(SigElement)),
     ?assertEqual(false, signerl_xml:is_signature_element(NonSigElement)),
     ?assertEqual(false, signerl_xml:is_signature_element("text")).
+
+unicode_export_roundtrip_test() ->
+    Root = {root, [{value, "café árvíztűrő 東京 😀"}], ["café árvíztűrő 東京 😀"]},
+    Prolog = ["<?xml version=\"1.0\" encoding=\"UTF-8\"?>"],
+    Expected = <<"café árvíztűrő 東京 😀"/utf8>>,
+    lists:foreach(
+        fun(Binary) ->
+            ?assertMatch({_, _}, binary:match(Binary, Expected)),
+            ?assertEqual({ok, Root}, signerl_xml:parse_binary(Binary))
+        end,
+        [signerl_xml:export(Prolog, Root), signerl_xml:export_fragment(Root)]
+    ),
+    ?assertEqual({ok, Expected}, signerl_xml:single_text({root, [], ["café árvíztűrő 東京 😀"]})).
+
+utf8_declaration_test_() ->
+    [
+        {Encoding, ?_assertEqual(Expected, signerl_xml:parse_prolog(Message))}
+     || {Encoding, Expected, Message} <- [
+            {"default", {ok, ["<?xml version='1.0'?>"]}, <<"<?xml version='1.0'?><root/>">>},
+            {"mixed case", {ok, ["<?xml version='1.0' encoding = 'uTf-8'?>"]},
+                <<"<?xml version='1.0' encoding = 'uTf-8'?><root/>">>},
+            {"Latin-1", {error, invalid_prolog},
+                <<"<?xml version='1.0' encoding='ISO-8859-1'?><root/>">>},
+            {"UTF-16", {error, invalid_prolog},
+                <<"<?xml version='1.0' encoding='UTF-16'?><root/>">>}
+        ]
+    ].
+
+reject_non_utf8_input_test_() ->
+    [
+        {Name, ?_assertEqual({error, invalid_xml}, signerl_xml:parse_binary(Message))}
+     || {Name, Message} <- [
+            {"Latin-1 declaration", <<"<?xml version='1.0' encoding='ISO-8859-1'?><root/>">>},
+            {"UTF-8 BOM with Latin-1 declaration",
+                <<239, 187, 191, "<?xml version='1.0' encoding='ISO-8859-1'?><root/>">>},
+            {"UTF-16 bytes",
+                unicode:characters_to_binary(
+                    "<?xml version='1.0' encoding='UTF-16'?><root/>", unicode, {utf16, big}
+                )},
+            {"isolated continuation byte", <<"<root>", 16#80, "</root>">>},
+            {"overlong encoding", <<"<root>", 16#C0, 16#AF, "</root>">>},
+            {"surrogate", <<"<root>", 16#ED, 16#A0, 16#80, "</root>">>},
+            {"incomplete character", <<"<root/>", 16#F0, 16#9F>>}
+        ]
+    ].
+
+export_rejects_unsupported_encoding_test() ->
+    ?assertException(
+        error,
+        _,
+        signerl_xml:export(
+            ["<?xml version='1.0' encoding='ISO-8859-1'?>"], {root, [], ["café"]}
+        )
+    ).
