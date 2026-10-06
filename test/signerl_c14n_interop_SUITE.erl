@@ -16,7 +16,8 @@ groups() ->
             interop_escaping,
             interop_default_ns,
             interop_mixed_content,
-            interop_dsig_like
+            interop_dsig_like,
+            interop_utf8
         ]}
     ].
 
@@ -60,7 +61,7 @@ interop_dsig_like(Config) ->
 
 assert_matches_xmllint(FileName, _Config) ->
     FilePath = filename:join([test_examples_dir(), "c14n", FileName]),
-    XmllintOutput = run_xmllint_c14n11(FilePath),
+    XmllintOutput = run_xmllint(FilePath, "--c14n11"),
     OurOutput = run_our_c14n(FilePath),
     ?assertEqual(XmllintOutput, OurOutput).
 
@@ -69,10 +70,10 @@ test_examples_dir() ->
     TestDir = filename:dirname(SuiteFile),
     filename:join(TestDir, "examples").
 
-run_xmllint_c14n11(FilePath) ->
+run_xmllint(FilePath, Mode) ->
     Port = open_port(
         {spawn_executable, os:find_executable("xmllint")},
-        [{args, ["--c14n11", FilePath]}, binary, exit_status, stderr_to_stdout]
+        [{args, [Mode, FilePath]}, binary, exit_status, stderr_to_stdout]
     ),
     collect_port_output(Port, <<>>).
 
@@ -92,3 +93,10 @@ run_our_c14n(FilePath) ->
     {ok, RawXml} = file:read_file(FilePath),
     {ok, ParsedXml} = signerl_xml:parse_binary(RawXml),
     signerl_c14n:canonicalize(ParsedXml).
+
+interop_utf8(Config) ->
+    assert_matches_xmllint("utf8.xml", Config),
+    Path = filename:join([test_examples_dir(), "c14n", "utf8.xml"]),
+    {ok, Raw} = file:read_file(Path),
+    {ok, Parsed} = signerl_xml:parse_binary(Raw),
+    ?assertEqual(run_xmllint(Path, "--exc-c14n"), signerl_c14n:canonicalize(Parsed, exc_c14n)).

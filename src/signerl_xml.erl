@@ -24,15 +24,21 @@
     FileName :: string(),
     SimplifiedXml :: simplified_xml().
 parse_file(FileName) ->
-    {Element, _} = xmerl_scan:file(FileName, [{space, normalize}]),
-    simplify_xml_element(Element).
+    {ok, Message} = file:read_file(FileName),
+    {ok, Xml} = parse_binary(Message, [{space, normalize}, {xmlbase, filename:dirname(FileName)}]),
+    Xml.
 
 -spec parse_binary(Message) -> Result when
     Message :: binary(),
     Result :: {ok, simplified_xml()} | {error, invalid_xml}.
 parse_binary(Message) ->
+    parse_binary(Message, []).
+
+parse_binary(Message, Options) ->
     try
-        {Element, _} = xmerl_scan:string(binary_to_list(Message)),
+        Message = unicode:characters_to_binary(Message, utf8, utf8),
+        true = utf8_encoding(Message),
+        {Element, _} = xmerl_scan:string(binary_to_list(Message), [{encoding, "utf-8"} | Options]),
         {ok, simplify_xml_element(Element)}
     catch
         _:_ ->
@@ -65,6 +71,12 @@ simplify_xml_element(XmlElement) ->
     [Clean] = xmerl_lib:remove_whitespace([XmlElement]),
     xmerl_lib:simplify_element(Clean).
 
+utf8_encoding(Message) ->
+    case re:run(Message, ?XML_ENCODING_EXTRACT_RE, [{capture, [2], binary}]) of
+        {match, [Encoding]} -> string:lowercase(Encoding) =:= <<"utf-8">>;
+        nomatch -> true
+    end.
+
 valid_prolog(PrologBin) ->
     case re:run(PrologBin, ?XML_PROLOG_VALID_RE) of
         {match, _} -> true;
@@ -76,15 +88,16 @@ valid_prolog(PrologBin) ->
     XmlTerm :: simplified_xml(),
     Result :: binary().
 export(Prolog, XmlTerm) ->
+    true = utf8_encoding(iolist_to_binary(Prolog)),
     Exported = xmerl:export([xmerl_lib:normalize_element(XmlTerm)], xmerl_xml, [{prolog, Prolog}]),
-    list_to_binary(Exported ++ "\n").
+    unicode:characters_to_binary([Exported, "\n"]).
 
 -spec export_fragment(XmlTerm) -> Result when
     XmlTerm :: simplified_xml(),
     Result :: binary().
 export_fragment(XmlTerm) ->
     Exported = xmerl:export([xmerl_lib:normalize_element(XmlTerm)], xmerl_xml),
-    list_to_binary(Exported).
+    unicode:characters_to_binary(Exported).
 
 -spec to_file(FileName, XmlBinary) -> Result when
     FileName :: string(),
@@ -120,7 +133,7 @@ find_path([Tag | Rest], Xml) ->
 single_text({_, _, [Text]}) when is_binary(Text) ->
     {ok, Text};
 single_text({_, _, [Text]}) when is_list(Text) ->
-    {ok, list_to_binary(Text)};
+    {ok, unicode:characters_to_binary(Text)};
 single_text(_) ->
     {error, not_found}.
 

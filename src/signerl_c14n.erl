@@ -11,9 +11,9 @@ canonicalize(XmlTerm) ->
 
 -spec canonicalize(signerl_xml:simplified_xml(), c14n_mode()) -> binary().
 canonicalize(XmlTerm, c14n11) ->
-    list_to_binary(c14n11_element(XmlTerm, #{}));
+    unicode:characters_to_binary(c14n11_element(XmlTerm, #{}));
 canonicalize(XmlTerm, exc_c14n) ->
-    list_to_binary(exc_element(XmlTerm, #{}, #{})).
+    unicode:characters_to_binary(exc_element(XmlTerm, #{}, #{})).
 
 -spec remove_signature_elements(signerl_xml:simplified_xml()) -> signerl_xml:simplified_xml().
 remove_signature_elements({Tag, Attrs, Children}) ->
@@ -36,7 +36,7 @@ c14n11_element({Tag, Attrs, Children}, ParentNs) ->
 
 c14n11_child({_, _, _} = Element, Ns) -> c14n11_element(Element, Ns);
 c14n11_child(Text, _Ns) when is_list(Text) -> escape_text(Text);
-c14n11_child(Text, _Ns) when is_binary(Text) -> escape_text(binary_to_list(Text)).
+c14n11_child(Text, _Ns) when is_binary(Text) -> escape_text(unicode:characters_to_list(Text)).
 
 %% ====================================================================
 %% Exclusive C14N — only emit visibly utilized ns decls
@@ -57,9 +57,11 @@ exc_element({Tag, Attrs, Children}, InputParentNs, OutputParentNs) ->
     ChildrenIo = [exc_child(C, InputNs, OutputNs) || C <- Children],
     render_element(TagStr, SortedNsDecls, SortedAttrs, ChildrenIo).
 
-exc_child({_, _, _} = Element, InputNs, OutputNs) -> exc_element(Element, InputNs, OutputNs);
+exc_child({_, _, _} = Element, InputNs, OutputNs) ->
+    exc_element(Element, InputNs, OutputNs);
 exc_child(Text, _InputNs, _OutputNs) when is_list(Text) -> escape_text(Text);
-exc_child(Text, _InputNs, _OutputNs) when is_binary(Text) -> escape_text(binary_to_list(Text)).
+exc_child(Text, _InputNs, _OutputNs) when is_binary(Text) ->
+    escape_text(unicode:characters_to_list(Text)).
 
 %% For each visibly used prefix, if it's in InputNs but not in OutputParentNs
 %% (or has a different value), emit the declaration.
@@ -220,6 +222,6 @@ escape_text([C | Rest], Acc) ->
 %% --- Helpers ---
 
 value_to_string(V) when is_list(V) -> V;
-value_to_string(V) when is_binary(V) -> binary_to_list(V);
+value_to_string(V) when is_binary(V) -> unicode:characters_to_list(V);
 value_to_string(V) when is_integer(V) -> integer_to_list(V);
 value_to_string(V) when is_atom(V) -> atom_to_list(V).
