@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<root tab="x&#x9;y" lf="x&#xA;y" cr="x&#xD;y" literal="&amp;#x9;">
+  <a/> <b/>
+  <mixed>  before <em>ő &amp; 東京</em> after  </mixed>
+  <pre xml:space="preserve"> 	 </pre>
+  <value>t&#xD;t</value>
+</root>

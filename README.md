@@ -65,9 +65,29 @@ There is no automatic transcoding of other input encodings.
 The lower-level XML exporters also emit UTF-8; `export/2` raises if supplied
 an incompatible encoding declaration. `parse_file/1` raises for missing files
 or invalid input, while `parse_binary/1` returns `{error, invalid_xml}`.
-The existing file-parser whitespace normalization and XML simplification remain;
-content preservation, complete-document parsing, and namespace/resource
-hardening are tracked separately in #50, #51, #41, #39, and #61.
+
+## XML content profile
+
+File and binary inputs share the same parser. Element content retains whitespace,
+including indentation, spaces between child elements, mixed content, and
+`xml:space="preserve"` content. XML line-ending normalization still applies:
+literal CR/CRLF becomes LF, including inside CDATA, while `&#xD;` retains CR.
+CDATA delimiters are not retained; their characters are preserved as text.
+
+The exporters escape attribute tab, LF, and CR as `&#x9;`, `&#xA;`, and `&#xD;`,
+and text CR as `&#xD;`. Reparsing signed output therefore preserves the character
+values used for its digests. Changing signed whitespace can invalidate a signature.
+
+Processing instructions are unsupported and return `{error, invalid_xml}` from
+signing, verification, and `parse_binary/1`, whether before, inside, or after the
+root. XML declarations follow the encoding rules above. Comments are omitted
+under the existing canonicalization profile without comments; legal whitespace
+outside the root is also omitted. Unconsumed trailing content is validated rather
+than discarded.
+
+Namespace/profile work, resource limits, and XML name atom allocation remain
+tracked in #41, #39, and #61. The broader public API regression matrix for trailing
+input remains tracked in #51.
 
 ## Development toolchain
 

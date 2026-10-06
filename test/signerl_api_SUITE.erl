@@ -26,6 +26,8 @@ groups() ->
             sign_with_self_signed_ecdsa,
             sign_deterministic,
             sign_utf8_binary_and_file,
+            sign_preserves_content,
+            processing_instructions_are_rejected,
             reject_unsupported_encoding,
             reject_invalid_utf8,
             sign_uses_input_prolog_binary_and_file,
@@ -842,4 +844,52 @@ reject_invalid_utf8(Config) ->
             ?assertEqual({error, invalid_xml}, signerl:verify(InvalidSigned, sha256, PublicKey))
         end,
         [<<16#80>>, <<16#C0, 16#AF>>, <<16#ED, 16#A0, 16#80>>, <<16#F0, 16#9F>>]
+    ).
+
+sign_preserves_content(Config) ->
+    Key = ?config(rsa_key, Config),
+    PublicKey = ?config(rsa_public_key, Config),
+    Path = signerl_utils:file_path("test/examples/c14n/preserved_content.xml"),
+    {ok, Raw} = file:read_file(Path),
+    {ok, Original} = signerl_xml:parse_binary(Raw),
+    lists:foreach(
+        fun(Signed) ->
+            ?assertEqual(true, signerl:verify(Signed, sha256, PublicKey)),
+            {ok, Parsed} = signerl_xml:parse_binary(Signed),
+            ?assertEqual(Original, signerl_c14n:remove_signature_elements(Parsed)),
+            lists:foreach(
+                fun({Before, After}) ->
+                    Changed = test_helpers:replace_once(Signed, Before, After),
+                    ?assertEqual(false, signerl:verify(Changed, sha256, PublicKey))
+                end,
+                [
+                    {<<"<a/> <b/>">>, <<"<a/><b/>">>},
+                    {<<"  before <em>">>, <<" before <em>">>},
+                    {<<"tab=\"x&#x9;y\"">>, <<"tab=\"x y\"">>},
+                    {<<"lf=\"x&#xA;y\"">>, <<"lf=\"x&#xD;y\"">>},
+                    {<<">t&#xD;t<">>, <<">t\nt<">>}
+                ]
+            )
+        end,
+        [signerl:sign(Raw, sha256, Key), signerl:sign(Path, sha256, Key)]
+    ).
+
+processing_instructions_are_rejected(Config) ->
+    Key = ?config(rsa_key, Config),
+    PublicKey = ?config(rsa_public_key, Config),
+    Raw = <<"<?xml version='1.0'?><root><a/></root>">>,
+    Signed = signerl:sign(Raw, sha256, Key),
+    ?assertEqual(true, signerl:verify(Signed, sha256, PublicKey)),
+    lists:foreach(
+        fun({Before, After}) ->
+            Input = test_helpers:replace_once(Raw, Before, After),
+            ?assertEqual({error, invalid_xml}, signerl:sign(Input, sha256, Key)),
+            Changed = test_helpers:replace_once(Signed, Before, After),
+            ?assertEqual({error, invalid_xml}, signerl:verify(Changed, sha256, PublicKey))
+        end,
+        [
+            {<<"<root>">>, <<"<?report preserved?><root>">>},
+            {<<"<a/>">>, <<"<a/><?report preserved?>">>},
+            {<<"</root>">>, <<"</root><?report preserved?>">>}
+        ]
     ).

@@ -17,7 +17,8 @@ groups() ->
             interop_default_ns,
             interop_mixed_content,
             interop_dsig_like,
-            interop_utf8
+            interop_utf8,
+            interop_preserved_content
         ]}
     ].
 
@@ -100,3 +101,18 @@ interop_utf8(Config) ->
     {ok, Raw} = file:read_file(Path),
     {ok, Parsed} = signerl_xml:parse_binary(Raw),
     ?assertEqual(run_xmllint(Path, "--exc-c14n"), signerl_c14n:canonicalize(Parsed, exc_c14n)).
+
+interop_preserved_content(Config) ->
+    Path = filename:join([test_examples_dir(), "c14n", "preserved_content.xml"]),
+    {ok, Raw} = file:read_file(Path),
+    {ok, Parsed} = signerl_xml:parse_binary(Raw),
+    OutputPath = filename:join(?config(priv_dir, Config), "preserved-export.xml"),
+    ok = file:write_file(OutputPath, signerl_xml:export([], Parsed)),
+    lists:foreach(
+        fun({Mode, Flag}) ->
+            Expected = run_xmllint(Path, Flag),
+            ?assertEqual(Expected, signerl_c14n:canonicalize(Parsed, Mode)),
+            ?assertEqual(Expected, run_xmllint(OutputPath, Flag))
+        end,
+        [{c14n11, "--c14n11"}, {exc_c14n, "--exc-c14n"}]
+    ).

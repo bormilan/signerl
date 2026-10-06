@@ -5,27 +5,21 @@
 parse_test() ->
     Path = "test/examples/base/books.xml",
     {library, [{id, "112233"}], [
-        {book, _, _},
-        {book, _, _},
-        {book, _, _}
-    ]} = signerl_xml:parse_file(
-        Path
-    ).
+        "\n    ", {book, _, _}, "\n    ", {book, _, _}, "\n    ", {book, _, _}, "\n"
+    ]} = signerl_xml:parse_file(Path).
 
 add_new_test() ->
-    Path = "test/examples/base/books.xml",
-    ExpectedPath = "test/examples/xml/books_with_new.xml",
-
-    Root = signerl_xml:parse_file(Path),
-    Expected = signerl_xml:parse_file(ExpectedPath),
-
-    New =
-        signerl_xml:add_new_element(new_test_element(), Root),
-
-    ?assertEqual(
-        Expected,
-        New
-    ).
+    {ok, Root} = signerl_xml:parse_binary(
+        <<"<library id='112233'> before <book/> after </library>">>
+    ),
+    Expected =
+        {library, [{id, "112233"}], [
+            " before ",
+            {book, [], []},
+            " after ",
+            {book, [{id, "4"}], [{title, [], ["My new book"]}]}
+        ]},
+    ?assertEqual(Expected, signerl_xml:add_new_element(new_test_element(), Root)).
 
 export_test() ->
     Path = "test/examples/base/books.xml",
@@ -142,10 +136,7 @@ unicode_export_roundtrip_test() ->
     Prolog = ["<?xml version=\"1.0\" encoding=\"UTF-8\"?>"],
     Expected = <<"café árvíztűrő 東京 😀"/utf8>>,
     lists:foreach(
-        fun(Binary) ->
-            ?assertMatch({_, _}, binary:match(Binary, Expected)),
-            ?assertEqual({ok, Root}, signerl_xml:parse_binary(Binary))
-        end,
+        fun(Binary) -> assert_export_roundtrip(Root, Expected, Binary) end,
         [signerl_xml:export(Prolog, Root), signerl_xml:export_fragment(Root)]
     ),
     ?assertEqual({ok, Expected}, signerl_xml:single_text({root, [], ["café árvíztűrő 東京 😀"]})).
@@ -175,6 +166,8 @@ reject_non_utf8_input_test_() ->
                 unicode:characters_to_binary(
                     "<?xml version='1.0' encoding='UTF-16'?><root/>", unicode, {utf16, big}
                 )},
+            {"UTF-16 bytes with no declaration",
+                unicode:characters_to_binary("<root/>", unicode, {utf16, big})},
             {"isolated continuation byte", <<"<root>", 16#80, "</root>">>},
             {"overlong encoding", <<"<root>", 16#C0, 16#AF, "</root>">>},
             {"surrogate", <<"<root>", 16#ED, 16#A0, 16#80, "</root>">>},
@@ -190,3 +183,78 @@ export_rejects_unsupported_encoding_test() ->
             ["<?xml version='1.0' encoding='ISO-8859-1'?>"], {root, [], ["café"]}
         )
     ).
+
+preserve_character_content_test_() ->
+    [
+        {Name,
+            ?_assertEqual(
+                Expected, signerl_c14n:canonicalize(element(2, signerl_xml:parse_binary(Xml)))
+            )}
+     || {Name, Xml, Expected} <- [
+            {"separating whitespace", <<"<root><a/> <b/></root>">>,
+                <<"<root><a></a> <b></b></root>">>},
+            {"mixed and whitespace-only content", <<"<root>  before <a> \t\n </a> after  </root>">>,
+                <<"<root>  before <a> \t\n </a> after  </root>">>},
+            {"CDATA characters", <<"<root>left<![CDATA[ <&>\t ]]>right</root>">>,
+                <<"<root>left &lt;&amp;&gt;\t right</root>">>},
+            {"text carriage-return references", <<"<root>x&#xD;&#13;y</root>">>,
+                <<"<root>x&#xD;&#xD;y</root>">>},
+            {"literal line endings including CDATA",
+                <<"<root>x\r\ny\rz<![CDATA[a\r\nb\rc]]></root>">>,
+                <<"<root>x\ny\nza\nb\nc</root>">>},
+            {"xml:space preserve", <<"<root xml:space='preserve'> \t\n </root>">>,
+                <<"<root xml:space=\"preserve\"> \t\n </root>">>}
+        ]
+    ].
+
+export_preserves_character_references_test() ->
+    Root = {root, [{tab, "x\ty"}, {lf, "x\ny"}, {cr, "x\ry"}, {literal, "&#x9;"}], ["t\rt<&>"]},
+    ExpectedBody = <<
+        "<root tab=\"x&#x9;y\" lf=\"x&#xA;y\" cr=\"x&#xD;y\" literal=\"&amp;#x9;\">"
+        "t&#xD;t&lt;&amp;&gt;</root>"
+    >>,
+    lists:foreach(
+        fun(Output) -> assert_export_roundtrip(Root, ExpectedBody, Output) end,
+        [signerl_xml:export([], Root), signerl_xml:export_fragment(Root)]
+    ).
+
+reject_processing_instructions_test_() ->
+    [
+        {Name, ?_assertEqual({error, invalid_xml}, signerl_xml:parse_binary(Xml))}
+     || {Name, Xml} <- [
+            {"inside root", <<"<root><?report preserved?></root>">>},
+            {"before root", <<"<?report preserved?><root/>">>},
+            {"after empty root", <<"<root/><?report preserved?>">>},
+            {"after nonempty root", <<"<root><a/></root><?report preserved?>">>},
+            {"stylesheet", <<"<?xml-stylesheet href='a.xsl'?><root/>">>}
+        ]
+    ].
+
+processing_instruction_text_is_not_an_instruction_test() ->
+    ?assertEqual(
+        {ok, {root, [], ["<?report preserved?>"]}},
+        signerl_xml:parse_binary(<<"<root><![CDATA[<?report preserved?>]]></root>">>)
+    ),
+    ?assertEqual(
+        {ok, {root, [], ["text"]}},
+        signerl_xml:parse_binary(<<"<root><!-- <?report preserved?> -->text</root>">>)
+    ).
+
+trailing_misc_test_() ->
+    [
+        {Name, ?_assertEqual(Expected, signerl_xml:parse_binary(Xml))}
+     || {Name, Xml, Expected} <- [
+            {"trailing comments and whitespace",
+                <<"<root><a/></root> \t\r\n<!-- preserved profile omits comments -->">>,
+                {ok, {root, [], [{a, [], []}]}}},
+            {"second root", <<"<root><a/></root><other/>">>, {error, invalid_xml}},
+            {"trailing declaration", <<"<root><a/></root><?xml version='1.0'?>">>,
+                {error, invalid_xml}},
+            {"trailing DTD", <<"<root><a/></root><!DOCTYPE tail>">>, {error, invalid_xml}},
+            {"trailing text", <<"<root><a/></root>unexpected">>, {error, invalid_xml}}
+        ]
+    ].
+
+assert_export_roundtrip(Root, ExpectedBytes, Output) ->
+    ?assertMatch({_, _}, binary:match(Output, ExpectedBytes)),
+    ?assertEqual({ok, Root}, signerl_xml:parse_binary(Output)).
