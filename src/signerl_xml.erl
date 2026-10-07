@@ -219,7 +219,16 @@ find_unique_child(Tag, {_, _, Content}) ->
             {error, not_found}
     end.
 
-export_element({Tag, Attrs, Content}) ->
+export_element(Element) ->
+    export_content([Element], [], []).
+
+% Keep pending closing tags and siblings on an explicit stack, so XML depth
+% does not grow the call stack or the nesting of the accumulated output.
+export_content([], [], Acc) ->
+    lists:reverse(Acc);
+export_content([], [{Name, Siblings} | Parents], Acc) ->
+    export_content(Siblings, Parents, [["</", Name, ">"] | Acc]);
+export_content([{Tag, Attrs, Content} | Rest], Parents, Acc) ->
     Name = atom_to_list(Tag),
     Attributes = [
         [" ", atom_to_list(Key), "=\"", export_attribute(Value), "\""]
@@ -227,13 +236,13 @@ export_element({Tag, Attrs, Content}) ->
     ],
     case Content of
         [] ->
-            ["<", Name, Attributes, "/>"];
+            export_content(Rest, Parents, [["<", Name, Attributes, "/>"] | Acc]);
         _ ->
-            ["<", Name, Attributes, ">", [export_content(Item) || Item <- Content], "</", Name, ">"]
-    end.
-
-export_content({_, _, _} = Element) -> export_element(Element);
-export_content(Text) -> [export_character(Char, text) || Char <- xmerl_lib:export_text(Text)].
+            export_content(Content, [{Name, Rest} | Parents], [["<", Name, Attributes, ">"] | Acc])
+    end;
+export_content([Text | Rest], Parents, Acc) ->
+    Escaped = [export_character(Char, text) || Char <- xmerl_lib:export_text(Text)],
+    export_content(Rest, Parents, [Escaped | Acc]).
 
 export_attribute(Value) ->
     [export_character(Char, attribute) || Char <- xmerl_lib:export_attribute(Value)].

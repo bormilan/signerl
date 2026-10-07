@@ -30,6 +30,39 @@ export_test() ->
     ?assertEqual({ok, Prolog}, signerl_xml:parse_prolog(Binary)),
     ?assertEqual({ok, Root}, signerl_xml:parse_binary(Binary)).
 
+export_nested_content_order_test() ->
+    Root =
+        {root, [{id, "a&b"}], [
+            "before ",
+            {outer, [], ["left ", {inner, [], ["<&>"]}, " right"]},
+            " between ",
+            {empty, [{value, "\t"}], []},
+            " after"
+        ]},
+    Expected = <<
+        "<root id=\"a&amp;b\">before <outer>left <inner>&lt;&amp;&gt;</inner> right</outer>"
+        " between <empty value=\"&#x9;\"/> after</root>"
+    >>,
+    ?assertEqual(<<Expected/binary, "\n">>, signerl_xml:export([], Root)),
+    ?assertEqual(
+        <<"<?xml version=\"1.0\"?>", Expected/binary>>, signerl_xml:export_fragment(Root)
+    ).
+
+export_deep_tree_test() ->
+    Depth = 10000,
+    Root = lists:foldl(
+        fun(_, Child) -> {branch, [], [Child]} end,
+        {leaf, [], ["end<&>"]},
+        lists:seq(1, Depth)
+    ),
+    Expected = iolist_to_binary([
+        binary:copy(<<"<branch>">>, Depth),
+        <<"<leaf>end&lt;&amp;&gt;</leaf>">>,
+        binary:copy(<<"</branch>">>, Depth),
+        "\n"
+    ]),
+    ?assertEqual(Expected, signerl_xml:export([], Root)).
+
 parse_prolog_valid_test() ->
     Message = <<"<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?><root/>">>,
     ?assertEqual(

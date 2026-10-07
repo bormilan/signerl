@@ -852,26 +852,24 @@ sign_preserves_content(Config) ->
     Path = signerl_utils:file_path("test/examples/c14n/preserved_content.xml"),
     {ok, Raw} = file:read_file(Path),
     {ok, Original} = signerl_xml:parse_binary(Raw),
+    Signed = signerl:sign(Raw, sha256, Key),
+    ?assertEqual(true, signerl:verify(Signed, sha256, PublicKey)),
+    {ok, Parsed} = signerl_xml:parse_binary(Signed),
+    ?assertEqual(Original, signerl_c14n:remove_signature_elements(Parsed)),
+    FileSigned = signerl:sign(Path, sha256, Key),
+    ?assertEqual(true, signerl:verify(FileSigned, sha256, PublicKey)),
     lists:foreach(
-        fun(Signed) ->
-            ?assertEqual(true, signerl:verify(Signed, sha256, PublicKey)),
-            {ok, Parsed} = signerl_xml:parse_binary(Signed),
-            ?assertEqual(Original, signerl_c14n:remove_signature_elements(Parsed)),
-            lists:foreach(
-                fun({Before, After}) ->
-                    Changed = test_helpers:replace_once(Signed, Before, After),
-                    ?assertEqual(false, signerl:verify(Changed, sha256, PublicKey))
-                end,
-                [
-                    {<<"<a/> <b/>">>, <<"<a/><b/>">>},
-                    {<<"  before <em>">>, <<" before <em>">>},
-                    {<<"tab=\"x&#x9;y\"">>, <<"tab=\"x y\"">>},
-                    {<<"lf=\"x&#xA;y\"">>, <<"lf=\"x&#xD;y\"">>},
-                    {<<">t&#xD;t<">>, <<">t\nt<">>}
-                ]
-            )
+        fun({Before, After}) ->
+            Changed = test_helpers:replace_once(Signed, Before, After),
+            ?assertEqual(false, signerl:verify(Changed, sha256, PublicKey))
         end,
-        [signerl:sign(Raw, sha256, Key), signerl:sign(Path, sha256, Key)]
+        [
+            {<<"<a/> <b/>">>, <<"<a/><b/>">>},
+            {<<"  before <em>">>, <<" before <em>">>},
+            {<<"tab=\"x&#x9;y\"">>, <<"tab=\"x y\"">>},
+            {<<"lf=\"x&#xA;y\"">>, <<"lf=\"x&#xD;y\"">>},
+            {<<">t&#xD;t<">>, <<">t\nt<">>}
+        ]
     ).
 
 processing_instructions_are_rejected(Config) ->

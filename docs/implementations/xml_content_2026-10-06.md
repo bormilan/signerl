@@ -89,6 +89,34 @@ signature-profile support remains #41. Remainder validation overlaps #51 because
 PIs after the root must be rejected, but its wider public API trailing-input matrix
 is left for that issue; this PR only claims closure of #50.
 
+## PR review follow-up (2026-10-07)
+
+- Replaced the mutually body-recursive `export_element/1` / `export_content/1`
+  tree traversal with tail-recursive `export_content/3`. Its explicit parent stack
+  holds each pending closing tag and remaining siblings. Output accumulates as
+  a reversed list of fragments and is reversed once at completion, preserving
+  byte order without building an iolist nested by XML depth.
+- Added exact nested/sibling/mixed-content export assertions and a 10,000-level
+  tree export case before refactoring. Both pass against the previous implementation
+  and establish output compatibility; this is a recursion refactor, not a claim
+  that the old implementation failed those functional cases.
+- Removed the outer binary/file loop in `sign_preserves_content`. The five mutation
+  cases run once against the verified binary signature; one positive file-path
+  verification remains. Shared parser equivalence already has a dedicated test.
+- Public XML behavior and APIs are unchanged, so README changes are unnecessary.
+  The test responsibilities/counts are updated in `test/TESTS.md`.
+- Recorded the tail-recursion preference in `AGENTS.md` for future traversals.
+- Baseline: 54 focused XML EUnit cases and all 59 public-API CT cases passed before
+  the exporter refactor. After refactoring, 54 XML EUnit and all 74 CT cases pass.
+- Full `test` and `as test cover`: 195 EUnit + 74 CT = 269 cases, no skips, 100%
+  coverage. `flint` and `dialyzer` pass. A BEAM disassembly review confirmed all
+  four recursive traversal calls use `call_last` or `call_only`.
+- Final native `tall` passed with all 269 cases, no skips, 100% coverage and clean
+  formatting/lint, Xref and Dialyzer. The six-job GitHub matrix must pass on the
+  updated head before the PR is declared ready to merge.
+- Review recovery diffs and validation logs are saved under
+  `/Users/milanbor/projects/signerl/.recovery/issue-50/review-2026-10-07`.
+
 ## Recovery
 
 Persistent source: `/Users/milanbor/.codex/worktrees/signerl-issue-50/signerl`.

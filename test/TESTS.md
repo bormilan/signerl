@@ -12,7 +12,7 @@ rebar3; there is no custom runner or manually maintained suite list.
 | `signerl_signed_properties_test.erl` | 66 | XAdES property extraction and malformed Erlang/XML value boundaries. |
 | `signerl_signature_test.erl` | 5 | Signature construction contracts for RSA and ECDSA. |
 | `signerl_verify_test.erl` | 23 | Signature extraction, reference validation, algorithm selection, and malformed signature contracts. |
-| `signerl_xml_test.erl` | 52 | XML parsing, prologs, export, tree lookup, text values, and signature-element recognition. |
+| `signerl_xml_test.erl` | 54 | XML parsing, prologs, export, tree lookup, text values, and signature-element recognition. |
 | `signerl_xades_xml_test.erl` | 1 | XAdES tree lookup rejects a non-signature root. |
 | `signerl_cert_test.erl` | 1 | Exact issuer/serial DER against OTP ASN.1, including positive integer padding. |
 | `signerl_cert_helpers_test.erl` | 6 | Application fixture paths and clear missing/malformed PEM failures. |
@@ -20,7 +20,7 @@ rebar3; there is no custom runner or manually maintained suite list.
 | `signerl_c14n_interop_SUITE.erl` | 9 | Compare production parsing/canonicalization with `xmllint --c14n11`; Unicode and content preservation also cover `--exc-c14n`. |
 | `signerl_xml_SUITE.erl` | 6 | Real file export/read-back, Unicode, unsupported encodings, and missing files using CT's isolated `priv_dir`. |
 
-Total: **193 EUnit + 74 Common Test = 267 cases**. See the
+Total: **195 EUnit + 74 Common Test = 269 cases**. See the
 [migration log and case map](../docs/implementations/test_organization_2026-10-04.md)
 for the earlier suite locations and the
 [fixture cleanup log](../docs/implementations/test_fixtures_2026-10-04.md)
@@ -42,10 +42,12 @@ unsupported declarations, UTF-16 bytes, and malformed UTF-8 sequences.
 
 Content-preservation regressions cover whitespace-only and mixed text, CDATA,
 `xml:space`, literal line-ending normalization versus character references, and
-attribute/text export round trips. Public signing tests verify untouched binary
-and file inputs before mutating separating whitespace, mixed text, attribute
-controls, and a text CR. Processing instructions are rejected before, inside,
-and after the root; PI-looking CDATA/comment text is not mistaken for an instruction.
+attribute/text export round trips. Export tests also verify nested/sibling ordering
+and a 10,000-level tree. Public signing tests verify the untouched binary signature
+before mutating separating whitespace, mixed text, attribute controls, and a text
+CR. A single positive file-path verification covers that entry point; mutations
+are not repeated for the shared parser. Processing instructions are rejected
+before, inside, and after the root; PI-looking CDATA/comment text is not mistaken for an instruction.
 The interoperability fixture compares original and exported bytes through
 `xmllint` in both supported canonicalization modes. On Windows, the helper undoes
 only C stdio's LF-to-CRLF output translation before comparing bytes; fixture and
