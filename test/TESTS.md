@@ -12,15 +12,15 @@ rebar3; there is no custom runner or manually maintained suite list.
 | `signerl_signed_properties_test.erl` | 66 | XAdES property extraction and malformed Erlang/XML value boundaries. |
 | `signerl_signature_test.erl` | 5 | Signature construction contracts for RSA and ECDSA. |
 | `signerl_verify_test.erl` | 23 | Signature extraction, reference validation, algorithm selection, and malformed signature contracts. |
-| `signerl_xml_test.erl` | 65 | XML parsing, prologs, export, tree lookup, text values, and signature-element recognition. |
+| `signerl_xml_test.erl` | 77 | XML parsing, DTD/entity rejection, prologs, export, tree lookup, text values, and signature-element recognition. |
 | `signerl_xades_xml_test.erl` | 1 | XAdES tree lookup rejects a non-signature root. |
 | `signerl_cert_test.erl` | 1 | Exact issuer/serial DER against OTP ASN.1, including positive integer padding. |
 | `signerl_cert_helpers_test.erl` | 6 | Application fixture paths and clear missing/malformed PEM failures. |
-| `signerl_api_SUITE.erl` | 62 | Full public signing/verification, binary/file/key inputs, RSA/ECDSA certificate wiring, tampering, and independent signature fixtures. |
+| `signerl_api_SUITE.erl` | 64 | Full public signing/verification, binary/file/key inputs, RSA/ECDSA certificate wiring, tampering, and independent signature fixtures. |
 | `signerl_c14n_interop_SUITE.erl` | 9 | Compare production parsing/canonicalization with `xmllint --c14n11`; Unicode and content preservation also cover `--exc-c14n`. |
-| `signerl_xml_SUITE.erl` | 6 | Real file export/read-back, Unicode, unsupported encodings, and missing files using CT's isolated `priv_dir`. |
+| `signerl_xml_SUITE.erl` | 8 | Real file export/read-back, encoding, missing files, and controlled file/HTTP entity canaries. |
 
-Total: **206 EUnit + 77 Common Test = 283 cases**. See the
+Total: **218 EUnit + 81 Common Test = 299 cases**. See the
 [migration log and case map](../docs/implementations/test_organization_2026-10-04.md)
 for the earlier suite locations and the
 [fixture cleanup log](../docs/implementations/test_fixtures_2026-10-04.md)
@@ -60,6 +60,15 @@ CDATA/character references outside the root, non-XML whitespace, and misplaced
 BOMs. One file-path case checks an accepted comment suffix and second-root
 rejection through parsing, signing, and verification; the full binary suffix
 matrix is not duplicated for files.
+
+Entity-safety regressions reject bare/internal/external DTDs, custom and parameter
+entities, and bounded exponential/quadratic expansion payloads. Positive controls
+retain predefined/numeric references and DTD-looking comments/CDATA. File canaries
+exercise absolute `file://` and relative paths; a loopback HTTP canary first proves
+its request detector works, then checks that external subsets and general/parameter
+entities make no request. These tests use only generated canary files and localhost,
+not real secrets or remote services. Public DTD rejection starts with a valid
+signature and includes one focused file-path case.
 
 ## Run the tests
 

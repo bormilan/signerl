@@ -91,8 +91,33 @@ parsed tree and signed output. Appending them to a valid signed document does
 not change its verification result; appending invalid content rejects the input.
 Binary and file inputs follow the same full-document policy.
 
-Namespace/profile work, resource limits, and XML name atom allocation remain
-tracked in #41, #39, and #61.
+Namespace/profile work and XML name atom allocation remain tracked in #41 and #61.
+
+## XML entity safety
+
+DTDs and custom entities are unsupported. Otherwise supported inputs containing
+a `DOCTYPE`, including an empty one, return `{error, invalid_xml}` from `sign/3`, `sign/4`, `verify/3`, and
+`parse_binary/1`. The lower-level `parse_file/1` raises for invalid XML as before.
+Both binary and file inputs use this policy, with no option to enable DTDs.
+DTD-derived default attributes and custom entity values are therefore unavailable.
+
+The parser disables external entity resolution and entity declarations, rejects
+undeclared references, and sets the custom entity recursion limit to zero. DTD
+rejection happens before processing internal/external subsets, so the custom
+entity expansion budget is **zero levels and zero replacement bytes**. This
+blocks file/HTTP external entities and exponential or quadratic custom entity
+expansion. It does not fetch external DTDs.
+
+The five predefined XML entities (`amp`, `lt`, `gt`, `quot`, `apos`) and numeric
+character references remain supported. DTD-looking text inside comments or
+CDATA is ordinary content, not a declaration. The policy follows
+[OWASP's DTD rejection guidance](https://cheatsheetseries.owasp.org/cheatsheets/XML_External_Entity_Prevention_Cheat_Sheet.html#general-guidance)
+and uses [xmerl's SAX entity controls](https://www.erlang.org/doc/apps/xmerl/xmerl_sax_parser.html#options/0).
+
+These controls bound custom entity expansion, not ordinary document size or
+element depth. Callers still need request/file size and concurrency limits;
+file APIs currently read the whole input before parsing. Persistent atom growth
+from arbitrary XML names remains tracked in #61.
 
 ## Development toolchain
 
