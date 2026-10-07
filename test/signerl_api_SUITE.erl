@@ -514,13 +514,14 @@ sign_with_certificate_includes_keyinfo(Config) ->
     SignedMessage = signerl:sign(RawMessage, sha256, RsaKey, RsaCertDer),
     {ok, Parsed} = signerl_xml:parse_binary(SignedMessage),
     ?assertMatch(
-        {ok, {'ds:KeyInfo', _, _}},
-        signerl_xml:find_path(['ds:Signature', 'ds:KeyInfo'], Parsed)
+        {ok, {<<"ds:KeyInfo">>, _, _}},
+        signerl_xml:find_path([<<"ds:Signature">>, <<"ds:KeyInfo">>], Parsed)
     ),
     ?assertMatch(
-        {ok, {'ds:X509Certificate', _, [_]}},
+        {ok, {<<"ds:X509Certificate">>, _, [_]}},
         signerl_xml:find_path(
-            ['ds:Signature', 'ds:KeyInfo', 'ds:X509Data', 'ds:X509Certificate'], Parsed
+            [<<"ds:Signature">>, <<"ds:KeyInfo">>, <<"ds:X509Data">>, <<"ds:X509Certificate">>],
+            Parsed
         )
     ).
 
@@ -531,7 +532,7 @@ sign_without_certificate_omits_keyinfo(Config) ->
     {ok, Parsed} = signerl_xml:parse_binary(SignedMessage),
     ?assertEqual(
         {error, not_found},
-        signerl_xml:find_path(['ds:Signature', 'ds:KeyInfo'], Parsed)
+        signerl_xml:find_path([<<"ds:Signature">>, <<"ds:KeyInfo">>], Parsed)
     ).
 
 sign_with_certificate_roundtrip_rsa(Config) ->
@@ -590,7 +591,7 @@ sign_with_certificate_includes_signing_certificate_v2(Config) ->
     SignedMessage = signerl:sign(RawMessage, sha256, RsaKey, RsaCertDer),
     {ok, Parsed} = signerl_xml:parse_binary(SignedMessage),
     ?assertMatch(
-        {ok, {'xades:SigningCertificateV2', _, _}},
+        {ok, {<<"xades:SigningCertificateV2">>, _, _}},
         signerl_xml:find_path(signing_certificate_v2_path(), Parsed)
     ).
 
@@ -674,7 +675,7 @@ c14n_idempotent_after_sign(Config) ->
     SignedMessage = signerl:sign(RawMessage, sha256, RsaKey),
     {ok, ParsedSigned} = signerl_xml:parse_binary(SignedMessage),
     {ok, SignedInfoElement} = signerl_xml:find_path(
-        ['ds:Signature', 'ds:SignedInfo'], ParsedSigned
+        [<<"ds:Signature">>, <<"ds:SignedInfo">>], ParsedSigned
     ),
     C14N1 = signerl_c14n:canonicalize(SignedInfoElement),
     {ok, ReParsed} = signerl_xml:parse_binary(C14N1),
@@ -685,12 +686,12 @@ c14n_idempotent_after_sign(Config) ->
 
 signing_certificate_v2_path() ->
     [
-        'ds:Signature',
-        'ds:Object',
-        'xades:QualifyingProperties',
-        'xades:SignedProperties',
-        'xades:SignedSignatureProperties',
-        'xades:SigningCertificateV2'
+        <<"ds:Signature">>,
+        <<"ds:Object">>,
+        <<"xades:QualifyingProperties">>,
+        <<"xades:SignedProperties">>,
+        <<"xades:SignedSignatureProperties">>,
+        <<"xades:SigningCertificateV2">>
     ].
 
 tamper_keyinfo_certificate(SignedMessage, NewCertDer) ->
@@ -700,8 +701,8 @@ tamper_keyinfo_certificate(SignedMessage, NewCertDer) ->
     ?assertNotEqual(Parsed, Tampered),
     signerl_xml:export(<<"<?xml version=\"1.0\" encoding=\"UTF-8\"?>">>, Tampered).
 
-replace_x509_certificate({'ds:X509Certificate', Attrs, _}, NewCertB64) ->
-    {'ds:X509Certificate', Attrs, [NewCertB64]};
+replace_x509_certificate({<<"ds:X509Certificate">>, Attrs, _}, NewCertB64) ->
+    {<<"ds:X509Certificate">>, Attrs, [NewCertB64]};
 replace_x509_certificate({Tag, Attrs, Content}, NewCertB64) when is_list(Content) ->
     {Tag, Attrs, [replace_x509_certificate(Child, NewCertB64) || Child <- Content]};
 replace_x509_certificate(Other, _NewCertB64) ->
@@ -713,7 +714,7 @@ strip_keyinfo_certificate(SignedMessage) ->
     ?assertNotEqual(Parsed, Stripped),
     signerl_xml:export(<<"<?xml version=\"1.0\" encoding=\"UTF-8\"?>">>, Stripped).
 
-remove_x509_data({'ds:X509Data', _Attrs, _Content}) ->
+remove_x509_data({<<"ds:X509Data">>, _Attrs, _Content}) ->
     removed;
 remove_x509_data({Tag, Attrs, Content}) when is_list(Content) ->
     Filtered = lists:filtermap(
@@ -735,30 +736,31 @@ tamper_cert_digest_method(SignedMessage) ->
     ?assertNotEqual(Parsed, Tampered),
     signerl_xml:export(<<"<?xml version=\"1.0\" encoding=\"UTF-8\"?>">>, Tampered).
 
-replace_cert_digest_method({'xades:SigningCertificateV2', Attrs, Content}) ->
-    {'xades:SigningCertificateV2', Attrs, replace_cert_digest_method_inner(Content)};
+replace_cert_digest_method({<<"xades:SigningCertificateV2">>, Attrs, Content}) ->
+    {<<"xades:SigningCertificateV2">>, Attrs, replace_cert_digest_method_inner(Content)};
 replace_cert_digest_method({Tag, Attrs, Content}) when is_list(Content) ->
     {Tag, Attrs, [replace_cert_digest_method(Child) || Child <- Content]};
 replace_cert_digest_method(Other) ->
     Other.
 
-replace_cert_digest_method_inner([{'xades:Cert', CAttrs, CContent}]) ->
-    [{'xades:Cert', CAttrs, replace_digest_method_in_cert(CContent)}];
+replace_cert_digest_method_inner([{<<"xades:Cert">>, CAttrs, CContent}]) ->
+    [{<<"xades:Cert">>, CAttrs, replace_digest_method_in_cert(CContent)}];
 replace_cert_digest_method_inner(Other) ->
     Other.
 
 replace_digest_method_in_cert([]) ->
     [];
-replace_digest_method_in_cert([{'xades:CertDigest', DAttrs, DContent} | Rest]) ->
-    [{'xades:CertDigest', DAttrs, replace_digest_method_elem(DContent)} | Rest];
+replace_digest_method_in_cert([{<<"xades:CertDigest">>, DAttrs, DContent} | Rest]) ->
+    [{<<"xades:CertDigest">>, DAttrs, replace_digest_method_elem(DContent)} | Rest];
 replace_digest_method_in_cert([H | T]) ->
     [H | replace_digest_method_in_cert(T)].
 
 replace_digest_method_elem([]) ->
     [];
-replace_digest_method_elem([{'ds:DigestMethod', _, DMContent} | Rest]) ->
+replace_digest_method_elem([{<<"ds:DigestMethod">>, _, DMContent} | Rest]) ->
     [
-        {'ds:DigestMethod', [{'Algorithm', "http://www.w3.org/2001/04/xmlenc#sha512"}], DMContent}
+        {<<"ds:DigestMethod">>, [{<<"Algorithm">>, "http://www.w3.org/2001/04/xmlenc#sha512"}],
+            DMContent}
         | Rest
     ];
 replace_digest_method_elem([H | T]) ->
@@ -952,7 +954,7 @@ complete_document_file_boundary(Config) ->
     InputPath = filename:join(?config(priv_dir, Config), "complete-input.xml"),
     SignedPath = filename:join(?config(priv_dir, Config), "complete-signed.xml"),
     ok = file:write_file(InputPath, Raw),
-    ?assertEqual({root, [], []}, signerl_xml:parse_file(InputPath)),
+    ?assertEqual({<<"root">>, [], []}, signerl_xml:parse_file(InputPath)),
     Signed = signerl:sign(InputPath, sha256, Key),
     ok = file:write_file(SignedPath, <<Signed/binary, " \t<!-- allowed -->\n">>),
     ?assertEqual(true, signerl:verify(SignedPath, sha256, PublicKey)),
