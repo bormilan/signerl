@@ -31,6 +31,8 @@ groups() ->
             complete_document_accepts_trailing_misc,
             complete_document_rejects_trailing_content,
             complete_document_file_boundary,
+            dtd_is_rejected_by_public_apis,
+            dtd_file_input_is_rejected,
             reject_unsupported_encoding,
             reject_invalid_utf8,
             sign_uses_input_prolog_binary_and_file,
@@ -959,3 +961,43 @@ complete_document_file_boundary(Config) ->
     ?assertEqual({error, invalid_xml}, signerl:sign(InputPath, sha256, Key)),
     ok = file:write_file(SignedPath, <<Signed/binary, "<extra/>">>),
     ?assertEqual({error, invalid_xml}, signerl:verify(SignedPath, sha256, PublicKey)).
+
+dtd_is_rejected_by_public_apis(Config) ->
+    Key = ?config(rsa_key, Config),
+    PublicKey = ?config(rsa_public_key, Config),
+    Prolog = <<"<?xml version='1.0'?>">>,
+    Raw = <<Prolog/binary, "<root>content</root>">>,
+    Signed = signerl:sign(Raw, sha256, Key),
+    ?assertEqual(true, signerl:verify(Signed, sha256, PublicKey)),
+    lists:foreach(
+        fun(Dtd) ->
+            ?assertEqual(
+                {error, invalid_xml},
+                signerl:sign(<<Prolog/binary, Dtd/binary, "<root>content</root>">>, sha256, Key)
+            ),
+            WithDtd = binary:replace(Signed, Prolog, <<Prolog/binary, Dtd/binary>>),
+            ?assertNotEqual(Signed, WithDtd),
+            ?assertEqual({error, invalid_xml}, signerl:verify(WithDtd, sha256, PublicKey))
+        end,
+        [
+            <<"<!DOCTYPE root>">>,
+            <<"<!DOCTYPE root []>">>,
+            <<"<!DOCTYPE root [<!ENTITY value 'unused'>]>">>
+        ]
+    ).
+
+dtd_file_input_is_rejected(Config) ->
+    Key = ?config(rsa_key, Config),
+    PublicKey = ?config(rsa_public_key, Config),
+    Prolog = <<"<?xml version='1.0'?>">>,
+    Raw = <<Prolog/binary, "<root/>">>,
+    Signed = signerl:sign(Raw, sha256, Key),
+    Path = filename:join(?config(priv_dir, Config), "dtd-input.xml"),
+    ok = file:write_file(Path, Signed),
+    ?assertEqual(true, signerl:verify(Path, sha256, PublicKey)),
+    WithDtd = binary:replace(Signed, Prolog, <<Prolog/binary, "<!DOCTYPE root>">>),
+    ?assertNotEqual(Signed, WithDtd),
+    ok = file:write_file(Path, WithDtd),
+    ?assertEqual({error, invalid_xml}, signerl:verify(Path, sha256, PublicKey)),
+    ok = file:write_file(Path, <<Prolog/binary, "<!DOCTYPE root><root/>">>),
+    ?assertEqual({error, invalid_xml}, signerl:sign(Path, sha256, Key)).

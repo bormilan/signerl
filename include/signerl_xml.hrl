@@ -9,3 +9,6 @@
 -define(XML_ENCODING_EXTRACT_RE, <<
     "^(?:\\xEF\\xBB\\xBF)?<\\?xml\\s+[^?]*\\sencoding\\s*=\\s*(['\"])([^'\"]+)\\1"
 >>).
+
+% Custom entities are unsupported; never recurse into replacement text.
+-define(XML_ENTITY_RECURSE_LIMIT, 0).

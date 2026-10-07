@@ -72,7 +72,10 @@ scan_xml(Message, Options) ->
     xmerl_sax_parser:stream(Message, [
         {event_fun, fun xml_event/3},
         {event_state, {[], [{document, [], []}]}},
-        {external_entities, all}
+        disallow_entities,
+        {external_entities, none},
+        {entity_recurse_limit, ?XML_ENTITY_RECURSE_LIMIT},
+        {fail_undeclared_ref, true}
         | Options
     ]).
 
@@ -107,6 +110,12 @@ xml_event({Kind, Text}, _, {Namespaces, [Element | Stack]}) when
     Kind =:= characters; Kind =:= ignorableWhitespace
 ->
     {Namespaces, [prepend_content(Text, Element) | Stack]};
+% Abort before xmerl reads a DTD subset or resolves any declared entity.
+xml_event({startDTD, _, _, _}, _, _) ->
+    error(unsupported_dtd);
+% xmerl can emit only endDTD for a bare <!DOCTYPE root>.
+xml_event(endDTD, _, _) ->
+    error(unsupported_dtd);
 xml_event({processingInstruction, _, _}, _, _) ->
     error(unsupported_processing_instruction);
 xml_event(_, _, State) ->

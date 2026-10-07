@@ -305,3 +305,60 @@ trailing_misc_test_() ->
 assert_export_roundtrip(Root, ExpectedBytes, Output) ->
     ?assertMatch({_, _}, binary:match(Output, ExpectedBytes)),
     ?assertEqual({ok, Root}, signerl_xml:parse_binary(Output)).
+
+reject_dtd_test_() ->
+    [
+        {Name, ?_assertEqual({error, invalid_xml}, signerl_xml:parse_binary(Xml))}
+     || {Name, Xml} <- [
+            {"bare doctype", <<"<!DOCTYPE root><root/>">>},
+            {"doctype whitespace", <<"<!DOCTYPE root \t\r\n><root/>">>},
+            {"empty subset", <<"<!DOCTYPE root []><root/>">>},
+            {"element declaration", <<"<!DOCTYPE root [<!ELEMENT root EMPTY>]><root/>">>},
+            {"default attribute",
+                <<"<!DOCTYPE root [<!ATTLIST root id CDATA 'default'>]><root/>">>},
+            {"internal entity",
+                <<"<!DOCTYPE root [<!ENTITY value 'expanded'>]><root>&value;</root>">>},
+            {"parameter entity",
+                <<"<!DOCTYPE root [<!ENTITY % value '<!ELEMENT root EMPTY>'>%value;]><root/>">>},
+            {"undeclared entity", <<"<root>&unknown;</root>">>}
+        ]
+    ].
+
+reject_bounded_exponential_expansion_test() ->
+    % A small billion-laughs shape: at most 256 characters if expanded.
+    Xml = <<
+        "<!DOCTYPE root [<!ENTITY a 'ha'><!ENTITY b '&a;&a;&a;&a;'>"
+        "<!ENTITY c '&b;&b;&b;&b;'>]><root>&c;&c;&c;&c;&c;&c;&c;&c;</root>"
+    >>,
+    ?assertEqual({error, invalid_xml}, signerl_xml:parse_binary(Xml)).
+
+reject_bounded_quadratic_expansion_test() ->
+    % A long entity repeated many times, bounded to 32 KiB before the fix.
+    Value = binary:copy(<<"a">>, 512),
+    Refs = binary:copy(<<"&value;">>, 64),
+    Xml =
+        <<"<!DOCTYPE root [<!ENTITY value '", Value/binary, "'>]><root>", Refs/binary, "</root>">>,
+    ?assertEqual({error, invalid_xml}, signerl_xml:parse_binary(Xml)).
+
+predefined_entities_and_character_references_test() ->
+    Xml =
+        <<
+            "<root value='&lt;&gt;&amp;&quot;&apos;&#65;&#x1F600;'>"
+            "&lt;&gt;&amp;&quot;&apos;&#65;&#x1F600;&amp;unknown;</root>"
+        >>,
+    ?assertEqual(
+        {ok, {root, [{value, "<>&\"'A😀"}], ["<>&\"'A😀&unknown;"]}},
+        signerl_xml:parse_binary(Xml)
+    ).
+
+dtd_looking_text_is_not_a_declaration_test() ->
+    Xml =
+        <<
+            "<!-- <!DOCTYPE root> --><root>"
+            "<![CDATA[<!DOCTYPE root [<!ENTITY value 'text'>]>]]></root>"
+            "<!-- <!DOCTYPE root> -->"
+        >>,
+    ?assertEqual(
+        {ok, {root, [], ["<!DOCTYPE root [<!ENTITY value 'text'>]>"]}},
+        signerl_xml:parse_binary(Xml)
+    ).
