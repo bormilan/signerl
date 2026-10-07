@@ -28,6 +28,9 @@ groups() ->
             sign_utf8_binary_and_file,
             sign_preserves_content,
             processing_instructions_are_rejected,
+            complete_document_accepts_trailing_misc,
+            complete_document_rejects_trailing_content,
+            complete_document_file_boundary,
             reject_unsupported_encoding,
             reject_invalid_utf8,
             sign_uses_input_prolog_binary_and_file,
@@ -891,3 +894,68 @@ processing_instructions_are_rejected(Config) ->
             {<<"</root>">>, <<"</root><?report preserved?>">>}
         ]
     ).
+
+complete_document_accepts_trailing_misc(Config) ->
+    Key = ?config(rsa_key, Config),
+    PublicKey = ?config(rsa_public_key, Config),
+    Raw = <<"<?xml version='1.0'?><root><value>content</value></root>">>,
+    Signed = signerl:sign(Raw, sha256, Key),
+    ?assertEqual(true, signerl:verify(Signed, sha256, PublicKey)),
+    lists:foreach(
+        fun(Tail) ->
+            ?assertEqual(true, signerl:verify(<<Signed/binary, Tail/binary>>, sha256, PublicKey)),
+            SignedWithTail = signerl:sign(<<Raw/binary, Tail/binary>>, sha256, Key),
+            ?assertEqual(true, signerl:verify(SignedWithTail, sha256, PublicKey))
+        end,
+        [
+            <<" \t\r\n">>,
+            <<"<!-- trailing comment -->">>,
+            <<"\n<!-- <extra/> <?report ignored?> -->\t<!-- ő 東京 -->\r\n"/utf8>>
+        ]
+    ).
+
+complete_document_rejects_trailing_content(Config) ->
+    Key = ?config(rsa_key, Config),
+    PublicKey = ?config(rsa_public_key, Config),
+    Raw = <<"<?xml version='1.0'?><root><value>content</value></root>">>,
+    Signed = signerl:sign(Raw, sha256, Key),
+    ?assertEqual(true, signerl:verify(Signed, sha256, PublicKey)),
+    lists:foreach(
+        fun({Name, Tail}) ->
+            ct:log("Checking trailing ~s", [Name]),
+            ?assertEqual(
+                {error, invalid_xml}, signerl:sign(<<Raw/binary, Tail/binary>>, sha256, Key)
+            ),
+            ?assertEqual(
+                {error, invalid_xml},
+                signerl:verify(<<Signed/binary, Tail/binary>>, sha256, PublicKey)
+            )
+        end,
+        [
+            {"second root", <<"<extra/>">>},
+            {"plain text", <<"not XML">>},
+            {"declaration", <<"<?xml version='1.0'?><extra/>">>},
+            {"garbage after comment", <<"\n<!-- fine -->not XML">>},
+            {"unfinished comment", <<"<!-- unfinished">>},
+            {"invalid comment", <<"<!-- invalid -- separator -->">>},
+            {"character reference", <<"&#x20;">>},
+            {"incomplete markup", <<"<">>}
+        ]
+    ).
+
+complete_document_file_boundary(Config) ->
+    Key = ?config(rsa_key, Config),
+    PublicKey = ?config(rsa_public_key, Config),
+    Raw = <<"<?xml version='1.0'?><root/>\n<!-- allowed -->">>,
+    InputPath = filename:join(?config(priv_dir, Config), "complete-input.xml"),
+    SignedPath = filename:join(?config(priv_dir, Config), "complete-signed.xml"),
+    ok = file:write_file(InputPath, Raw),
+    ?assertEqual({root, [], []}, signerl_xml:parse_file(InputPath)),
+    Signed = signerl:sign(InputPath, sha256, Key),
+    ok = file:write_file(SignedPath, <<Signed/binary, " \t<!-- allowed -->\n">>),
+    ?assertEqual(true, signerl:verify(SignedPath, sha256, PublicKey)),
+    ok = file:write_file(InputPath, <<Raw/binary, "<extra/>">>),
+    ?assertException(error, _, signerl_xml:parse_file(InputPath)),
+    ?assertEqual({error, invalid_xml}, signerl:sign(InputPath, sha256, Key)),
+    ok = file:write_file(SignedPath, <<Signed/binary, "<extra/>">>),
+    ?assertEqual({error, invalid_xml}, signerl:verify(SignedPath, sha256, PublicKey)).

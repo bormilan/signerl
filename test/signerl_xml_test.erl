@@ -284,7 +284,21 @@ trailing_misc_test_() ->
             {"trailing declaration", <<"<root><a/></root><?xml version='1.0'?>">>,
                 {error, invalid_xml}},
             {"trailing DTD", <<"<root><a/></root><!DOCTYPE tail>">>, {error, invalid_xml}},
-            {"trailing text", <<"<root><a/></root>unexpected">>, {error, invalid_xml}}
+            {"trailing text", <<"<root><a/></root>unexpected">>, {error, invalid_xml}},
+            {"second root after empty root", <<"<root/><extra/>">>, {error, invalid_xml}},
+            {"trailing text after empty root", <<"<root/>not XML">>, {error, invalid_xml}},
+            {"comments after empty root", <<"<root/> \t\r\n<!-- <extra/> -->">>,
+                {ok, {root, [], []}}},
+            {"garbage after a comment", <<"<root/><!-- fine -->not XML">>, {error, invalid_xml}},
+            {"unterminated comment", <<"<root><a/></root><!-- unfinished">>, {error, invalid_xml}},
+            {"invalid comment separator", <<"<root/><!-- invalid -- separator -->">>,
+                {error, invalid_xml}},
+            {"incomplete markup", <<"<root><a/></root><">>, {error, invalid_xml}},
+            {"CDATA outside root", <<"<root/><![CDATA[ ]]>">>, {error, invalid_xml}},
+            {"character reference outside root", <<"<root><a/></root>&#x20;">>,
+                {error, invalid_xml}},
+            {"non-XML whitespace", <<"<root/>", 16#C2, 16#A0>>, {error, invalid_xml}},
+            {"trailing BOM", <<"<root><a/></root>", 239, 187, 191>>, {error, invalid_xml}}
         ]
     ].
 

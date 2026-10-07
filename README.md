@@ -81,13 +81,18 @@ values used for its digests. Changing signed whitespace can invalidate a signatu
 Processing instructions are unsupported and return `{error, invalid_xml}` from
 signing, verification, and `parse_binary/1`, whether before, inside, or after the
 root. XML declarations follow the encoding rules above. Comments are omitted
-under the existing canonicalization profile without comments; legal whitespace
-outside the root is also omitted. Unconsumed trailing content is validated rather
-than discarded.
+under the existing canonicalization profile without comments.
+
+Each input must contain exactly one document element. Signing, verification,
+and `parse_binary/1` return `{error, invalid_xml}` for a second root, trailing
+text, or malformed trailing markup. Legal XML whitespace (space, tab, CR, LF)
+and well-formed comments after the root are accepted and omitted from the
+parsed tree and signed output. Appending them to a valid signed document does
+not change its verification result; appending invalid content rejects the input.
+Binary and file inputs follow the same full-document policy.
 
 Namespace/profile work, resource limits, and XML name atom allocation remain
-tracked in #41, #39, and #61. The broader public API regression matrix for trailing
-input remains tracked in #51.
+tracked in #41, #39, and #61.
 
 ## Development toolchain
 
