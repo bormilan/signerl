@@ -29,6 +29,7 @@ If a required gate is unavailable, continue independent work, record the exact b
 ## Coding Rules
 - Prefer `rg` for file/text search.
 - Keep Erlang functions focused and avoid unnecessary nesting.
+- Prefer tail recursion for new recursive traversals. Use an explicit work stack when a tree traversal would otherwise recurse in non-tail position.
 - Preserve existing module/function naming patterns unless there is a strong reason to change.
 - When switching to a new branch with local uncommitted changes, stash first (`git stash -u`), switch branch, then restore (`git stash pop`) to avoid carrying accidental branch state.
 - Keep source worktrees in persistent storage, using a managed worktree or a persistent project directory. Never use `/tmp`, `/private/tmp`, or another temporary directory as the only location for implementation work.

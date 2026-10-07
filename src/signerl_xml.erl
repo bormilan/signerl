@@ -25,7 +25,9 @@
     SimplifiedXml :: simplified_xml().
 parse_file(FileName) ->
     {ok, Message} = file:read_file(FileName),
-    {ok, Xml} = parse_binary(Message, [{space, normalize}, {xmlbase, filename:dirname(FileName)}]),
+    {ok, Xml} = parse_binary(Message, [
+        {current_location, filename:absname(filename:dirname(FileName))}
+    ]),
     Xml.
 
 -spec parse_binary(Message) -> Result when
@@ -38,8 +40,11 @@ parse_binary(Message, Options) ->
     try
         Message = unicode:characters_to_binary(Message, utf8, utf8),
         true = utf8_encoding(Message),
-        {Element, _} = xmerl_scan:string(binary_to_list(Message), [{encoding, "utf-8"} | Options]),
-        {ok, simplify_xml_element(Element)}
+        % NUL is illegal XML and also exposes BOM-less UTF-16/32 autodetection.
+        nomatch = binary:match(Message, <<0>>),
+        {ok, {[], [{document, [], [Root]}]}, Rest} = scan_xml(Message, Options),
+        ok = validate_remainder(Rest),
+        {ok, Root}
     catch
         _:_ ->
             {error, invalid_xml}
@@ -63,13 +68,55 @@ parse_prolog(Message) when is_binary(Message) ->
             {error, invalid_prolog}
     end.
 
-% private
--spec simplify_xml_element(XmlElement) -> SimplifiedXml when
-    XmlElement :: term(),
-    SimplifiedXml :: simplified_xml().
-simplify_xml_element(XmlElement) ->
-    [Clean] = xmerl_lib:remove_whitespace([XmlElement]),
-    xmerl_lib:simplify_element(Clean).
+scan_xml(Message, Options) ->
+    xmerl_sax_parser:stream(Message, [
+        {event_fun, fun xml_event/3},
+        {event_state, {[], [{document, [], []}]}},
+        {external_entities, all}
+        | Options
+    ]).
+
+% SAX streams can stop at a nonempty root's closing tag. Parsing the remainder
+% after an empty sentinel root consumes XML Misc (comments/whitespace), rejects
+% PIs through the same callback, and leaves any second document/garbage to reject.
+validate_remainder(<<>>) ->
+    ok;
+validate_remainder(Rest) ->
+    {ok, {[], [{document, [], [{tail, [], []}]}]}, <<>>} = scan_xml(
+        <<"<tail/>", Rest/binary>>, []
+    ),
+    ok.
+
+% Accumulate children in reverse order; namespace declarations belong to the
+% following startElement. Keep character data, including whitespace-only events.
+xml_event({startPrefixMapping, Prefix, Uri}, _, {Namespaces, Stack}) ->
+    Name =
+        case Prefix of
+            [] -> xmlns;
+            _ -> qualified_name({"xmlns", Prefix})
+        end,
+    {[{Name, Uri} | Namespaces], Stack};
+xml_event({startElement, _, _, Name, Attributes}, _, {Namespaces, Stack}) ->
+    Attrs = [{qualified_name({Prefix, Local}), Value} || {_, Prefix, Local, Value} <- Attributes],
+    {[], [{qualified_name(Name), lists:reverse(Namespaces) ++ Attrs, []} | Stack]};
+xml_event({endElement, _, _, _}, _, {[], [{Tag, Attrs, Content}, Parent | Stack]}) ->
+    {[], [prepend_content({Tag, Attrs, lists:reverse(Content)}, Parent) | Stack]};
+xml_event({ignorableWhitespace, _}, _, {[], [{document, [], _}]} = State) ->
+    State;
+xml_event({Kind, Text}, _, {Namespaces, [Element | Stack]}) when
+    Kind =:= characters; Kind =:= ignorableWhitespace
+->
+    {Namespaces, [prepend_content(Text, Element) | Stack]};
+xml_event({processingInstruction, _, _}, _, _) ->
+    error(unsupported_processing_instruction);
+xml_event(_, _, State) ->
+    State.
+
+prepend_content(Item, {Tag, Attrs, Content}) ->
+    {Tag, Attrs, [Item | Content]}.
+
+qualified_name({[], Local}) -> list_to_atom(Local);
+qualified_name({Prefix, Local}) -> list_to_atom(Prefix ++ ":" ++ Local).
 
 utf8_encoding(Message) ->
     case re:run(Message, ?XML_ENCODING_EXTRACT_RE, [{capture, [2], binary}]) of
@@ -89,15 +136,13 @@ valid_prolog(PrologBin) ->
     Result :: binary().
 export(Prolog, XmlTerm) ->
     true = utf8_encoding(iolist_to_binary(Prolog)),
-    Exported = xmerl:export([xmerl_lib:normalize_element(XmlTerm)], xmerl_xml, [{prolog, Prolog}]),
-    unicode:characters_to_binary([Exported, "\n"]).
+    unicode:characters_to_binary([Prolog, export_element(XmlTerm), "\n"]).
 
 -spec export_fragment(XmlTerm) -> Result when
     XmlTerm :: simplified_xml(),
     Result :: binary().
 export_fragment(XmlTerm) ->
-    Exported = xmerl:export([xmerl_lib:normalize_element(XmlTerm)], xmerl_xml),
-    unicode:characters_to_binary(Exported).
+    unicode:characters_to_binary(["<?xml version=\"1.0\"?>", export_element(XmlTerm)]).
 
 -spec to_file(FileName, XmlBinary) -> Result when
     FileName :: string(),
@@ -173,3 +218,36 @@ find_unique_child(Tag, {_, _, Content}) ->
         _ ->
             {error, not_found}
     end.
+
+export_element(Element) ->
+    export_content([Element], [], []).
+
+% Keep pending closing tags and siblings on an explicit stack, so XML depth
+% does not grow the call stack or the nesting of the accumulated output.
+export_content([], [], Acc) ->
+    lists:reverse(Acc);
+export_content([], [{Name, Siblings} | Parents], Acc) ->
+    export_content(Siblings, Parents, [["</", Name, ">"] | Acc]);
+export_content([{Tag, Attrs, Content} | Rest], Parents, Acc) ->
+    Name = atom_to_list(Tag),
+    Attributes = [
+        [" ", atom_to_list(Key), "=\"", export_attribute(Value), "\""]
+     || {Key, Value} <- Attrs
+    ],
+    case Content of
+        [] ->
+            export_content(Rest, Parents, [["<", Name, Attributes, "/>"] | Acc]);
+        _ ->
+            export_content(Content, [{Name, Rest} | Parents], [["<", Name, Attributes, ">"] | Acc])
+    end;
+export_content([Text | Rest], Parents, Acc) ->
+    Escaped = [export_character(Char, text) || Char <- xmerl_lib:export_text(Text)],
+    export_content(Rest, Parents, [Escaped | Acc]).
+
+export_attribute(Value) ->
+    [export_character(Char, attribute) || Char <- xmerl_lib:export_attribute(Value)].
+
+export_character($\r, _) -> "&#xD;";
+export_character($\t, attribute) -> "&#x9;";
+export_character($\n, attribute) -> "&#xA;";
+export_character(Char, _) -> Char.

@@ -12,15 +12,15 @@ rebar3; there is no custom runner or manually maintained suite list.
 | `signerl_signed_properties_test.erl` | 66 | XAdES property extraction and malformed Erlang/XML value boundaries. |
 | `signerl_signature_test.erl` | 5 | Signature construction contracts for RSA and ECDSA. |
 | `signerl_verify_test.erl` | 23 | Signature extraction, reference validation, algorithm selection, and malformed signature contracts. |
-| `signerl_xml_test.erl` | 33 | XML parsing, prologs, export, tree lookup, text values, and signature-element recognition. |
+| `signerl_xml_test.erl` | 54 | XML parsing, prologs, export, tree lookup, text values, and signature-element recognition. |
 | `signerl_xades_xml_test.erl` | 1 | XAdES tree lookup rejects a non-signature root. |
 | `signerl_cert_test.erl` | 1 | Exact issuer/serial DER against OTP ASN.1, including positive integer padding. |
 | `signerl_cert_helpers_test.erl` | 6 | Application fixture paths and clear missing/malformed PEM failures. |
-| `signerl_api_SUITE.erl` | 57 | Full public signing/verification, binary/file/key inputs, RSA/ECDSA certificate wiring, tampering, and independent signature fixtures. |
-| `signerl_c14n_interop_SUITE.erl` | 8 | Compare production parsing/canonicalization with `xmllint --c14n11`; Unicode also covers `--exc-c14n`. |
-| `signerl_xml_SUITE.erl` | 4 | Real file export/read-back, Unicode, unsupported encodings, and missing files using CT's isolated `priv_dir`. |
+| `signerl_api_SUITE.erl` | 59 | Full public signing/verification, binary/file/key inputs, RSA/ECDSA certificate wiring, tampering, and independent signature fixtures. |
+| `signerl_c14n_interop_SUITE.erl` | 9 | Compare production parsing/canonicalization with `xmllint --c14n11`; Unicode and content preservation also cover `--exc-c14n`. |
+| `signerl_xml_SUITE.erl` | 6 | Real file export/read-back, Unicode, unsupported encodings, and missing files using CT's isolated `priv_dir`. |
 
-Total: **174 EUnit + 69 Common Test = 243 cases**. See the
+Total: **195 EUnit + 74 Common Test = 269 cases**. See the
 [migration log and case map](../docs/implementations/test_organization_2026-10-04.md)
 for the earlier suite locations and the
 [fixture cleanup log](../docs/implementations/test_fixtures_2026-10-04.md)
@@ -39,6 +39,19 @@ text/attributes, Unicode XML names, direct export, public `sign/3`/`sign/4` with
 binary/file inputs, verification with and without a declaration/BOM, and a
 Unicode mutation after successful verification. Encoding rejection covers
 unsupported declarations, UTF-16 bytes, and malformed UTF-8 sequences.
+
+Content-preservation regressions cover whitespace-only and mixed text, CDATA,
+`xml:space`, literal line-ending normalization versus character references, and
+attribute/text export round trips. Export tests also verify nested/sibling ordering
+and a 10,000-level tree. Public signing tests verify the untouched binary signature
+before mutating separating whitespace, mixed text, attribute controls, and a text
+CR. A single positive file-path verification covers that entry point; mutations
+are not repeated for the shared parser. Processing instructions are rejected
+before, inside, and after the root; PI-looking CDATA/comment text is not mistaken for an instruction.
+The interoperability fixture compares original and exported bytes through
+`xmllint` in both supported canonicalization modes. On Windows, the helper undoes
+only C stdio's LF-to-CRLF output translation before comparing bytes; fixture and
+production output bytes are untouched, and XML CR values remain `&#xD;`.
 
 ## Run the tests
 
@@ -73,7 +86,7 @@ Before pushing, run native `rebar3 flint`, `rebar3 dialyzer`, and `rebar3 tall`
 as required by [AGENTS.md](../AGENTS.md). `tall` includes `test`, lint, Xref, and
 Dialyzer. GitHub Actions runs the same gate on OTP 26/27/28 across Ubuntu and
 Windows. All six jobs must pass on the latest PR commit before merging.
-`xmllint` is required for the seven interoperability comparisons; an unavailable
+`xmllint` is required for the nine interoperability comparisons; an unavailable
 tool skips that group, which is not a complete validation run. Install it locally;
 Linux CI installs it automatically.
 
@@ -194,7 +207,8 @@ for the clean/warm checks and lint failure probes.
   reconstruction before the mutation. Binary replacements must match once;
   tree mutations must change their target.
 - Verifier tests retain the original unsigned tree rather than reparsing it
-  with `parse_file/1` whitespace normalization. Changing SignedInfo's
+  through a separate parsing policy. Both parser entry points now preserve
+  whitespace identically. Changing SignedInfo's
   canonicalization leaves reference digests valid but invalidates the existing
   signature bytes; a separate fixture tests genuine Exclusive C14N signing.
 - `examples/independent/` contains signatures created by `xmlsec1`, alongside
