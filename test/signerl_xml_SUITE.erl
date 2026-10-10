@@ -16,7 +16,8 @@ all() ->
         file_and_binary_preserve_content,
         file_rejects_processing_instruction,
         external_file_entities_are_rejected,
-        external_http_entities_are_rejected
+        external_http_entities_are_rejected,
+        fresh_xml_names_do_not_grow_atoms
     ].
 
 to_file_writes_and_reads_back(Config) ->
@@ -24,14 +25,14 @@ to_file_writes_and_reads_back(Config) ->
     OutPath = filename:join(PrivDir, "to_file_test.xml"),
     Prolog = ["<?xml version=\"1.0\" encoding=\"UTF-8\"?>"],
     Root = signerl_xml:parse_file(signerl_utils:file_path("test/examples/base/books.xml")),
-    ?assertMatch({library, [{id, "112233"}], ["\n    ", {book, _, _} | _]}, Root),
+    ?assertMatch({<<"library">>, [{<<"id">>, "112233"}], ["\n    ", {<<"book">>, _, _} | _]}, Root),
     Binary = signerl_xml:export(Prolog, Root),
     ok = signerl_xml:to_file(OutPath, Binary),
     ReadBack = signerl_xml:parse_file(OutPath),
     ?assertEqual(Root, ReadBack).
 
 utf8_file_roundtrip(Config) ->
-    Root = {root, [{value, "café ő 東京 😀"}], ["café ő 東京 😀"]},
+    Root = {<<"root">>, [{<<"value">>, "café ő 東京 😀"}], ["café ő 東京 😀"]},
     Binary = signerl_xml:export(["<?xml version='1.0' encoding='UTF-8'?>"], Root),
     Path = filename:join(?config(priv_dir, Config), "utf8.xml"),
     ok = signerl_xml:to_file(Path, Binary),
@@ -121,3 +122,64 @@ http_canary(Listen, Owner, Ref) ->
         {error, closed} ->
             ok
     end.
+
+fresh_xml_names_do_not_grow_atoms(_Config) ->
+    Key = signerl_cert_helpers:signer_rsa_key(),
+    PublicKey = signerl_cert_helpers:rsa_public_key_from_cert(
+        signerl_cert_helpers:signer_rsa_cert_path()
+    ),
+    % A fresh VM keeps other tests/module loading out of the atom-count measurement.
+    {ok, Peer, _} = peer:start_link(#{
+        connection => standard_io,
+        args => [
+            "+S",
+            "2:2",
+            "-enable-feature",
+            "maybe_expr",
+            "-pa",
+            code:lib_dir(signerl, ebin),
+            filename:dirname(code:which(?MODULE))
+        ]
+    }),
+    try
+        Growth = peer:call(Peer, ?MODULE, atom_name_probe, [Key, PublicKey], 20000),
+        ?assertEqual([0, 0], Growth)
+    after
+        peer:stop(Peer)
+    end.
+
+atom_name_probe(Key, PublicKey) ->
+    atom_name_batch(lists:seq(1, 5), Key, PublicKey),
+    Before = erlang:system_info(atom_count),
+    atom_name_batch(lists:seq(10, 34), Key, PublicKey),
+    erlang:garbage_collect(),
+    AfterFirst = erlang:system_info(atom_count),
+    atom_name_batch(lists:seq(35, 59), Key, PublicKey),
+    erlang:garbage_collect(),
+    AfterSecond = erlang:system_info(atom_count),
+    [AfterFirst - Before, AfterSecond - AfterFirst].
+
+atom_name_batch(Numbers, Key, PublicKey) ->
+    lists:foreach(fun(N) -> probe_xml_name(N, Key, PublicKey) end, Numbers).
+
+probe_xml_name(N, Key, PublicKey) ->
+    Suffix = integer_to_binary(N),
+    Name = <<"node_", Suffix/binary>>,
+    Prefix = <<"p_", Suffix/binary>>,
+    Attr = <<"attr_", Suffix/binary>>,
+    Child = <<Prefix/binary, ":child_", Suffix/binary>>,
+    Property = <<Prefix/binary, ":property_", Suffix/binary>>,
+    Xml =
+        <<"<?xml version='1.0'?><", Name/binary, " xmlns:", Prefix/binary, "='urn:probe' ",
+            Attr/binary, "='v'><", Child/binary, " ", Property/binary, "='w'/></", Name/binary,
+            ">">>,
+    {ok, Parsed} = signerl_xml:parse_binary(Xml),
+    {ok, Parsed} = signerl_xml:parse_binary(signerl_xml:export([], Parsed)),
+    _ = signerl_c14n:canonicalize(Parsed, c14n11),
+    _ = signerl_c14n:canonicalize(Parsed, exc_c14n),
+    Signed = signerl:sign(Xml, sha256, Key),
+    true = signerl:verify(Signed, sha256, PublicKey),
+    {error, invalid_xml} = signerl_xml:parse_binary(
+        <<"<broken_", Suffix/binary, "/>trailing garbage">>
+    ),
+    ok.

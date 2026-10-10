@@ -9,16 +9,16 @@
 -spec find_signed_signature_properties(SignatureElement) -> Result when
     SignatureElement :: signerl_xml:simplified_xml(),
     Result :: {ok, signerl_xml:simplified_xml()} | {error, missing_element}.
-find_signed_signature_properties({'ds:Signature', Attrs, SignatureContent}) ->
+find_signed_signature_properties({<<"ds:Signature">>, Attrs, SignatureContent}) ->
     case
         signerl_xml:find_path(
             [
-                'ds:Object',
-                'xades:QualifyingProperties',
-                'xades:SignedProperties',
-                'xades:SignedSignatureProperties'
+                <<"ds:Object">>,
+                <<"xades:QualifyingProperties">>,
+                <<"xades:SignedProperties">>,
+                <<"xades:SignedSignatureProperties">>
             ],
-            {'ds:Signature', Attrs, SignatureContent}
+            {<<"ds:Signature">>, Attrs, SignatureContent}
         )
     of
         {ok, _} = Ok ->
@@ -32,16 +32,16 @@ find_signed_signature_properties(_) ->
 -spec find_signed_data_object_properties(SignatureElement) -> Result when
     SignatureElement :: signerl_xml:simplified_xml(),
     Result :: {ok, signerl_xml:simplified_xml()} | {error, missing_element}.
-find_signed_data_object_properties({'ds:Signature', Attrs, SignatureContent}) ->
+find_signed_data_object_properties({<<"ds:Signature">>, Attrs, SignatureContent}) ->
     case
         signerl_xml:find_path(
             [
-                'ds:Object',
-                'xades:QualifyingProperties',
-                'xades:SignedProperties',
-                'xades:SignedDataObjectProperties'
+                <<"ds:Object">>,
+                <<"xades:QualifyingProperties">>,
+                <<"xades:SignedProperties">>,
+                <<"xades:SignedDataObjectProperties">>
             ],
-            {'ds:Signature', Attrs, SignatureContent}
+            {<<"ds:Signature">>, Attrs, SignatureContent}
         )
     of
         {ok, _} = Ok ->
@@ -55,18 +55,18 @@ find_signed_data_object_properties(_) ->
 -spec find_signed_properties_element(SignatureElement) -> Result when
     SignatureElement :: signerl_xml:simplified_xml(),
     Result :: {ok, signerl_xml:simplified_xml()} | {error, missing_element}.
-find_signed_properties_element({'ds:Signature', _, _} = SignatureElement) ->
+find_signed_properties_element({<<"ds:Signature">>, _, _} = SignatureElement) ->
     case
         signerl_xml:find_path(
             [
-                'ds:Object',
-                'xades:QualifyingProperties',
-                'xades:SignedProperties'
+                <<"ds:Object">>,
+                <<"xades:QualifyingProperties">>,
+                <<"xades:SignedProperties">>
             ],
             SignatureElement
         )
     of
-        {ok, {'xades:SignedProperties', _, _} = SignedPropertiesElement} ->
+        {ok, {<<"xades:SignedProperties">>, _, _} = SignedPropertiesElement} ->
             {ok, SignedPropertiesElement};
         _ ->
             {error, missing_element}

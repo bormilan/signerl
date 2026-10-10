@@ -4,8 +4,14 @@
 
 parse_test() ->
     Path = "test/examples/base/books.xml",
-    {library, [{id, "112233"}], [
-        "\n    ", {book, _, _}, "\n    ", {book, _, _}, "\n    ", {book, _, _}, "\n"
+    {<<"library">>, [{<<"id">>, "112233"}], [
+        "\n    ",
+        {<<"book">>, _, _},
+        "\n    ",
+        {<<"book">>, _, _},
+        "\n    ",
+        {<<"book">>, _, _},
+        "\n"
     ]} = signerl_xml:parse_file(Path).
 
 add_new_test() ->
@@ -13,11 +19,11 @@ add_new_test() ->
         <<"<library id='112233'> before <book/> after </library>">>
     ),
     Expected =
-        {library, [{id, "112233"}], [
+        {<<"library">>, [{<<"id">>, "112233"}], [
             " before ",
-            {book, [], []},
+            {<<"book">>, [], []},
             " after ",
-            {book, [{id, "4"}], [{title, [], ["My new book"]}]}
+            {<<"book">>, [{<<"id">>, "4"}], [{<<"title">>, [], ["My new book"]}]}
         ]},
     ?assertEqual(Expected, signerl_xml:add_new_element(new_test_element(), Root)).
 
@@ -32,11 +38,11 @@ export_test() ->
 
 export_nested_content_order_test() ->
     Root =
-        {root, [{id, "a&b"}], [
+        {<<"root">>, [{<<"id">>, "a&b"}], [
             "before ",
-            {outer, [], ["left ", {inner, [], ["<&>"]}, " right"]},
+            {<<"outer">>, [], ["left ", {<<"inner">>, [], ["<&>"]}, " right"]},
             " between ",
-            {empty, [{value, "\t"}], []},
+            {<<"empty">>, [{<<"value">>, "\t"}], []},
             " after"
         ]},
     Expected = <<
@@ -51,8 +57,8 @@ export_nested_content_order_test() ->
 export_deep_tree_test() ->
     Depth = 10000,
     Root = lists:foldl(
-        fun(_, Child) -> {branch, [], [Child]} end,
-        {leaf, [], ["end<&>"]},
+        fun(_, Child) -> {<<"branch">>, [], [Child]} end,
+        {<<"leaf">>, [], ["end<&>"]},
         lists:seq(1, Depth)
     ),
     Expected = iolist_to_binary([
@@ -97,38 +103,37 @@ parse_prolog_only_extracts_declaration_test() ->
 
 find_path_success_test() ->
     Root = test_helpers:signature_element([
-        {'xades:SigningTime', [], ["2026-01-01T00:00:00Z"]}
+        {<<"xades:SigningTime">>, [], ["2026-01-01T00:00:00Z"]}
     ]),
     ?assertMatch(
-        {ok, {'xades:SigningTime', _, _}},
+        {ok, {<<"xades:SigningTime">>, _, _}},
         signerl_xml:find_path(
             [
-                'ds:Object',
-                'xades:QualifyingProperties',
-                'xades:SignedProperties',
-                'xades:SignedSignatureProperties',
-                'xades:SigningTime'
+                <<"ds:Object">>,
+                <<"xades:QualifyingProperties">>,
+                <<"xades:SignedProperties">>,
+                <<"xades:SignedSignatureProperties">>,
+                <<"xades:SigningTime">>
             ],
             Root
         )
     ).
 
-find_path_errors_on_missing_or_ambiguous_nodes_test() ->
-    MissingRoot = {'ds:Signature', [], []},
-    ?assertEqual({error, not_found}, signerl_xml:find_path(['ds:Object'], MissingRoot)),
-    AmbiguousRoot = {
-        'ds:Signature',
-        [],
-        [
-            {'ds:Object', [], []},
-            {'ds:Object', [], []}
+find_path_errors_on_missing_or_ambiguous_nodes_test_() ->
+    [
+        {Name, ?_assertEqual({error, not_found}, signerl_xml:find_path([<<"ds:Object">>], Root))}
+     || {Name, Root} <- [
+            {"missing", {<<"ds:Signature">>, [], []}},
+            {"ambiguous",
+                {<<"ds:Signature">>, [], [
+                    {<<"ds:Object">>, [], []}, {<<"ds:Object">>, [], []}
+                ]}}
         ]
-    },
-    ?assertEqual({error, not_found}, signerl_xml:find_path(['ds:Object'], AmbiguousRoot)).
+    ].
 
 single_text_test_() ->
     [
-        {Name, ?_assertEqual(Expected, signerl_xml:single_text({tag, [], Content}))}
+        {Name, ?_assertEqual(Expected, signerl_xml:single_text({<<"tag">>, [], Content}))}
      || {Name, Content, Expected} <- [
             {"binary", [<<"abc">>], {ok, <<"abc">>}},
             {"byte list", ["abc"], {ok, <<"abc">>}},
@@ -141,10 +146,10 @@ export_fragment_exact_xml_test_() ->
     [
         {Name, ?_assertEqual(Expected, signerl_xml:export_fragment(Element))}
      || {Name, Element, Expected} <- [
-            {"text content", {tag, [], ["content"]},
+            {"text content", {<<"tag">>, [], ["content"]},
                 <<"<?xml version=\"1.0\"?><tag>content</tag>">>},
-            {"empty element", {tag, [], []}, <<"<?xml version=\"1.0\"?><tag/>">>},
-            {"escaped attribute and text", {tag, [{id, "a&b"}], ["<value>"]},
+            {"empty element", {<<"tag">>, [], []}, <<"<?xml version=\"1.0\"?><tag/>">>},
+            {"escaped attribute and text", {<<"tag">>, [{<<"id">>, "a&b"}], ["<value>"]},
                 <<"<?xml version=\"1.0\"?><tag id=\"a&amp;b\">&lt;value&gt;</tag>">>}
         ]
     ].
@@ -152,27 +157,29 @@ export_fragment_exact_xml_test_() ->
 %% Utils
 
 new_test_element() ->
-    NewTag = book,
-    NewAttrs = [{id, "4"}],
-    NewContent = [{title, [], ["My new book"]}],
+    NewTag = <<"book">>,
+    NewAttrs = [{<<"id">>, "4"}],
+    NewContent = [{<<"title">>, [], ["My new book"]}],
     {NewTag, NewAttrs, NewContent}.
 
 is_signature_element_shared_test() ->
-    SigElement = {'ds:Signature', [], []},
-    NonSigElement = {'ds:SignedInfo', [], []},
+    SigElement = {<<"ds:Signature">>, [], []},
+    NonSigElement = {<<"ds:SignedInfo">>, [], []},
     ?assertEqual(true, signerl_xml:is_signature_element(SigElement)),
     ?assertEqual(false, signerl_xml:is_signature_element(NonSigElement)),
     ?assertEqual(false, signerl_xml:is_signature_element("text")).
 
 unicode_export_roundtrip_test() ->
-    Root = {root, [{value, "café árvíztűrő 東京 😀"}], ["café árvíztűrő 東京 😀"]},
+    Root = {<<"root">>, [{<<"value">>, "café árvíztűrő 東京 😀"}], ["café árvíztűrő 東京 😀"]},
     Prolog = ["<?xml version=\"1.0\" encoding=\"UTF-8\"?>"],
     Expected = <<"café árvíztűrő 東京 😀"/utf8>>,
     lists:foreach(
         fun(Binary) -> assert_export_roundtrip(Root, Expected, Binary) end,
         [signerl_xml:export(Prolog, Root), signerl_xml:export_fragment(Root)]
     ),
-    ?assertEqual({ok, Expected}, signerl_xml:single_text({root, [], ["café árvíztűrő 東京 😀"]})).
+    ?assertEqual(
+        {ok, Expected}, signerl_xml:single_text({<<"root">>, [], ["café árvíztűrő 東京 😀"]})
+    ).
 
 utf8_declaration_test_() ->
     [
@@ -213,7 +220,7 @@ export_rejects_unsupported_encoding_test() ->
         error,
         _,
         signerl_xml:export(
-            ["<?xml version='1.0' encoding='ISO-8859-1'?>"], {root, [], ["café"]}
+            ["<?xml version='1.0' encoding='ISO-8859-1'?>"], {<<"root">>, [], ["café"]}
         )
     ).
 
@@ -241,7 +248,10 @@ preserve_character_content_test_() ->
     ].
 
 export_preserves_character_references_test() ->
-    Root = {root, [{tab, "x\ty"}, {lf, "x\ny"}, {cr, "x\ry"}, {literal, "&#x9;"}], ["t\rt<&>"]},
+    Root =
+        {<<"root">>,
+            [{<<"tab">>, "x\ty"}, {<<"lf">>, "x\ny"}, {<<"cr">>, "x\ry"}, {<<"literal">>, "&#x9;"}],
+            ["t\rt<&>"]},
     ExpectedBody = <<
         "<root tab=\"x&#x9;y\" lf=\"x&#xA;y\" cr=\"x&#xD;y\" literal=\"&amp;#x9;\">"
         "t&#xD;t&lt;&amp;&gt;</root>"
@@ -265,11 +275,11 @@ reject_processing_instructions_test_() ->
 
 processing_instruction_text_is_not_an_instruction_test() ->
     ?assertEqual(
-        {ok, {root, [], ["<?report preserved?>"]}},
+        {ok, {<<"root">>, [], ["<?report preserved?>"]}},
         signerl_xml:parse_binary(<<"<root><![CDATA[<?report preserved?>]]></root>">>)
     ),
     ?assertEqual(
-        {ok, {root, [], ["text"]}},
+        {ok, {<<"root">>, [], ["text"]}},
         signerl_xml:parse_binary(<<"<root><!-- <?report preserved?> -->text</root>">>)
     ).
 
@@ -279,7 +289,7 @@ trailing_misc_test_() ->
      || {Name, Xml, Expected} <- [
             {"trailing comments and whitespace",
                 <<"<root><a/></root> \t\r\n<!-- preserved profile omits comments -->">>,
-                {ok, {root, [], [{a, [], []}]}}},
+                {ok, {<<"root">>, [], [{<<"a">>, [], []}]}}},
             {"second root", <<"<root><a/></root><other/>">>, {error, invalid_xml}},
             {"trailing declaration", <<"<root><a/></root><?xml version='1.0'?>">>,
                 {error, invalid_xml}},
@@ -288,7 +298,7 @@ trailing_misc_test_() ->
             {"second root after empty root", <<"<root/><extra/>">>, {error, invalid_xml}},
             {"trailing text after empty root", <<"<root/>not XML">>, {error, invalid_xml}},
             {"comments after empty root", <<"<root/> \t\r\n<!-- <extra/> -->">>,
-                {ok, {root, [], []}}},
+                {ok, {<<"root">>, [], []}}},
             {"garbage after a comment", <<"<root/><!-- fine -->not XML">>, {error, invalid_xml}},
             {"unterminated comment", <<"<root><a/></root><!-- unfinished">>, {error, invalid_xml}},
             {"invalid comment separator", <<"<root/><!-- invalid -- separator -->">>,
@@ -347,7 +357,7 @@ predefined_entities_and_character_references_test() ->
             "&lt;&gt;&amp;&quot;&apos;&#65;&#x1F600;&amp;unknown;</root>"
         >>,
     ?assertEqual(
-        {ok, {root, [{value, "<>&\"'A😀"}], ["<>&\"'A😀&unknown;"]}},
+        {ok, {<<"root">>, [{<<"value">>, "<>&\"'A😀"}], ["<>&\"'A😀&unknown;"]}},
         signerl_xml:parse_binary(Xml)
     ).
 
@@ -359,6 +369,27 @@ dtd_looking_text_is_not_a_declaration_test() ->
             "<!-- <!DOCTYPE root> -->"
         >>,
     ?assertEqual(
-        {ok, {root, [], ["<!DOCTYPE root [<!ENTITY value 'text'>]>"]}},
+        {ok, {<<"root">>, [], ["<!DOCTYPE root [<!ENTITY value 'text'>]>"]}},
         signerl_xml:parse_binary(Xml)
     ).
+
+xml_names_are_utf8_binaries_test() ->
+    Xml =
+        <<
+            "<ár xmlns='urn:default' xmlns:ő='urn:prefixed' érték='v'>"/utf8,
+            "<ő:東京 ő:érték='w'/></ár>"/utf8
+        >>,
+    Expected =
+        {<<"ár"/utf8>>,
+            [
+                {<<"xmlns">>, "urn:default"},
+                {<<"xmlns:ő"/utf8>>, "urn:prefixed"},
+                {<<"érték"/utf8>>, "v"}
+            ],
+            [{<<"ő:東京"/utf8>>, [{<<"ő:érték"/utf8>>, "w"}], []}]},
+    ?assertEqual({ok, Expected}, signerl_xml:parse_binary(Xml)).
+
+xml_name_longer_than_atom_limit_test() ->
+    Name = binary:copy(<<"n">>, 300),
+    Xml = <<"<", Name/binary, " ", Name/binary, "='v'/>">>,
+    ?assertEqual({ok, {Name, [{Name, "v"}], []}}, signerl_xml:parse_binary(Xml)).

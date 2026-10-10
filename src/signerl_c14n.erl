@@ -25,7 +25,7 @@ remove_signature_elements({Tag, Attrs, Children}) ->
 %% ====================================================================
 
 c14n11_element({Tag, Attrs, Children}, ParentNs) ->
-    TagStr = atom_to_list(Tag),
+    TagStr = unicode:characters_to_list(Tag),
     {NsDecls, RegularAttrs} = partition_attrs(Attrs),
     CurrentNs = merge_namespaces(ParentNs, NsDecls),
     NewNsDecls = new_namespace_decls(ParentNs, NsDecls),
@@ -45,7 +45,7 @@ c14n11_child(Text, _Ns) when is_binary(Text) -> escape_text(unicode:characters_t
 %% ====================================================================
 
 exc_element({Tag, Attrs, Children}, InputParentNs, OutputParentNs) ->
-    TagStr = atom_to_list(Tag),
+    TagStr = unicode:characters_to_list(Tag),
     {NsDecls, RegularAttrs} = partition_attrs(Attrs),
     InputNs = merge_namespaces(InputParentNs, NsDecls),
     VisiblyUsed = visibly_used_prefixes(TagStr, RegularAttrs),
@@ -87,7 +87,7 @@ partition_attrs(Attrs) ->
 partition_attrs([], NsAcc, RegAcc) ->
     {lists:reverse(NsAcc), lists:reverse(RegAcc)};
 partition_attrs([{Name, Value} | Rest], NsAcc, RegAcc) ->
-    NameStr = atom_to_list(Name),
+    NameStr = unicode:characters_to_list(Name),
     case is_ns_decl(NameStr) of
         true ->
             partition_attrs(Rest, [{NameStr, Value} | NsAcc], RegAcc);

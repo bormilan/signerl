@@ -90,35 +90,36 @@ decode_signature_data(SignatureElement, UnsignedMessage) ->
         }}
     end.
 
-signature_value({'ds:Signature', _, _} = SignatureElement) ->
-    decode_signature_value(signerl_xml:find_path(['ds:SignatureValue'], SignatureElement)).
+signature_value({<<"ds:Signature">>, _, _} = SignatureElement) ->
+    decode_signature_value(signerl_xml:find_path([<<"ds:SignatureValue">>], SignatureElement)).
 
-decode_signature_value({ok, {'ds:SignatureValue', _, [SignatureValue]}}) ->
+decode_signature_value({ok, {<<"ds:SignatureValue">>, _, [SignatureValue]}}) ->
     decode_base64_binary(SignatureValue);
-decode_signature_value({ok, {'ds:SignatureValue', _, _}}) ->
+decode_signature_value({ok, {<<"ds:SignatureValue">>, _, _}}) ->
     {error, missing_signature_value};
 decode_signature_value({error, not_found}) ->
     {error, missing_signature_value}.
 
-signed_info_element({'ds:Signature', _, _} = SignatureElement) ->
-    case signerl_xml:find_path(['ds:SignedInfo'], SignatureElement) of
-        {ok, {'ds:SignedInfo', _, _} = SignedInfoElement} ->
+signed_info_element({<<"ds:Signature">>, _, _} = SignatureElement) ->
+    case signerl_xml:find_path([<<"ds:SignedInfo">>], SignatureElement) of
+        {ok, {<<"ds:SignedInfo">>, _, _} = SignedInfoElement} ->
             {ok, SignedInfoElement};
         _ ->
             {error, missing_signed_info}
     end.
 
-signed_info_references({'ds:SignedInfo', _, _} = SignedInfoElement) ->
-    {'ds:SignedInfo', _, SignedInfoContent} = SignedInfoElement,
+signed_info_references({<<"ds:SignedInfo">>, _, _} = SignedInfoElement) ->
+    {<<"ds:SignedInfo">>, _, SignedInfoContent} = SignedInfoElement,
     maybe
-        {ok, {'ds:CanonicalizationMethod', C14NAttrs, _}} ?=
-            signerl_xml:find_path(['ds:CanonicalizationMethod'], SignedInfoElement),
-        {ok, C14NAlgorithm} ?= signerl_xml:attr_value('Algorithm', C14NAttrs),
-        {ok, {'ds:SignatureMethod', SignatureMethodAttrs, _}} ?=
-            signerl_xml:find_path(['ds:SignatureMethod'], SignedInfoElement),
-        {ok, SignatureMethodAlgorithm} ?= signerl_xml:attr_value('Algorithm', SignatureMethodAttrs),
+        {ok, {<<"ds:CanonicalizationMethod">>, C14NAttrs, _}} ?=
+            signerl_xml:find_path([<<"ds:CanonicalizationMethod">>], SignedInfoElement),
+        {ok, C14NAlgorithm} ?= signerl_xml:attr_value(<<"Algorithm">>, C14NAttrs),
+        {ok, {<<"ds:SignatureMethod">>, SignatureMethodAttrs, _}} ?=
+            signerl_xml:find_path([<<"ds:SignatureMethod">>], SignedInfoElement),
+        {ok, SignatureMethodAlgorithm} ?=
+            signerl_xml:attr_value(<<"Algorithm">>, SignatureMethodAttrs),
         ReferenceElements =
-            [Element || Element = {'ds:Reference', _, _} <- SignedInfoContent],
+            [Element || Element = {<<"ds:Reference">>, _, _} <- SignedInfoContent],
         {ok, DocumentReference, SignedPropertiesReference} ?=
             decode_reference_elements(ReferenceElements),
         {ok, #{
@@ -136,14 +137,14 @@ decode_reference_elements(ReferenceElements) ->
     DocumentReferences =
         [
             Reference
-         || Reference = {'ds:Reference', Attrs, _} <- ReferenceElements,
-            signerl_xml:attr_value('URI', Attrs) =:= {ok, ""}
+         || Reference = {<<"ds:Reference">>, Attrs, _} <- ReferenceElements,
+            signerl_xml:attr_value(<<"URI">>, Attrs) =:= {ok, ""}
         ],
     SignedPropertiesReferences =
         [
             Reference
-         || Reference = {'ds:Reference', Attrs, _} <- ReferenceElements,
-            signerl_xml:attr_value('URI', Attrs) =:= {ok, "#" ++ ?SIGNED_PROPERTIES_ID}
+         || Reference = {<<"ds:Reference">>, Attrs, _} <- ReferenceElements,
+            signerl_xml:attr_value(<<"URI">>, Attrs) =:= {ok, "#" ++ ?SIGNED_PROPERTIES_ID}
         ],
     case {DocumentReferences, SignedPropertiesReferences} of
         {[DocumentReferenceElement], [SignedPropertiesReferenceElement]} ->
@@ -157,20 +158,21 @@ decode_reference_elements(ReferenceElements) ->
             {error, invalid_reference}
     end.
 
-decode_reference({'ds:Reference', Attrs, ReferenceContent}) ->
-    ReferenceElement = {'ds:Reference', [], ReferenceContent},
+decode_reference({<<"ds:Reference">>, Attrs, ReferenceContent}) ->
+    ReferenceElement = {<<"ds:Reference">>, [], ReferenceContent},
     maybe
-        {ok, Uri} ?= signerl_xml:attr_value('URI', Attrs),
+        {ok, Uri} ?= signerl_xml:attr_value(<<"URI">>, Attrs),
         {ok, TransformUris} ?= transform_uris(ReferenceElement),
-        {ok, DigestMethodElement} ?= signerl_xml:find_path(['ds:DigestMethod'], ReferenceElement),
+        {ok, DigestMethodElement} ?=
+            signerl_xml:find_path([<<"ds:DigestMethod">>], ReferenceElement),
         {ok, DigestMethodUri} ?=
-            signerl_xml:attr_value('Algorithm', element(2, DigestMethodElement)),
-        {ok, DigestValueElement} ?= signerl_xml:find_path(['ds:DigestValue'], ReferenceElement),
+            signerl_xml:attr_value(<<"Algorithm">>, element(2, DigestMethodElement)),
+        {ok, DigestValueElement} ?= signerl_xml:find_path([<<"ds:DigestValue">>], ReferenceElement),
         {ok, DigestValueText} ?= signerl_xml:single_text(DigestValueElement),
         {ok, DigestValue} ?= decode_base64_binary(DigestValueText),
         {ok, #{
             uri => Uri,
-            type => signerl_xml:attr_value_or_undefined('Type', Attrs),
+            type => signerl_xml:attr_value_or_undefined(<<"Type">>, Attrs),
             transforms => TransformUris,
             digest_method => DigestMethodUri,
             digest_value => DigestValue
@@ -181,8 +183,8 @@ decode_reference({'ds:Reference', Attrs, ReferenceContent}) ->
     end.
 
 transform_uris(ReferenceElement) ->
-    case signerl_xml:find_path(['ds:Transforms'], ReferenceElement) of
-        {ok, {'ds:Transforms', _, TransformElements}} ->
+    case signerl_xml:find_path([<<"ds:Transforms">>], ReferenceElement) of
+        {ok, {<<"ds:Transforms">>, _, TransformElements}} ->
             decode_transform_uris(TransformElements, []);
         {error, not_found} ->
             {ok, []}
@@ -190,8 +192,8 @@ transform_uris(ReferenceElement) ->
 
 decode_transform_uris([], Acc) ->
     {ok, lists:reverse(Acc)};
-decode_transform_uris([{'ds:Transform', Attrs, []} | Rest], Acc) ->
-    case signerl_xml:attr_value('Algorithm', Attrs) of
+decode_transform_uris([{<<"ds:Transform">>, Attrs, []} | Rest], Acc) ->
+    case signerl_xml:attr_value(<<"Algorithm">>, Attrs) of
         {ok, Algorithm} ->
             decode_transform_uris(Rest, [Algorithm | Acc]);
         {error, _} = Err ->
@@ -273,7 +275,7 @@ c14n_mode(_) ->
     c14n11.
 
 extract_key_info(SignatureElement) ->
-    case signerl_xml:find_path(['ds:KeyInfo'], SignatureElement) of
+    case signerl_xml:find_path([<<"ds:KeyInfo">>], SignatureElement) of
         {ok, KeyInfoElement} ->
             extract_x509_certificate(KeyInfoElement);
         {error, not_found} ->
@@ -283,7 +285,7 @@ extract_key_info(SignatureElement) ->
 extract_x509_certificate(KeyInfoElement) ->
     maybe
         {ok, {_, _, [CertB64]}} ?=
-            signerl_xml:find_path(['ds:X509Data', 'ds:X509Certificate'], KeyInfoElement),
+            signerl_xml:find_path([<<"ds:X509Data">>, <<"ds:X509Certificate">>], KeyInfoElement),
         true ?= is_list(CertB64),
         {ok, CertDer} ?= decode_base64_binary(list_to_binary(CertB64)),
         #{x509_certificate => CertDer}

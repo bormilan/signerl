@@ -26,11 +26,11 @@ add_signature_element_inserts_signature_value(Config) ->
     ),
     SignedMessage = signerl_xml:add_new_element(SignatureElement, Message),
     ?assertMatch(
-        {ok, {'ds:SignatureValue', [], [_]}},
+        {ok, {<<"ds:SignatureValue">>, [], [_]}},
         signerl_xml:find_path(
             [
-                'ds:Signature',
-                'ds:SignatureValue'
+                <<"ds:Signature">>,
+                <<"ds:SignatureValue">>
             ],
             SignedMessage
         )
@@ -53,12 +53,12 @@ add_signature_element_inserts_signed_properties(Config) ->
     ?assertMatch({_, _}, binary:match(SignedMessageBin, <<"<xades:SigningTime>">>)),
     {ok, SigningTimeElement} = signerl_xml:find_path(
         [
-            'ds:Signature',
-            'ds:Object',
-            'xades:QualifyingProperties',
-            'xades:SignedProperties',
-            'xades:SignedSignatureProperties',
-            'xades:SigningTime'
+            <<"ds:Signature">>,
+            <<"ds:Object">>,
+            <<"xades:QualifyingProperties">>,
+            <<"xades:SignedProperties">>,
+            <<"xades:SignedSignatureProperties">>,
+            <<"xades:SigningTime">>
         ],
         SignedMessage
     ),
@@ -123,5 +123,6 @@ builder_fixture() ->
 
 assert_has_signed_info(SignatureElement) ->
     ?assertMatch(
-        {ok, {'ds:SignedInfo', _, _}}, signerl_xml:find_path(['ds:SignedInfo'], SignatureElement)
+        {ok, {<<"ds:SignedInfo">>, _, _}},
+        signerl_xml:find_path([<<"ds:SignedInfo">>], SignatureElement)
     ).

@@ -44,7 +44,7 @@ construct_signature_without_value(
     ),
     KeyInfoElement = key_info(CertDer),
     SignatureElement =
-        {'ds:Signature', [{'xmlns:ds', ?DSIG_NAMESPACE_URI}, {'Id', ?SIGNATURE_ID}],
+        {<<"ds:Signature">>, [{<<"xmlns:ds">>, ?DSIG_NAMESPACE_URI}, {<<"Id">>, ?SIGNATURE_ID}],
             [SignedInfo] ++ KeyInfoElement ++ [signature_object(SignedProperties)]},
     {ok, SignatureElement, SignedInfo}.
 
@@ -52,7 +52,11 @@ key_info(undefined) ->
     [];
 key_info(CertDer) when is_binary(CertDer) ->
     CertB64 = binary_to_list(base64:encode(CertDer)),
-    [{'ds:KeyInfo', [], [{'ds:X509Data', [], [{'ds:X509Certificate', [], [CertB64]}]}]}].
+    [
+        {<<"ds:KeyInfo">>, [], [
+            {<<"ds:X509Data">>, [], [{<<"ds:X509Certificate">>, [], [CertB64]}]}
+        ]}
+    ].
 
 signed_info(Message, SignedProperties, HashAlgorithm, DigestMethodUri, SignatureMethodUri) ->
     MessageDigest = signerl_dsig_utils:digest_base64(
@@ -62,18 +66,19 @@ signed_info(Message, SignedProperties, HashAlgorithm, DigestMethodUri, Signature
         signerl_dsig_utils:digest_base64(
             HashAlgorithm, signerl_c14n:canonicalize(SignedProperties)
         ),
-    DigestMethodElement = {'ds:DigestMethod', [{'Algorithm', DigestMethodUri}], []},
-    MessageDigestElement = {'ds:DigestValue', [], [binary_to_list(MessageDigest)]},
+    DigestMethodElement = digest_method_element(DigestMethodUri),
+    MessageDigestElement = {<<"ds:DigestValue">>, [], [binary_to_list(MessageDigest)]},
     SignedPropertiesDigestElement =
-        {'ds:DigestValue', [], [binary_to_list(SignedPropertiesDigest)]},
-    {'ds:SignedInfo', [], [
-        {'ds:CanonicalizationMethod', [{'Algorithm', ?DSIG_C14N11_ALGO_URI}], []},
-        {'ds:SignatureMethod', [{'Algorithm', SignatureMethodUri}], []},
+        {<<"ds:DigestValue">>, [], [binary_to_list(SignedPropertiesDigest)]},
+    {<<"ds:SignedInfo">>, [], [
+        {<<"ds:CanonicalizationMethod">>, [{<<"Algorithm">>, ?DSIG_C14N11_ALGO_URI}], []},
+        {<<"ds:SignatureMethod">>, [{<<"Algorithm">>, SignatureMethodUri}], []},
         reference(
-            [{'URI', ""}],
+            [{<<"URI">>, ""}],
             [
-                {'ds:Transforms', [], [
-                    {'ds:Transform', [{'Algorithm', ?DSIG_ENVELOPED_SIGNATURE_TRANSFORM_URI}], []}
+                {<<"ds:Transforms">>, [], [
+                    {<<"ds:Transform">>,
+                        [{<<"Algorithm">>, ?DSIG_ENVELOPED_SIGNATURE_TRANSFORM_URI}], []}
                 ]},
                 DigestMethodElement,
                 MessageDigestElement
@@ -81,39 +86,42 @@ signed_info(Message, SignedProperties, HashAlgorithm, DigestMethodUri, Signature
         ),
         reference(
             [
-                {'URI', "#" ++ ?SIGNED_PROPERTIES_ID},
-                {'Type', ?XADES_SIGNED_PROPERTIES_TYPE_URI}
+                {<<"URI">>, "#" ++ ?SIGNED_PROPERTIES_ID},
+                {<<"Type">>, ?XADES_SIGNED_PROPERTIES_TYPE_URI}
             ],
             [DigestMethodElement, SignedPropertiesDigestElement]
         )
     ]}.
 
-reference(Attrs, Content) ->
-    {'ds:Reference', Attrs, Content}.
+digest_method_element(DigestMethodUri) ->
+    {<<"ds:DigestMethod">>, [{<<"Algorithm">>, DigestMethodUri}], []}.
 
-add_signature_value({'ds:Signature', Attrs, Content}, SignatureValue) ->
+reference(Attrs, Content) ->
+    {<<"ds:Reference">>, Attrs, Content}.
+
+add_signature_value({<<"ds:Signature">>, Attrs, Content}, SignatureValue) ->
     [SignedInfo | Rest] = Content,
-    {'ds:Signature', Attrs, [
+    {<<"ds:Signature">>, Attrs, [
         SignedInfo,
-        {'ds:SignatureValue', [], [SignatureValue]}
+        {<<"ds:SignatureValue">>, [], [SignatureValue]}
         | Rest
     ]}.
 
 signature_object(SignedProperties) ->
-    {'ds:Object', [], [
-        {'xades:QualifyingProperties',
+    {<<"ds:Object">>, [], [
+        {<<"xades:QualifyingProperties">>,
             [
-                {'xmlns:xades', ?XADES_NAMESPACE_URI},
-                {'Target', "#" ++ ?SIGNATURE_ID}
+                {<<"xmlns:xades">>, ?XADES_NAMESPACE_URI},
+                {<<"Target">>, "#" ++ ?SIGNATURE_ID}
             ],
             [SignedProperties]}
     ]}.
 
 signed_properties(SigningTime, HashAlgorithm, DigestMethodUri, CertDer) ->
-    SigningTimeElement = {'xades:SigningTime', [], [binary_to_list(SigningTime)]},
+    SigningTimeElement = {<<"xades:SigningTime">>, [], [binary_to_list(SigningTime)]},
     CertElements = signing_certificate_v2_elements(HashAlgorithm, DigestMethodUri, CertDer),
-    {'xades:SignedProperties', [{'Id', ?SIGNED_PROPERTIES_ID}], [
-        {'xades:SignedSignatureProperties', [], [SigningTimeElement | CertElements]}
+    {<<"xades:SignedProperties">>, [{<<"Id">>, ?SIGNED_PROPERTIES_ID}], [
+        {<<"xades:SignedSignatureProperties">>, [], [SigningTimeElement | CertElements]}
     ]}.
 
 signing_certificate_v2_elements(_HashAlgorithm, _DigestMethodUri, undefined) ->
@@ -122,13 +130,13 @@ signing_certificate_v2_elements(HashAlgorithm, DigestMethodUri, CertDer) ->
     CertDigestB64 = signerl_cert:cert_digest_base64(HashAlgorithm, CertDer),
     IssuerSerialB64 = signerl_cert:issuer_serial_v2_base64(CertDer),
     [
-        {'xades:SigningCertificateV2', [], [
-            {'xades:Cert', [], [
-                {'xades:CertDigest', [], [
-                    {'ds:DigestMethod', [{'Algorithm', DigestMethodUri}], []},
-                    {'ds:DigestValue', [], [binary_to_list(CertDigestB64)]}
+        {<<"xades:SigningCertificateV2">>, [], [
+            {<<"xades:Cert">>, [], [
+                {<<"xades:CertDigest">>, [], [
+                    digest_method_element(DigestMethodUri),
+                    {<<"ds:DigestValue">>, [], [binary_to_list(CertDigestB64)]}
                 ]},
-                {'xades:IssuerSerialV2', [], [binary_to_list(IssuerSerialB64)]}
+                {<<"xades:IssuerSerialV2">>, [], [binary_to_list(IssuerSerialB64)]}
             ]}
         ]}
     ].

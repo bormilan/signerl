@@ -6,7 +6,7 @@
 
 extract_accepts_binary_signing_time_test() ->
     SignatureElement = test_helpers:signature_element([
-        {'xades:SigningTime', [], [<<"2026-01-01T00:00:00Z">>]}
+        {<<"xades:SigningTime">>, [], [<<"2026-01-01T00:00:00Z">>]}
     ]),
     ?assertEqual(
         {ok, #{signing_time => <<"2026-01-01T00:00:00Z">>}},
@@ -15,7 +15,7 @@ extract_accepts_binary_signing_time_test() ->
 
 extract_returns_error_with_non_byte_list_signing_time_test() ->
     SignatureElement = test_helpers:signature_element([
-        {'xades:SigningTime', [], [[65, {invalid, [], []}]]}
+        {<<"xades:SigningTime">>, [], [[65, {invalid, [], []}]]}
     ]),
     ?assertEqual(
         {error, invalid_signing_time}, signerl_signed_properties:extract(SignatureElement)
@@ -23,7 +23,7 @@ extract_returns_error_with_non_byte_list_signing_time_test() ->
 
 extract_returns_error_with_non_text_signing_time_test() ->
     SignatureElement = test_helpers:signature_element([
-        {'xades:SigningTime', [], [123]}
+        {<<"xades:SigningTime">>, [], [123]}
     ]),
     ?assertEqual(
         {error, invalid_signing_time}, signerl_signed_properties:extract(SignatureElement)
@@ -31,8 +31,8 @@ extract_returns_error_with_non_text_signing_time_test() ->
 
 extract_returns_error_with_duplicate_signing_time_property_test() ->
     SignatureElement = test_helpers:signature_element([
-        {'xades:SigningTime', [], ["2026-01-01T00:00:00Z"]},
-        {'xades:SigningTime', [], ["2026-01-01T00:00:00Z"]}
+        {<<"xades:SigningTime">>, [], ["2026-01-01T00:00:00Z"]},
+        {<<"xades:SigningTime">>, [], ["2026-01-01T00:00:00Z"]}
     ]),
     ?assertEqual({error, duplicate_property}, signerl_signed_properties:extract(SignatureElement)).
 
@@ -74,7 +74,7 @@ extract_accepts_signing_certificate_v2_without_issuer_serial_test() ->
 
 extract_returns_error_with_empty_signing_certificate_v2_test() ->
     SignatureElement = sig_element([
-        {'xades:SigningCertificateV2', [], []}
+        {<<"xades:SigningCertificateV2">>, [], []}
     ]),
     ?assertEqual(
         {error, invalid_signing_certificate_v2},
@@ -83,9 +83,9 @@ extract_returns_error_with_empty_signing_certificate_v2_test() ->
 
 extract_returns_error_with_missing_cert_digest_test() ->
     SignatureElement = sig_element([
-        {'xades:SigningCertificateV2', [], [
-            {'xades:Cert', [], [
-                {'xades:IssuerSerialV2', [], ["AQID"]}
+        {<<"xades:SigningCertificateV2">>, [], [
+            {<<"xades:Cert">>, [], [
+                {<<"xades:IssuerSerialV2">>, [], ["AQID"]}
             ]}
         ]}
     ]),
@@ -121,10 +121,10 @@ extract_returns_error_with_duplicate_signing_certificate_v2_test() ->
 extract_returns_error_with_missing_digest_method_test() ->
     DigestB64 = binary_to_list(base64:encode(crypto:hash(sha256, <<"test">>))),
     SignatureElement = sig_element([
-        {'xades:SigningCertificateV2', [], [
-            {'xades:Cert', [], [
-                {'xades:CertDigest', [], [
-                    {'ds:DigestValue', [], [DigestB64]}
+        {<<"xades:SigningCertificateV2">>, [], [
+            {<<"xades:Cert">>, [], [
+                {<<"xades:CertDigest">>, [], [
+                    {<<"ds:DigestValue">>, [], [DigestB64]}
                 ]}
             ]}
         ]}
@@ -147,10 +147,10 @@ extract_accepts_binary_digest_value_test() ->
 extract_ignores_invalid_base64_issuer_serial_v2_test() ->
     DigestB64 = binary_to_list(base64:encode(crypto:hash(sha256, <<"test">>))),
     CertV2 =
-        {'xades:SigningCertificateV2', [], [
-            {'xades:Cert', [], [
+        {<<"xades:SigningCertificateV2">>, [], [
+            {<<"xades:Cert">>, [], [
                 cert_digest_element(DigestB64),
-                {'xades:IssuerSerialV2', [], ["not valid base64!!!"]}
+                {<<"xades:IssuerSerialV2">>, [], ["not valid base64!!!"]}
             ]}
         ]},
     SignatureElement = signature_with_cert_v2(CertV2),
@@ -177,7 +177,7 @@ extract_accepts_explicit_policy_with_digest_test() ->
 
 extract_accepts_explicit_policy_with_description_test() ->
     PolicyElement = explicit_policy_element([
-        {'xades:Description', [], ["Human-readable policy"]}
+        {<<"xades:Description">>, [], ["Human-readable policy"]}
     ]),
     SignatureElement = sig_element([PolicyElement]),
     {ok, Props} = signerl_signed_properties:extract(SignatureElement),
@@ -193,7 +193,7 @@ extract_accepts_explicit_policy_with_binary_identifier_test() ->
 
 extract_returns_error_with_empty_policy_identifier_test() ->
     SignatureElement = sig_element([
-        {'xades:SignaturePolicyIdentifier', [], []}
+        {<<"xades:SignaturePolicyIdentifier">>, [], []}
     ]),
     ?assertEqual(
         {error, invalid_signature_policy_identifier},
@@ -203,8 +203,8 @@ extract_returns_error_with_empty_policy_identifier_test() ->
 extract_returns_error_with_missing_policy_id_test() ->
     HashB64 = binary_to_list(base64:encode(<<"hash">>)),
     SignatureElement = sig_element([
-        {'xades:SignaturePolicyIdentifier', [], [
-            {'xades:SignaturePolicyId', [], [
+        {<<"xades:SignaturePolicyIdentifier">>, [], [
+            {<<"xades:SignaturePolicyId">>, [], [
                 policy_hash_element(HashB64)
             ]}
         ]}
@@ -216,8 +216,8 @@ extract_returns_error_with_missing_policy_id_test() ->
 
 extract_returns_error_with_missing_policy_hash_test() ->
     SignatureElement = sig_element([
-        {'xades:SignaturePolicyIdentifier', [], [
-            {'xades:SignaturePolicyId', [], [
+        {<<"xades:SignaturePolicyIdentifier">>, [], [
+            {<<"xades:SignaturePolicyId">>, [], [
                 policy_id_element("http://example.com/policy")
             ]}
         ]}
@@ -229,11 +229,11 @@ extract_returns_error_with_missing_policy_hash_test() ->
 
 extract_returns_error_with_malformed_policy_hash_test() ->
     SignatureElement = sig_element([
-        {'xades:SignaturePolicyIdentifier', [], [
-            {'xades:SignaturePolicyId', [], [
+        {<<"xades:SignaturePolicyIdentifier">>, [], [
+            {<<"xades:SignaturePolicyId">>, [], [
                 policy_id_element("http://example.com/policy"),
-                {'xades:SigPolicyHash', [], [
-                    {'ds:DigestValue', [], ["aGFzaA=="]}
+                {<<"xades:SigPolicyHash">>, [], [
+                    {<<"ds:DigestValue">>, [], ["aGFzaA=="]}
                 ]}
             ]}
         ]}
@@ -259,7 +259,7 @@ extract_returns_error_with_non_text_policy_identifier_test() ->
 
 extract_ignores_non_text_policy_description_test() ->
     PolicyElement = explicit_policy_element([
-        {'xades:Description', [], [12345]}
+        {<<"xades:Description">>, [], [12345]}
     ]),
     SignatureElement = sig_element([PolicyElement]),
     {ok, Props} = signerl_signed_properties:extract(SignatureElement),
@@ -268,7 +268,7 @@ extract_ignores_non_text_policy_description_test() ->
 
 extract_accepts_binary_policy_description_test() ->
     PolicyElement = explicit_policy_element([
-        {'xades:Description', [], [<<"Binary description">>]}
+        {<<"xades:Description">>, [], [<<"Binary description">>]}
     ]),
     SignatureElement = sig_element([PolicyElement]),
     {ok, Props} = signerl_signed_properties:extract(SignatureElement),
@@ -320,9 +320,9 @@ extract_accepts_empty_production_place_test() ->
 
 extract_accepts_binary_production_place_test() ->
     Place =
-        {'xades:SignatureProductionPlace', [], [
-            {'xades:City', [], [<<"Wien">>]},
-            {'xades:CountryName', [], [<<"AT">>]}
+        {<<"xades:SignatureProductionPlace">>, [], [
+            {<<"xades:City">>, [], [<<"Wien">>]},
+            {<<"xades:CountryName">>, [], [<<"AT">>]}
         ]},
     SignatureElement = sig_element([Place]),
     {ok, Props} = signerl_signed_properties:extract(SignatureElement),
@@ -333,10 +333,10 @@ extract_accepts_binary_production_place_test() ->
 
 extract_skips_non_text_place_fields_test() ->
     Place =
-        {'xades:SignatureProductionPlace', [], [
-            {'xades:City', [], ["Budapest"]},
-            {'xades:PostalCode', [], [12345]},
-            {'xades:CountryName', [], [[65, {invalid}]]}
+        {<<"xades:SignatureProductionPlace">>, [], [
+            {<<"xades:City">>, [], ["Budapest"]},
+            {<<"xades:PostalCode">>, [], [12345]},
+            {<<"xades:CountryName">>, [], [[65, {invalid}]]}
         ]},
     SignatureElement = sig_element([Place]),
     {ok, Props} = signerl_signed_properties:extract(SignatureElement),
@@ -344,9 +344,9 @@ extract_skips_non_text_place_fields_test() ->
 
 extract_skips_non_byte_list_place_fields_test() ->
     Place =
-        {'xades:SignatureProductionPlace', [], [
-            {'xades:City', [], [[65, {invalid}]]},
-            {'xades:StateOrProvince', [], [42]}
+        {<<"xades:SignatureProductionPlace">>, [], [
+            {<<"xades:City">>, [], [[65, {invalid}]]},
+            {<<"xades:StateOrProvince">>, [], [42]}
         ]},
     SignatureElement = sig_element([Place]),
     {ok, Props} = signerl_signed_properties:extract(SignatureElement),
@@ -354,9 +354,9 @@ extract_skips_non_byte_list_place_fields_test() ->
 
 extract_skips_unknown_place_elements_test() ->
     Place =
-        {'xades:SignatureProductionPlace', [], [
-            {'xades:City', [], ["Vienna"]},
-            {'xades:UnknownField', [], ["ignored"]},
+        {<<"xades:SignatureProductionPlace">>, [], [
+            {<<"xades:City">>, [], ["Vienna"]},
+            {<<"xades:UnknownField">>, [], ["ignored"]},
             "text node ignored"
         ]},
     SignatureElement = sig_element([Place]),
@@ -402,11 +402,11 @@ extract_accepts_both_role_types_test() ->
 
 extract_skips_non_text_role_items_test() ->
     Role =
-        {'xades:SignerRole', [], [
-            {'xades:ClaimedRoles', [], [
-                {'xades:ClaimedRole', [], ["Valid"]},
-                {'xades:ClaimedRole', [], [12345]},
-                {'xades:ClaimedRole', [], [[65, {invalid}]]}
+        {<<"xades:SignerRole">>, [], [
+            {<<"xades:ClaimedRoles">>, [], [
+                {<<"xades:ClaimedRole">>, [], ["Valid"]},
+                {<<"xades:ClaimedRole">>, [], [12345]},
+                {<<"xades:ClaimedRole">>, [], [[65, {invalid}]]}
             ]}
         ]},
     SignatureElement = sig_element([Role]),
@@ -415,10 +415,10 @@ extract_skips_non_text_role_items_test() ->
 
 extract_skips_non_matching_role_items_test() ->
     Role =
-        {'xades:SignerRole', [], [
-            {'xades:ClaimedRoles', [], [
-                {'xades:ClaimedRole', [], ["Admin"]},
-                {'xades:UnknownElement', [], ["ignored"]}
+        {<<"xades:SignerRole">>, [], [
+            {<<"xades:ClaimedRoles">>, [], [
+                {<<"xades:ClaimedRole">>, [], ["Admin"]},
+                {<<"xades:UnknownElement">>, [], ["ignored"]}
             ]}
         ]},
     SignatureElement = sig_element([Role]),
@@ -427,7 +427,7 @@ extract_skips_non_matching_role_items_test() ->
 
 extract_returns_error_with_empty_signer_role_test() ->
     SignatureElement = sig_element([
-        {'xades:SignerRole', [], []}
+        {<<"xades:SignerRole">>, [], []}
     ]),
     ?assertEqual(
         {error, invalid_signer_role},
@@ -471,8 +471,8 @@ extract_accepts_multiple_data_object_formats_test() ->
 
 extract_returns_error_with_missing_object_reference_test() ->
     Format =
-        {'xades:DataObjectFormat', [], [
-            {'xades:MimeType', [], ["text/plain"]}
+        {<<"xades:DataObjectFormat">>, [], [
+            {<<"xades:MimeType">>, [], ["text/plain"]}
         ]},
     SignatureElement = sig_element_with_data_obj([], [Format]),
     ?assertEqual(
@@ -493,10 +493,10 @@ extract_accepts_data_object_format_with_all_fields_test() ->
 
 extract_skips_non_text_format_fields_test() ->
     Format =
-        {'xades:DataObjectFormat', [{'ObjectReference', "#Ref-1"}], [
-            {'xades:MimeType', [], [12345]},
-            {'xades:Description', [], [[65, {invalid}]]},
-            {'xades:Encoding', [], ["UTF-8"]}
+        {<<"xades:DataObjectFormat">>, [{<<"ObjectReference">>, "#Ref-1"}], [
+            {<<"xades:MimeType">>, [], [12345]},
+            {<<"xades:Description">>, [], [[65, {invalid}]]},
+            {<<"xades:Encoding">>, [], ["UTF-8"]}
         ]},
     SignatureElement = sig_element_with_data_obj([], [Format]),
     {ok, Props} = signerl_signed_properties:extract(SignatureElement),
@@ -507,9 +507,9 @@ extract_skips_non_text_format_fields_test() ->
 
 extract_ignores_unknown_data_object_elements_test() ->
     Format =
-        {'xades:DataObjectFormat', [{'ObjectReference', "#Ref-1"}], [
-            {'xades:MimeType', [], ["text/plain"]},
-            {'xades:UnknownChild', [], ["ignored"]}
+        {<<"xades:DataObjectFormat">>, [{<<"ObjectReference">>, "#Ref-1"}], [
+            {<<"xades:MimeType">>, [], ["text/plain"]},
+            {<<"xades:UnknownChild">>, [], ["ignored"]}
         ]},
     SignatureElement = sig_element_with_data_obj([], [Format]),
     {ok, Props} = signerl_signed_properties:extract(SignatureElement),
@@ -557,8 +557,8 @@ extract_accepts_multiple_commitment_types_test() ->
 
 extract_returns_error_with_missing_commitment_type_id_test() ->
     Commitment =
-        {'xades:CommitmentTypeIndication', [], [
-            {'xades:AllSignedDataObjects', [], []}
+        {<<"xades:CommitmentTypeIndication">>, [], [
+            {<<"xades:AllSignedDataObjects">>, [], []}
         ]},
     SignatureElement = sig_element_with_data_obj([], [Commitment]),
     ?assertEqual(
@@ -568,9 +568,9 @@ extract_returns_error_with_missing_commitment_type_id_test() ->
 
 extract_returns_error_with_missing_commitment_identifier_text_test() ->
     Commitment =
-        {'xades:CommitmentTypeIndication', [], [
-            {'xades:CommitmentTypeId', [], [
-                {'xades:Identifier', [], []}
+        {<<"xades:CommitmentTypeIndication">>, [], [
+            {<<"xades:CommitmentTypeId">>, [], [
+                {<<"xades:Identifier">>, [], []}
             ]}
         ]},
     SignatureElement = sig_element_with_data_obj([], [Commitment]),
@@ -591,7 +591,7 @@ extract_accepts_all_optional_properties_test() ->
     SignatureElement = test_helpers:signature_element(
         [
             signing_time_element(),
-            {'xades:SigningCertificate', [], []},
+            {<<"xades:SigningCertificate">>, [], []},
             CertV2,
             Policy,
             Place,
@@ -614,8 +614,8 @@ extract_accepts_all_optional_properties_test() ->
 
 extract_ignores_unknown_signed_signature_properties_test() ->
     SignatureElement = test_helpers:signature_element([
-        {'xades:SigningTime', [], ["2026-01-01T00:00:00Z"]},
-        {'xades:UnknownProperty', [], ["ignored"]}
+        {<<"xades:SigningTime">>, [], ["2026-01-01T00:00:00Z"]},
+        {<<"xades:UnknownProperty">>, [], ["ignored"]}
     ]),
     ?assertEqual(
         {ok, #{signing_time => <<"2026-01-01T00:00:00Z">>}},
@@ -629,7 +629,7 @@ extract_returns_error_with_invalid_signature_element_test() ->
     ).
 
 extract_ignores_unknown_data_object_property_types_test() ->
-    UnknownElement = {'xades:FutureProperty', [], ["value"]},
+    UnknownElement = {<<"xades:FutureProperty">>, [], ["value"]},
     Format = data_object_format_element("#Ref-1", [{mime_type, "text/plain"}]),
     SignatureElement = sig_element_with_data_obj([], [UnknownElement, Format]),
     {ok, Props} = signerl_signed_properties:extract(SignatureElement),
@@ -657,7 +657,7 @@ find_data_obj_props_returns_error_for_non_signature_test() ->
 %% Fixture helpers
 
 signing_time_element() ->
-    {'xades:SigningTime', [], ["2026-01-01T00:00:00Z"]}.
+    {<<"xades:SigningTime">>, [], ["2026-01-01T00:00:00Z"]}.
 
 sig_element(SigProps) ->
     test_helpers:signature_element([signing_time_element() | SigProps]).
@@ -677,20 +677,20 @@ valid_signing_certificate_v2_no_issuer() ->
     cert_v2_with_digest_value([DigestB64]).
 
 cert_v2_with_digest_value(ValueContent) ->
-    {'xades:SigningCertificateV2', [], [
-        {'xades:Cert', [], [
-            {'xades:CertDigest', [], digest_elements(ValueContent)}
+    {<<"xades:SigningCertificateV2">>, [], [
+        {<<"xades:Cert">>, [], [
+            {<<"xades:CertDigest">>, [], digest_elements(ValueContent)}
         ]}
     ]}.
 
 cert_digest_element(DigestB64) ->
-    {'xades:CertDigest', [], digest_elements([DigestB64])}.
+    {<<"xades:CertDigest">>, [], digest_elements([DigestB64])}.
 
 cert_v2_with_issuer(DigestB64, IssuerSerialB64) ->
-    {'xades:SigningCertificateV2', [], [
-        {'xades:Cert', [], [
+    {<<"xades:SigningCertificateV2">>, [], [
+        {<<"xades:Cert">>, [], [
             cert_digest_element(DigestB64),
-            {'xades:IssuerSerialV2', [], [IssuerSerialB64]}
+            {<<"xades:IssuerSerialV2">>, [], [IssuerSerialB64]}
         ]}
     ]}.
 
@@ -698,18 +698,18 @@ signature_with_cert_v2(CertV2) ->
     sig_element([CertV2]).
 
 implied_policy_element() ->
-    {'xades:SignaturePolicyIdentifier', [], [
-        {'xades:SignaturePolicyImplied', [], []}
+    {<<"xades:SignaturePolicyIdentifier">>, [], [
+        {<<"xades:SignaturePolicyImplied">>, [], []}
     ]}.
 
 explicit_policy_element() ->
     explicit_policy_element([]).
 explicit_policy_element(ExtraIdContent) ->
     HashB64 = binary_to_list(base64:encode(crypto:hash(sha256, <<"policy-doc">>))),
-    {'xades:SignaturePolicyIdentifier', [], [
-        {'xades:SignaturePolicyId', [], [
-            {'xades:SigPolicyId', [], [
-                {'xades:Identifier', [], ["http://example.com/policy/v1"]}
+    {<<"xades:SignaturePolicyIdentifier">>, [], [
+        {<<"xades:SignaturePolicyId">>, [], [
+            {<<"xades:SigPolicyId">>, [], [
+                {<<"xades:Identifier">>, [], ["http://example.com/policy/v1"]}
                 | ExtraIdContent
             ]},
             policy_hash_element(HashB64)
@@ -718,40 +718,40 @@ explicit_policy_element(ExtraIdContent) ->
 
 policy_element_with_id(IdentifierContent) ->
     HashB64 = binary_to_list(base64:encode(<<"hash">>)),
-    {'xades:SignaturePolicyIdentifier', [], [
-        {'xades:SignaturePolicyId', [], [
-            {'xades:SigPolicyId', [], [
-                {'xades:Identifier', [], IdentifierContent}
+    {<<"xades:SignaturePolicyIdentifier">>, [], [
+        {<<"xades:SignaturePolicyId">>, [], [
+            {<<"xades:SigPolicyId">>, [], [
+                {<<"xades:Identifier">>, [], IdentifierContent}
             ]},
             policy_hash_element(HashB64)
         ]}
     ]}.
 
 policy_hash_element(HashB64) ->
-    {'xades:SigPolicyHash', [], digest_elements([HashB64])}.
+    {<<"xades:SigPolicyHash">>, [], digest_elements([HashB64])}.
 
 digest_elements(ValueContent) ->
     [
-        {'ds:DigestMethod', [{'Algorithm', "http://www.w3.org/2001/04/xmlenc#sha256"}], []},
-        {'ds:DigestValue', [], ValueContent}
+        {<<"ds:DigestMethod">>, [{<<"Algorithm">>, "http://www.w3.org/2001/04/xmlenc#sha256"}], []},
+        {<<"ds:DigestValue">>, [], ValueContent}
     ].
 
 policy_id_element(Identifier) ->
-    {'xades:SigPolicyId', [], [
-        {'xades:Identifier', [], [Identifier]}
+    {<<"xades:SigPolicyId">>, [], [
+        {<<"xades:Identifier">>, [], [Identifier]}
     ]}.
 
 production_place_element(Fields) ->
     Children = lists:filtermap(
         fun
-            ({city, V}) -> {true, {'xades:City', [], [V]}};
-            ({state, V}) -> {true, {'xades:StateOrProvince', [], [V]}};
-            ({postal, V}) -> {true, {'xades:PostalCode', [], [V]}};
-            ({country, V}) -> {true, {'xades:CountryName', [], [V]}}
+            ({city, V}) -> {true, {<<"xades:City">>, [], [V]}};
+            ({state, V}) -> {true, {<<"xades:StateOrProvince">>, [], [V]}};
+            ({postal, V}) -> {true, {<<"xades:PostalCode">>, [], [V]}};
+            ({country, V}) -> {true, {<<"xades:CountryName">>, [], [V]}}
         end,
         Fields
     ),
-    {'xades:SignatureProductionPlace', [], Children}.
+    {<<"xades:SignatureProductionPlace">>, [], Children}.
 
 signer_role_element(Claimed, Certified) ->
     ClaimedPart =
@@ -759,37 +759,47 @@ signer_role_element(Claimed, Certified) ->
             [] ->
                 [];
             _ ->
-                [{'xades:ClaimedRoles', [], [{'xades:ClaimedRole', [], [R]} || R <- Claimed]}]
+                [
+                    {<<"xades:ClaimedRoles">>, [], [
+                        {<<"xades:ClaimedRole">>, [], [R]}
+                     || R <- Claimed
+                    ]}
+                ]
         end,
     CertifiedPart =
         case Certified of
             [] ->
                 [];
             _ ->
-                [{'xades:CertifiedRoles', [], [{'xades:CertifiedRole', [], [R]} || R <- Certified]}]
+                [
+                    {<<"xades:CertifiedRoles">>, [], [
+                        {<<"xades:CertifiedRole">>, [], [R]}
+                     || R <- Certified
+                    ]}
+                ]
         end,
-    {'xades:SignerRole', [], ClaimedPart ++ CertifiedPart}.
+    {<<"xades:SignerRole">>, [], ClaimedPart ++ CertifiedPart}.
 
 data_object_format_element(ObjectRef, Fields) ->
     Children = lists:filtermap(
         fun
-            ({mime_type, V}) -> {true, {'xades:MimeType', [], [V]}};
-            ({description, V}) -> {true, {'xades:Description', [], [V]}};
-            ({encoding, V}) -> {true, {'xades:Encoding', [], [V]}}
+            ({mime_type, V}) -> {true, {<<"xades:MimeType">>, [], [V]}};
+            ({description, V}) -> {true, {<<"xades:Description">>, [], [V]}};
+            ({encoding, V}) -> {true, {<<"xades:Encoding">>, [], [V]}}
         end,
         Fields
     ),
-    {'xades:DataObjectFormat', [{'ObjectReference', ObjectRef}], Children}.
+    {<<"xades:DataObjectFormat">>, [{<<"ObjectReference">>, ObjectRef}], Children}.
 
 commitment_type_element(Identifier, Scope) ->
     IdElement =
-        {'xades:CommitmentTypeId', [], [
-            {'xades:Identifier', [], [Identifier]}
+        {<<"xades:CommitmentTypeId">>, [], [
+            {<<"xades:Identifier">>, [], [Identifier]}
         ]},
     ScopeElements =
         case Scope of
-            all -> [{'xades:AllSignedDataObjects', [], []}];
-            {references, Refs} -> [{'xades:ObjectReference', [], [R]} || R <- Refs];
+            all -> [{<<"xades:AllSignedDataObjects">>, [], []}];
+            {references, Refs} -> [{<<"xades:ObjectReference">>, [], [R]} || R <- Refs];
             none -> []
         end,
-    {'xades:CommitmentTypeIndication', [], [IdElement | ScopeElements]}.
+    {<<"xades:CommitmentTypeIndication">>, [], [IdElement | ScopeElements]}.

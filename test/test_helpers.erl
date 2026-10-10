@@ -12,21 +12,21 @@
 %% Minimal extraction fixtures, not cryptographically valid signatures.
 signature_element(SignedSignaturePropertiesElements) ->
     signature_with_properties([
-        {'xades:SignedSignatureProperties', [], SignedSignaturePropertiesElements}
+        {<<"xades:SignedSignatureProperties">>, [], SignedSignaturePropertiesElements}
     ]).
 
 signature_element(SignedSignaturePropertiesElements, SignedDataObjectPropertiesElements) ->
     signature_with_properties([
-        {'xades:SignedSignatureProperties', [], SignedSignaturePropertiesElements},
-        {'xades:SignedDataObjectProperties', [], SignedDataObjectPropertiesElements}
+        {<<"xades:SignedSignatureProperties">>, [], SignedSignaturePropertiesElements},
+        {<<"xades:SignedDataObjectProperties">>, [], SignedDataObjectPropertiesElements}
     ]).
 
 signature_with_properties(Properties) ->
-    {'ds:Signature', [], [
-        {'ds:SignatureValue', [], ["AQID"]},
-        {'ds:Object', [], [
-            {'xades:QualifyingProperties', [], [
-                {'xades:SignedProperties', [], Properties}
+    {<<"ds:Signature">>, [], [
+        {<<"ds:SignatureValue">>, [], ["AQID"]},
+        {<<"ds:Object">>, [], [
+            {<<"xades:QualifyingProperties">>, [], [
+                {<<"xades:SignedProperties">>, [], Properties}
             ]}
         ]}
     ]}.

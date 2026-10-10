@@ -91,7 +91,7 @@ parsed tree and signed output. Appending them to a valid signed document does
 not change its verification result; appending invalid content rejects the input.
 Binary and file inputs follow the same full-document policy.
 
-Namespace/profile work and XML name atom allocation remain tracked in #41 and #61.
+Namespace/profile work remains tracked in #41.
 
 ## XML entity safety
 
@@ -116,8 +116,41 @@ and uses [xmerl's SAX entity controls](https://www.erlang.org/doc/apps/xmerl/xme
 
 These controls bound custom entity expansion, not ordinary document size or
 element depth. Callers still need request/file size and concurrency limits;
-file APIs currently read the whole input before parsing. Persistent atom growth
-from arbitrary XML names remains tracked in #61.
+file APIs currently read the whole input before parsing. XML names are handled
+without allocating atoms, as described below.
+
+## XML name representation
+
+The lower-level XML tree uses UTF-8 **binary names** for every element and
+attribute, including namespace declarations. Parsed text and attribute values
+remain Unicode character lists. For example:
+
+```erlang
+{ok, {<<"root">>, [{<<"id">>, "1"}], [{<<"child">>, [], ["text"]}]}} =
+    signerl_xml:parse_binary(<<"<root id='1'><child>text</child></root>">>).
+```
+
+This replaces the former atom-name representation. Callers constructing or
+pattern-matching XML tuples must use `<<"root">>` instead of `root`, and
+`<<"ds:Signature">>` instead of `'ds:Signature'`. Lookup paths and attribute keys
+also use binaries, for example `find_path([<<"ds:Object">>], Signature)` and
+`attr_value(<<"Id">>, Attrs)`. Signature builders emit the same representation;
+exporters and both canonicalizers consume it. The public `sign/3`, `sign/4`, and
+`verify/3` arguments and return shapes are unchanged.
+
+The SAX parser supplies character-list names, which SignErl converts directly
+to UTF-8 binaries. It does not intern names, consult existing atoms, or use an
+input-dependent atom vocabulary. Arbitrary names therefore cannot grow the VM's
+permanent atom table, including when a document is rejected after its root.
+Names keep their lexical prefixes; matching namespace URIs remains #41.
+
+A bounded regression runs the production parse/export/canonicalize/sign/verify
+path in a fresh VM on each supported OTP 26/27/28 CI runtime. After warm-up,
+two batches of 25 fresh name sets must each add zero atoms, including after
+garbage collection. The separate VM isolates the test measurement; production
+parsing does not rely on process isolation or garbage collection to reclaim atoms.
+The DTD/entity restrictions above remain in force, while ordinary document
+size/depth and concurrency limits remain the caller's responsibility.
 
 ## Development toolchain
 

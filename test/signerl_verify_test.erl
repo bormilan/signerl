@@ -85,7 +85,7 @@ signature_reconstruction_preserves_valid_baseline(Config) ->
 verify_returns_error_with_non_text_signature_value_in_signedinfo(Config) ->
     SignatureData = validated_signature_data(Config),
     SignatureElement = maps:get(signature_element, SignatureData),
-    BrokenSignature = replace_signature_value(SignatureElement, [{'invalid', [], []}]),
+    BrokenSignature = replace_signature_value(SignatureElement, [{<<"invalid">>, [], []}]),
     ?assertNotEqual(SignatureElement, BrokenSignature),
     Message = message_with_signature(SignatureData, BrokenSignature),
     ?assertEqual({error, invalid_base64}, signerl_verify:extract_signature_data(Message)).
@@ -109,7 +109,7 @@ verify_returns_error_with_empty_binary_signature_value_in_signedinfo(Config) ->
 verify_returns_error_without_signed_info(Config) ->
     SignatureData = validated_signature_data(Config),
     SignatureElement = maps:get(signature_element, SignatureData),
-    BrokenSignature = remove_signed_info_from_signature(SignatureElement),
+    BrokenSignature = remove_signature_child(SignatureElement, <<"ds:SignedInfo">>),
     ?assertNotEqual(SignatureElement, BrokenSignature),
     Message = message_with_signature(SignatureData, BrokenSignature),
     ?assertEqual({error, missing_signed_info}, signerl_verify:extract_signature_data(Message)).
@@ -179,7 +179,7 @@ extract_signature_data_returns_error_with_missing_reference_uri(Config) ->
 extract_signature_data_returns_error_with_invalid_reference_payload(Config) ->
     SignatureData = validated_signature_data(Config),
     SignatureElement = maps:get(signature_element, SignatureData),
-    BrokenSignature = remove_document_reference_element(SignatureElement, 'ds:DigestValue'),
+    BrokenSignature = remove_document_reference_element(SignatureElement, <<"ds:DigestValue">>),
     ?assertNotEqual(SignatureElement, BrokenSignature),
     Message = message_with_signature(SignatureData, BrokenSignature),
     ?assertEqual({error, invalid_signed_info}, signerl_verify:extract_signature_data(Message)).
@@ -187,7 +187,7 @@ extract_signature_data_returns_error_with_invalid_reference_payload(Config) ->
 verify_reference_digests_returns_error_with_missing_document_transforms(Config) ->
     SignatureData = validated_signature_data(Config),
     SignatureElement = maps:get(signature_element, SignatureData),
-    BrokenSignature = remove_document_reference_element(SignatureElement, 'ds:Transforms'),
+    BrokenSignature = remove_document_reference_element(SignatureElement, <<"ds:Transforms">>),
     ?assertNotEqual(SignatureElement, BrokenSignature),
     Message = message_with_signature(SignatureData, BrokenSignature),
     {ok, BrokenData} = signerl_verify:extract_signature_data(Message),
@@ -212,7 +212,7 @@ verify_reference_digests_returns_error_with_invalid_document_transform_algorithm
 verify_reference_digests_returns_error_with_transform_without_algorithm(Config) ->
     SignatureData = validated_signature_data(Config),
     SignatureElement = maps:get(signature_element, SignatureData),
-    BrokenSignature = replace_document_transforms(SignatureElement, [{'ds:Transform', [], []}]),
+    BrokenSignature = replace_document_transforms(SignatureElement, [{<<"ds:Transform">>, [], []}]),
     ?assertNotEqual(SignatureElement, BrokenSignature),
     Message = message_with_signature(SignatureData, BrokenSignature),
     ?assertEqual({error, invalid_signed_info}, signerl_verify:extract_signature_data(Message)).
@@ -221,7 +221,7 @@ verify_reference_digests_returns_error_with_invalid_transform_element(Config) ->
     SignatureData = validated_signature_data(Config),
     SignatureElement = maps:get(signature_element, SignatureData),
     BrokenSignature =
-        replace_document_transforms(SignatureElement, [{'ds:InvalidTransform', [], []}]),
+        replace_document_transforms(SignatureElement, [{<<"ds:InvalidTransform">>, [], []}]),
     ?assertNotEqual(SignatureElement, BrokenSignature),
     Message = message_with_signature(SignatureData, BrokenSignature),
     ?assertEqual({error, invalid_signed_info}, signerl_verify:extract_signature_data(Message)).
@@ -243,7 +243,7 @@ verify_rejects_duplicate_reference_attributes(Config) ->
 verify_reference_digests_returns_error_with_missing_signed_properties_element(Config) ->
     SignatureData = validated_signature_data(Config),
     SignatureElement = maps:get(signature_element, SignatureData),
-    BrokenSignature = remove_signed_properties_from_signature(SignatureElement),
+    BrokenSignature = remove_signature_child(SignatureElement, <<"ds:Object">>),
     ?assertNotEqual(SignatureElement, BrokenSignature),
     BrokenData = maps:put(signature_element, BrokenSignature, SignatureData),
     ?assertEqual(
@@ -304,7 +304,9 @@ extract_x509_certificate_returns_undefined_for_invalid_cert_test() ->
     {ok, #{key_info := #{x509_certificate := RsaCertDer}}} =
         signerl_verify:extract_signature_data(Parsed),
     %% Test 1: Corrupt cert to invalid structure (multiple children → _ catch-all)
-    CorruptedStructure = corrupt_x509_certificate(Parsed, [{'invalid', [], []}, {'extra', [], []}]),
+    CorruptedStructure = corrupt_x509_certificate(Parsed, [
+        {<<"invalid">>, [], []}, {<<"extra">>, [], []}
+    ]),
     ?assertNotEqual(Parsed, CorruptedStructure),
     {ok, ParsedStructure} = signerl_xml:parse_binary(signerl_xml:export([], CorruptedStructure)),
     {ok, #{key_info := KeyInfo1}} = signerl_verify:extract_signature_data(ParsedStructure),
@@ -348,28 +350,28 @@ message_with_signature(#{unsigned_message := Message}, SignatureElement) ->
     signerl_xml:add_new_element(SignatureElement, Message).
 
 remove_c14n_from_signature(
-    {'ds:Signature', Attrs, [SignedInfo, SignatureValue, SignatureObject]}
+    {<<"ds:Signature">>, Attrs, [SignedInfo, SignatureValue, SignatureObject]}
 ) ->
-    {'ds:SignedInfo', SignedInfoAttrs, SignedInfoContent} = SignedInfo,
+    {<<"ds:SignedInfo">>, SignedInfoAttrs, SignedInfoContent} = SignedInfo,
     FilteredSignedInfoContent =
         [
             Element
-         || Element = {Tag, _, _} <- SignedInfoContent, Tag =/= 'ds:CanonicalizationMethod'
+         || Element = {Tag, _, _} <- SignedInfoContent, Tag =/= <<"ds:CanonicalizationMethod">>
         ],
-    {'ds:Signature', Attrs, [
-        {'ds:SignedInfo', SignedInfoAttrs, FilteredSignedInfoContent},
+    {<<"ds:Signature">>, Attrs, [
+        {<<"ds:SignedInfo">>, SignedInfoAttrs, FilteredSignedInfoContent},
         SignatureValue,
         SignatureObject
     ]}.
 
 replace_c14n_algorithm(
-    {'ds:Signature', Attrs, [SignedInfo, SignatureValue, SignatureObject]}, Algorithm
+    {<<"ds:Signature">>, Attrs, [SignedInfo, SignatureValue, SignatureObject]}, Algorithm
 ) ->
     {SignedInfoAttrs, _C14N, SignatureMethod, DocumentReference, SignedPropsReference} =
         signed_info_parts(SignedInfo),
-    {'ds:Signature', Attrs, [
-        {'ds:SignedInfo', SignedInfoAttrs, [
-            {'ds:CanonicalizationMethod', [{'Algorithm', Algorithm}], []},
+    {<<"ds:Signature">>, Attrs, [
+        {<<"ds:SignedInfo">>, SignedInfoAttrs, [
+            {<<"ds:CanonicalizationMethod">>, [{<<"Algorithm">>, Algorithm}], []},
             SignatureMethod,
             DocumentReference,
             SignedPropsReference
@@ -379,14 +381,14 @@ replace_c14n_algorithm(
     ]}.
 
 replace_signature_method_algorithm(
-    {'ds:Signature', Attrs, [SignedInfo, SignatureValue, SignatureObject]}, Algorithm
+    {<<"ds:Signature">>, Attrs, [SignedInfo, SignatureValue, SignatureObject]}, Algorithm
 ) ->
     {SignedInfoAttrs, C14N, _SignatureMethod, DocumentReference, SignedPropsReference} =
         signed_info_parts(SignedInfo),
-    {'ds:Signature', Attrs, [
-        {'ds:SignedInfo', SignedInfoAttrs, [
+    {<<"ds:Signature">>, Attrs, [
+        {<<"ds:SignedInfo">>, SignedInfoAttrs, [
             C14N,
-            {'ds:SignatureMethod', [{'Algorithm', Algorithm}], []},
+            {<<"ds:SignatureMethod">>, [{<<"Algorithm">>, Algorithm}], []},
             DocumentReference,
             SignedPropsReference
         ]},
@@ -395,16 +397,16 @@ replace_signature_method_algorithm(
     ]}.
 
 remove_document_reference_uri(
-    {'ds:Signature', Attrs, [SignedInfo, SignatureValue, SignatureObject]}
+    {<<"ds:Signature">>, Attrs, [SignedInfo, SignatureValue, SignatureObject]}
 ) ->
     {SignedInfoAttrs, C14N, SignatureMethod, DocumentReference, SignedPropsReference} =
         signed_info_parts(SignedInfo),
-    {'ds:Reference', _DocAttrs, DocContent} = DocumentReference,
-    {'ds:Signature', Attrs, [
-        {'ds:SignedInfo', SignedInfoAttrs, [
+    {<<"ds:Reference">>, _DocAttrs, DocContent} = DocumentReference,
+    {<<"ds:Signature">>, Attrs, [
+        {<<"ds:SignedInfo">>, SignedInfoAttrs, [
             C14N,
             SignatureMethod,
-            {'ds:Reference', [], DocContent},
+            {<<"ds:Reference">>, [], DocContent},
             SignedPropsReference
         ]},
         SignatureValue,
@@ -414,21 +416,21 @@ remove_document_reference_uri(
 remove_document_reference_element(Signature, Tag) ->
     with_document_reference(
         Signature,
-        fun({'ds:Reference', DocAttrs, Content}) ->
+        fun({<<"ds:Reference">>, DocAttrs, Content}) ->
             {value, _Removed, Remaining} = lists:keytake(Tag, 1, Content),
-            {'ds:Reference', DocAttrs, Remaining}
+            {<<"ds:Reference">>, DocAttrs, Remaining}
         end
     ).
 
 replace_document_reference_transform_algorithm(Signature, Algorithm) ->
     with_document_reference(
         Signature,
-        fun({'ds:Reference', DocAttrs, [Transforms, DigestMethod, DigestValue]}) ->
-            {'ds:Transforms', TransformsAttrs, [{'ds:Transform', _TransformAttrs, []}]} =
+        fun({<<"ds:Reference">>, DocAttrs, [Transforms, DigestMethod, DigestValue]}) ->
+            {<<"ds:Transforms">>, TransformsAttrs, [{<<"ds:Transform">>, _TransformAttrs, []}]} =
                 Transforms,
-            {'ds:Reference', DocAttrs, [
-                {'ds:Transforms', TransformsAttrs, [
-                    {'ds:Transform', [{'Algorithm', Algorithm}], []}
+            {<<"ds:Reference">>, DocAttrs, [
+                {<<"ds:Transforms">>, TransformsAttrs, [
+                    {<<"ds:Transform">>, [{<<"Algorithm">>, Algorithm}], []}
                 ]},
                 DigestMethod,
                 DigestValue
@@ -439,10 +441,10 @@ replace_document_reference_transform_algorithm(Signature, Algorithm) ->
 replace_document_transforms(Signature, NewTransformElements) ->
     with_document_reference(
         Signature,
-        fun({'ds:Reference', DocAttrs, [Transforms, DigestMethod, DigestValue]}) ->
-            {'ds:Transforms', TransformsAttrs, _ExistingTransforms} = Transforms,
-            {'ds:Reference', DocAttrs, [
-                {'ds:Transforms', TransformsAttrs, NewTransformElements},
+        fun({<<"ds:Reference">>, DocAttrs, [Transforms, DigestMethod, DigestValue]}) ->
+            {<<"ds:Transforms">>, TransformsAttrs, _ExistingTransforms} = Transforms,
+            {<<"ds:Reference">>, DocAttrs, [
+                {<<"ds:Transforms">>, TransformsAttrs, NewTransformElements},
                 DigestMethod,
                 DigestValue
             ]}
@@ -450,13 +452,13 @@ replace_document_transforms(Signature, NewTransformElements) ->
     ).
 
 with_document_reference(
-    {'ds:Signature', Attrs, [SignedInfo, SignatureValue, SignatureObject]}, UpdateFun
+    {<<"ds:Signature">>, Attrs, [SignedInfo, SignatureValue, SignatureObject]}, UpdateFun
 ) ->
     {SignedInfoAttrs, C14N, SignatureMethod, DocumentReference, SignedPropsReference} =
         signed_info_parts(SignedInfo),
     UpdatedDocumentReference = UpdateFun(DocumentReference),
-    {'ds:Signature', Attrs, [
-        {'ds:SignedInfo', SignedInfoAttrs, [
+    {<<"ds:Signature">>, Attrs, [
+        {<<"ds:SignedInfo">>, SignedInfoAttrs, [
             C14N,
             SignatureMethod,
             UpdatedDocumentReference,
@@ -466,23 +468,19 @@ with_document_reference(
         SignatureObject
     ]}.
 
-remove_signed_properties_from_signature(
-    {'ds:Signature', Attrs, [SignedInfo, SignatureValue, _SignatureObject]}
-) ->
-    {'ds:Signature', Attrs, [SignedInfo, SignatureValue]}.
-
-remove_signed_info_from_signature(
-    {'ds:Signature', Attrs, [_SignedInfo, SignatureValue, SignatureObject]}
-) ->
-    {'ds:Signature', Attrs, [SignatureValue, SignatureObject]}.
+remove_signature_child({<<"ds:Signature">>, Attrs, Content}, Tag) ->
+    {value, _Removed, Remaining} = lists:keytake(Tag, 1, Content),
+    {<<"ds:Signature">>, Attrs, Remaining}.
 
 replace_signature_value(
-    {'ds:Signature', Attrs, [SignedInfo, _SignatureValue, SignatureObject]}, NewContent
+    {<<"ds:Signature">>, Attrs, [SignedInfo, _SignatureValue, SignatureObject]}, NewContent
 ) ->
-    {'ds:Signature', Attrs, [SignedInfo, {'ds:SignatureValue', [], NewContent}, SignatureObject]}.
+    {<<"ds:Signature">>, Attrs, [
+        SignedInfo, {<<"ds:SignatureValue">>, [], NewContent}, SignatureObject
+    ]}.
 
 signed_info_parts(
-    {'ds:SignedInfo', SignedInfoAttrs, [
+    {<<"ds:SignedInfo">>, SignedInfoAttrs, [
         C14N, SignatureMethod, DocumentReference, SignedPropsReference
     ]}
 ) ->
@@ -491,13 +489,13 @@ signed_info_parts(
 corrupt_x509_certificate({Tag, Attrs, Children}, Replacement) ->
     {Tag, Attrs, [corrupt_x509_certificate_child(C, Replacement) || C <- Children]}.
 
-corrupt_x509_certificate_child({'ds:Signature', Attrs, Content}, Replacement) ->
-    {'ds:Signature', Attrs, [corrupt_x509_certificate_child(C, Replacement) || C <- Content]};
-corrupt_x509_certificate_child({'ds:KeyInfo', Attrs, Content}, Replacement) ->
-    {'ds:KeyInfo', Attrs, [corrupt_x509_certificate_child(C, Replacement) || C <- Content]};
-corrupt_x509_certificate_child({'ds:X509Data', Attrs, Content}, Replacement) ->
-    {'ds:X509Data', Attrs, [corrupt_x509_certificate_child(C, Replacement) || C <- Content]};
-corrupt_x509_certificate_child({'ds:X509Certificate', Attrs, _}, Replacement) ->
-    {'ds:X509Certificate', Attrs, Replacement};
+corrupt_x509_certificate_child({<<"ds:Signature">>, Attrs, Content}, Replacement) ->
+    {<<"ds:Signature">>, Attrs, [corrupt_x509_certificate_child(C, Replacement) || C <- Content]};
+corrupt_x509_certificate_child({<<"ds:KeyInfo">>, Attrs, Content}, Replacement) ->
+    {<<"ds:KeyInfo">>, Attrs, [corrupt_x509_certificate_child(C, Replacement) || C <- Content]};
+corrupt_x509_certificate_child({<<"ds:X509Data">>, Attrs, Content}, Replacement) ->
+    {<<"ds:X509Data">>, Attrs, [corrupt_x509_certificate_child(C, Replacement) || C <- Content]};
+corrupt_x509_certificate_child({<<"ds:X509Certificate">>, Attrs, _}, Replacement) ->
+    {<<"ds:X509Certificate">>, Attrs, Replacement};
 corrupt_x509_certificate_child(Other, _Replacement) ->
     Other.

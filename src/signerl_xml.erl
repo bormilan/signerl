@@ -17,7 +17,7 @@
 ]).
 
 -type simplified_xml_item() :: simplified_xml() | string().
--type simplified_xml() :: {atom(), [{atom(), string() | number()}], [simplified_xml_item()]}.
+-type simplified_xml() :: {binary(), [{binary(), string() | number()}], [simplified_xml_item()]}.
 -export_type([simplified_xml/0]).
 
 -spec parse_file(FileName) -> SimplifiedXml when
@@ -85,7 +85,7 @@ scan_xml(Message, Options) ->
 validate_remainder(<<>>) ->
     ok;
 validate_remainder(Rest) ->
-    {ok, {[], [{document, [], [{tail, [], []}]}]}, <<>>} = scan_xml(
+    {ok, {[], [{document, [], [{<<"tail">>, [], []}]}]}, <<>>} = scan_xml(
         <<"<tail/>", Rest/binary>>, []
     ),
     ok.
@@ -95,7 +95,7 @@ validate_remainder(Rest) ->
 xml_event({startPrefixMapping, Prefix, Uri}, _, {Namespaces, Stack}) ->
     Name =
         case Prefix of
-            [] -> xmlns;
+            [] -> <<"xmlns">>;
             _ -> qualified_name({"xmlns", Prefix})
         end,
     {[{Name, Uri} | Namespaces], Stack};
@@ -124,8 +124,8 @@ xml_event(_, _, State) ->
 prepend_content(Item, {Tag, Attrs, Content}) ->
     {Tag, Attrs, [Item | Content]}.
 
-qualified_name({[], Local}) -> list_to_atom(Local);
-qualified_name({Prefix, Local}) -> list_to_atom(Prefix ++ ":" ++ Local).
+qualified_name({[], Local}) -> unicode:characters_to_binary(Local);
+qualified_name({Prefix, Local}) -> unicode:characters_to_binary([Prefix, ":", Local]).
 
 utf8_encoding(Message) ->
     case re:run(Message, ?XML_ENCODING_EXTRACT_RE, [{capture, [2], binary}]) of
@@ -168,7 +168,7 @@ add_new_element(NewElement, {Tag, Attrs, Content}) ->
     {Tag, Attrs, Content ++ [NewElement]}.
 
 -spec find_path(Path, Xml) -> Result when
-    Path :: [atom(), ...],
+    Path :: [binary(), ...],
     Xml :: simplified_xml(),
     Result :: {ok, simplified_xml()} | {error, not_found}.
 find_path([Tag], Xml) ->
@@ -192,8 +192,8 @@ single_text(_) ->
     {error, not_found}.
 
 -spec attr_value(Key, Attrs) -> Result when
-    Key :: atom(),
-    Attrs :: [{atom(), string() | number()}],
+    Key :: binary(),
+    Attrs :: [{binary(), string() | number()}],
     Result :: {ok, string() | number()} | {error, missing_attribute}.
 attr_value(Key, Attrs) ->
     case lists:keyfind(Key, 1, Attrs) of
@@ -204,8 +204,8 @@ attr_value(Key, Attrs) ->
     end.
 
 -spec attr_value_or_undefined(Key, Attrs) -> Result when
-    Key :: atom(),
-    Attrs :: [{atom(), string() | number()}],
+    Key :: binary(),
+    Attrs :: [{binary(), string() | number()}],
     Result :: string() | number() | undefined.
 attr_value_or_undefined(Key, Attrs) ->
     case lists:keyfind(Key, 1, Attrs) of
@@ -216,7 +216,7 @@ attr_value_or_undefined(Key, Attrs) ->
     end.
 
 -spec is_signature_element(term()) -> boolean().
-is_signature_element({'ds:Signature', _, _}) -> true;
+is_signature_element({<<"ds:Signature">>, _, _}) -> true;
 is_signature_element(_) -> false.
 
 find_unique_child(Tag, {_, _, Content}) ->
@@ -237,10 +237,9 @@ export_content([], [], Acc) ->
     lists:reverse(Acc);
 export_content([], [{Name, Siblings} | Parents], Acc) ->
     export_content(Siblings, Parents, [["</", Name, ">"] | Acc]);
-export_content([{Tag, Attrs, Content} | Rest], Parents, Acc) ->
-    Name = atom_to_list(Tag),
+export_content([{Name, Attrs, Content} | Rest], Parents, Acc) ->
     Attributes = [
-        [" ", atom_to_list(Key), "=\"", export_attribute(Value), "\""]
+        [" ", Key, "=\"", export_attribute(Value), "\""]
      || {Key, Value} <- Attrs
     ],
     case Content of
