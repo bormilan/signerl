@@ -8,20 +8,20 @@ rebar3; there is no custom runner or manually maintained suite list.
 
 | File | Cases | Responsibility |
 | --- | ---: | --- |
-| `signerl_c14n_test.erl` | 39 | Canonicalization, namespace ordering, escaping, Exclusive C14N, and signature-removal transforms. |
-| `signerl_signed_properties_test.erl` | 66 | XAdES property extraction and malformed Erlang/XML value boundaries. |
+| `signerl_c14n_test.erl` | 63 | Canonicalization, namespace ordering, escaping, Exclusive C14N, and signature-removal transforms. |
+| `signerl_signed_properties_test.erl` | 72 | XAdES property extraction and malformed Erlang/XML value boundaries. |
 | `signerl_utils_test.erl` | 25 | UTC date validation, leap-year boundaries, and fixed datetime formatting. |
 | `signerl_signature_test.erl` | 5 | Signature construction contracts for RSA and ECDSA. |
-| `signerl_verify_test.erl` | 23 | Signature extraction, reference validation, algorithm selection, and malformed signature contracts. |
-| `signerl_xml_test.erl` | 85 | XML parsing, DTD/entity rejection, prologs, export, tree lookup, text values, and signature-element recognition. |
+| `signerl_verify_test.erl` | 30 | Signature extraction, reference validation, algorithm selection, and malformed signature contracts. |
+| `signerl_xml_test.erl` | 133 | XML parsing, DTD/entity rejection, prologs, export, tree lookup, text values, and signature-element recognition. |
 | `signerl_xades_xml_test.erl` | 1 | XAdES tree lookup rejects a non-signature root. |
 | `signerl_cert_test.erl` | 1 | Exact issuer/serial DER against OTP ASN.1, including positive integer padding. |
 | `signerl_cert_helpers_test.erl` | 6 | Application fixture paths and clear missing/malformed PEM failures. |
-| `signerl_api_SUITE.erl` | 66 | Full public signing/verification, binary/file/key inputs, RSA/ECDSA certificate wiring, tampering, and independent signature fixtures. |
-| `signerl_c14n_interop_SUITE.erl` | 9 | Compare production parsing/canonicalization with `xmllint --c14n11`; Unicode and content preservation also cover `--exc-c14n`. |
+| `signerl_api_SUITE.erl` | 71 | Full public signing/verification, binary/file/key inputs, RSA/ECDSA certificate wiring, tampering, and independent signature fixtures. |
+| `signerl_c14n_interop_SUITE.erl` | 10 | Compare production parsing/canonicalization with `xmllint --c14n11`; Unicode and content preservation also cover `--exc-c14n`. |
 | `signerl_xml_SUITE.erl` | 9 | Real file export/read-back, encoding, missing files, controlled file/HTTP entity canaries, and isolated atom-growth measurement. |
 
-Total: **251 EUnit + 84 Common Test = 335 cases**. See the
+Total: **336 EUnit + 90 Common Test = 426 cases**. See the
 [migration log and case map](../docs/implementations/test_organization_2026-10-04.md)
 for the earlier suite locations and the
 [fixture cleanup log](../docs/implementations/test_fixtures_2026-10-04.md)
@@ -95,6 +95,17 @@ the supplied time; ECDSA is checked by verification only. Calendar tests include
 Gregorian century/leap-year boundaries, impossible month/day combinations, time
 ranges, and unsupported timestamp formats. Formatter expectations cover padded
 and unpadded fields without sleeps or dependence on wall-clock values.
+
+Namespace regressions cover URI/local-name lookup with aliases, defaults, local
+redeclarations, wrong-URI lookalikes, and inherited declarations on detached
+signed fragments. Independently supplied canonical bytes/signatures and existing
+xmlsec fixtures verify cryptographic behavior; tampering must fail. Both C14N
+modes agree with xmllint for implicit XML attributes, namespace undeclarations,
+and prefix rebinding. Parser cases reject undeclared/reserved prefixes, malformed
+QNames, duplicate expanded attributes, and the SAX-normalized empty `xmlns:`
+spelling, while preserving namespace-like literals in comments, CDATA, attributes,
+and text. Relative namespace URIs return `invalid_xml` through parsing and both public APIs.
+Missing lexical paths and malformed transform content remain covered.
 
 ## Run the tests
 

@@ -37,6 +37,7 @@ groups() ->
             dtd_file_input_is_rejected,
             reject_unsupported_encoding,
             reject_invalid_utf8,
+            relative_namespace_returns_invalid_xml,
             sign_uses_input_prolog_binary_and_file,
             sign_missing_prolog_binary_returns_error,
             sign_invalid_prolog_file_returns_error,
@@ -93,6 +94,10 @@ groups() ->
         {interop_smoke_group, [], [
             verify_independent_c14n11_signature,
             verify_independent_exc_c14n_signature,
+            verify_inherited_c14n11_signature,
+            verify_inherited_exc_c14n_signature,
+            verify_namespace_alias_and_default_signatures,
+            sign_with_ancestor_namespace_context,
             c14n_idempotent_after_sign
         ]}
     ].
@@ -677,13 +682,168 @@ verify_independent_c14n11_signature(_Config) ->
 verify_independent_exc_c14n_signature(_Config) ->
     verify_independent_signature("exclusive.xml", ?DSIG_EXC_C14N_ALGO_URI).
 
+verify_inherited_c14n11_signature(_Config) ->
+    verify_inherited_signature("c14n11.xml").
+
+verify_inherited_exc_c14n_signature(_Config) ->
+    verify_inherited_signature("exclusive.xml").
+
+verify_inherited_signature(FileName) ->
+    FixtureDir = signerl_utils:file_path("test/examples/independent"),
+    {ok, Original} = file:read_file(filename:join(FixtureDir, FileName)),
+    {ok, PublicKey} = signerl_utils:load_key_from_file(filename:join(FixtureDir, "rsa-public.pem")),
+    test_helpers:parse_verified_message(Original, PublicKey),
+    WithoutSignedInfoDecl = test_helpers:replace_once(
+        Original,
+        <<"<ds:SignedInfo xmlns:ds=\"", ?DSIG_NAMESPACE_URI, "\"">>,
+        <<"<ds:SignedInfo">>
+    ),
+    Inherited = test_helpers:replace_once(
+        WithoutSignedInfoDecl,
+        <<"<xades:SignedProperties xmlns:ds=\"", ?DSIG_NAMESPACE_URI, "\" xmlns:xades=\"",
+            ?XADES_NAMESPACE_URI, "\"">>,
+        <<"<xades:SignedProperties">>
+    ),
+    %% The digests and RSA signature are still the independent xmlsec1 values.
+    test_helpers:parse_verified_message(Inherited, PublicKey).
+
+verify_namespace_alias_and_default_signatures(Config) ->
+    Key = ?config(rsa_key, Config),
+    PublicKey = ?config(rsa_public_key, Config),
+    lists:foreach(
+        fun(Mode) ->
+            Signed = namespace_signature_fixture(Mode, Key),
+            test_helpers:parse_verified_message(Signed, PublicKey),
+            ChangedAmount = test_helpers:replace_once(Signed, <<"42.00">>, <<"43.00">>),
+            ?assertEqual(false, signerl:verify(ChangedAmount, sha256, PublicKey)),
+            {Ds, _, Declaration, _, _} = namespace_fixture_names(Mode),
+            WrongDeclaration = binary:replace(
+                Declaration, <<?DSIG_NAMESPACE_URI>>, <<"urn:application:signature">>
+            ),
+            ChangedNamespace = test_helpers:replace_once(
+                Signed,
+                <<"<", Ds/binary, "Signature", Declaration/binary>>,
+                <<"<", Ds/binary, "Signature", WrongDeclaration/binary>>
+            ),
+            ?assertEqual(
+                {error, missing_signature}, signerl:verify(ChangedNamespace, sha256, PublicKey)
+            )
+        end,
+        [prefixed, default]
+    ).
+
+sign_with_ancestor_namespace_context(Config) ->
+    Key = ?config(rsa_key, Config),
+    PublicKey = ?config(rsa_public_key, Config),
+    Cert = signerl_cert_helpers:cert_der(signerl_cert_helpers:signer_rsa_cert_path()),
+    Raw = <<
+        "<?xml version='1.0'?><invoice xmlns=\"urn:invoice\" "
+        "xmlns:unused=\"urn:unused\" xmlns:ds=\"urn:application:ds\" "
+        "xmlns:xades=\"urn:application:xades\"><ds:record xades:status=\"draft\">"
+        "<amount>42.00</amount></ds:record></invoice>"
+    >>,
+    {ok, Original} = signerl_xml:parse_binary(Raw),
+    Signed = signerl:sign(Raw, sha256, Key, Cert),
+    Parsed = test_helpers:parse_verified_message(Signed, PublicKey),
+    ?assertEqual(Original, signerl_c14n:remove_signature_elements(Parsed)),
+    {ok, SignatureData} = signerl_verify:extract_signature_data(Parsed),
+    #{signature_bytes := SignatureBytes, signature_element := SignatureElement} = SignatureData,
+    {ok, SignedInfo} = signerl_xml:find_path([<<"ds:SignedInfo">>], SignatureElement),
+    ExpectedSignedInfo = fragment_with_bindings(SignedInfo, [
+        {<<"xmlns">>, "urn:invoice"},
+        {<<"xmlns:unused">>, "urn:unused"},
+        {<<"xmlns:ds">>, ?DSIG_NAMESPACE_URI},
+        {<<"xmlns:xades">>, "urn:application:xades"}
+    ]),
+    SignedInfoBytes = signerl_c14n:canonicalize(ExpectedSignedInfo),
+    ?assertEqual(
+        SignedInfoBytes, signerl_c14n:canonicalize(maps:get(signed_info_element, SignatureData))
+    ),
+    ?assertEqual(true, public_key:verify(SignedInfoBytes, sha256, SignatureBytes, PublicKey)),
+    {ok, SignedProperties} = signerl_xml:find_path(
+        [<<"ds:Object">>, <<"xades:QualifyingProperties">>, <<"xades:SignedProperties">>],
+        SignatureElement
+    ),
+    ExpectedSignedProperties = fragment_with_bindings(SignedProperties, [
+        {<<"xmlns">>, "urn:invoice"},
+        {<<"xmlns:unused">>, "urn:unused"},
+        {<<"xmlns:ds">>, ?DSIG_NAMESPACE_URI},
+        {<<"xmlns:xades">>, ?XADES_NAMESPACE_URI}
+    ]),
+    SignedPropertiesBytes = signerl_c14n:canonicalize(ExpectedSignedProperties),
+    #{references := #{signed_properties := #{digest_value := SignedPropertiesDigest}}} =
+        SignatureData,
+    ?assertEqual(crypto:hash(sha256, SignedPropertiesBytes), SignedPropertiesDigest),
+    {ok, ContextualProperties} = signerl_xades_xml:find_signed_properties_element(SignatureElement),
+    ?assertEqual(SignedPropertiesBytes, signerl_c14n:canonicalize(ContextualProperties)).
+
+fragment_with_bindings({Name, Attrs, Children}, Bindings) ->
+    ContextAttrs = lists:foldl(
+        fun({Key, _} = Binding, Acc) -> lists:keystore(Key, 1, Acc, Binding) end,
+        Attrs,
+        Bindings
+    ),
+    {Name, ContextAttrs, Children}.
+
+%% A fixed profile with hand-supplied canonical XML. SignErl does not compute
+%% these reference digests, canonical bytes, or signature values.
+namespace_signature_fixture(Mode, Key) ->
+    {Ds, Xades, SignatureDecl, PropertiesDecl, PropertiesContext} = namespace_fixture_names(Mode),
+    Message = <<"<invoice Id=\"invoice-1\"><amount currency=\"EUR\">42.00</amount></invoice>">>,
+    PropertiesContent =
+        <<"<", Xades/binary, "SignedSignatureProperties><", Xades/binary,
+            "SigningTime>2026-01-01T00:00:00Z</", Xades/binary, "SigningTime></", Xades/binary,
+            "SignedSignatureProperties>">>,
+    Properties =
+        <<"<", Xades/binary, "SignedProperties Id=\"SignedProperties-1\">",
+            PropertiesContent/binary, "</", Xades/binary, "SignedProperties>">>,
+    CanonicalProperties =
+        <<"<", Xades/binary, "SignedProperties", PropertiesContext/binary,
+            " Id=\"SignedProperties-1\">", PropertiesContent/binary, "</", Xades/binary,
+            "SignedProperties>">>,
+    MessageDigest = base64:encode(crypto:hash(sha256, Message)),
+    PropertiesDigest = base64:encode(crypto:hash(sha256, CanonicalProperties)),
+    SignedInfoContent =
+        <<"<", Ds/binary, "CanonicalizationMethod Algorithm=\"", ?DSIG_C14N11_ALGO_URI, "\"></",
+            Ds/binary, "CanonicalizationMethod><", Ds/binary, "SignatureMethod Algorithm=\"",
+            ?DSIG_SIG_RSA_SHA256_URI, "\"></", Ds/binary, "SignatureMethod><", Ds/binary,
+            "Reference URI=\"\"><", Ds/binary, "Transforms><", Ds/binary, "Transform Algorithm=\"",
+            ?DSIG_ENVELOPED_SIGNATURE_TRANSFORM_URI, "\"></", Ds/binary, "Transform></", Ds/binary,
+            "Transforms><", Ds/binary, "DigestMethod Algorithm=\"", ?DSIG_DIGEST_SHA256_URI,
+            "\"></", Ds/binary, "DigestMethod><", Ds/binary, "DigestValue>", MessageDigest/binary,
+            "</", Ds/binary, "DigestValue></", Ds/binary, "Reference><", Ds/binary,
+            "Reference Type=\"", ?XADES_SIGNED_PROPERTIES_TYPE_URI,
+            "\" URI=\"#SignedProperties-1\"><", Ds/binary, "DigestMethod Algorithm=\"",
+            ?DSIG_DIGEST_SHA256_URI, "\"></", Ds/binary, "DigestMethod><", Ds/binary,
+            "DigestValue>", PropertiesDigest/binary, "</", Ds/binary, "DigestValue></", Ds/binary,
+            "Reference>">>,
+    CanonicalSignedInfo =
+        <<"<", Ds/binary, "SignedInfo", SignatureDecl/binary, ">", SignedInfoContent/binary, "</",
+            Ds/binary, "SignedInfo>">>,
+    SignatureValue = base64:encode(public_key:sign(CanonicalSignedInfo, sha256, Key)),
+    <<"<?xml version='1.0'?><invoice Id=\"invoice-1\"><amount currency=\"EUR\">42.00</amount><",
+        Ds/binary, "Signature", SignatureDecl/binary, " Id=\"Signature-1\"><", Ds/binary,
+        "SignedInfo>", SignedInfoContent/binary, "</", Ds/binary, "SignedInfo><", Ds/binary,
+        "SignatureValue>", SignatureValue/binary, "</", Ds/binary, "SignatureValue><", Ds/binary,
+        "Object><", Xades/binary, "QualifyingProperties", PropertiesDecl/binary,
+        " Target=\"#Signature-1\">", Properties/binary, "</", Xades/binary,
+        "QualifyingProperties></", Ds/binary, "Object></", Ds/binary, "Signature></invoice>">>.
+
+namespace_fixture_names(prefixed) ->
+    {<<"sig:">>, <<"proof:">>, <<" xmlns:sig=\"", ?DSIG_NAMESPACE_URI, "\"">>,
+        <<" xmlns:proof=\"", ?XADES_NAMESPACE_URI, "\"">>,
+        <<" xmlns:proof=\"", ?XADES_NAMESPACE_URI, "\" xmlns:sig=\"", ?DSIG_NAMESPACE_URI, "\"">>};
+namespace_fixture_names(default) ->
+    {<<>>, <<>>, <<" xmlns=\"", ?DSIG_NAMESPACE_URI, "\"">>,
+        <<" xmlns=\"", ?XADES_NAMESPACE_URI, "\"">>, <<" xmlns=\"", ?XADES_NAMESPACE_URI, "\"">>}.
+
 c14n_idempotent_after_sign(Config) ->
     RawMessage = ?config(raw_message, Config),
     RsaKey = ?config(rsa_key, Config),
     SignedMessage = signerl:sign(RawMessage, sha256, RsaKey),
     {ok, ParsedSigned} = signerl_xml:parse_binary(SignedMessage),
     {ok, SignedInfoElement} = signerl_xml:find_path(
-        [<<"ds:Signature">>, <<"ds:SignedInfo">>], ParsedSigned
+        [?DSIG_NAME(<<"Signature">>), ?DSIG_NAME(<<"SignedInfo">>)], ParsedSigned
     ),
     C14N1 = signerl_c14n:canonicalize(SignedInfoElement),
     {ok, ReParsed} = signerl_xml:parse_binary(C14N1),
@@ -1067,3 +1227,10 @@ sign_rejects_invalid_controlled_time(Config) ->
         {error, invalid_signing_time},
         signerl:verify(InvalidDate, sha256, ?config(rsa_public_key, Config))
     ).
+
+relative_namespace_returns_invalid_xml(Config) ->
+    Key = ?config(rsa_key, Config),
+    PublicKey = ?config(rsa_public_key, Config),
+    Raw = <<"<?xml version='1.0'?><root xmlns:p='relative'><p:child/></root>">>,
+    ?assertEqual({error, invalid_xml}, signerl:sign(Raw, sha256, Key)),
+    ?assertEqual({error, invalid_xml}, signerl:verify(Raw, sha256, PublicKey)).

@@ -54,6 +54,8 @@ signed_info_cases(Config) ->
             )},
         {"verify_reference_digests_returns_error_with_invalid_transform_element",
             ?_test(verify_reference_digests_returns_error_with_invalid_transform_element(Config))},
+        {"verify_rejects_transform_with_content",
+            ?_test(verify_rejects_transform_with_content(Config))},
         {"verify_rejects_duplicate_reference_attributes",
             ?_test(verify_rejects_duplicate_reference_attributes(Config))},
         {"verify_reference_digests_returns_error_with_missing_signed_properties_element",
@@ -318,7 +320,89 @@ extract_x509_certificate_returns_undefined_for_invalid_cert_test() ->
     {ok, #{key_info := KeyInfo2}} = signerl_verify:extract_signature_data(ParsedBase64),
     ?assertEqual(undefined, KeyInfo2).
 
+certificate_namespace_test_() ->
+    {setup, fun certificate_namespace_fixture/0, fun({Signed, CertDer}) ->
+        AliasNames = binary:replace(Signed, <<"ds:">>, <<"sig:">>, [global]),
+        Alias = binary:replace(AliasNames, <<"xmlns:ds">>, <<"xmlns:sig">>, [global]),
+        DefaultNames = binary:replace(Signed, <<"ds:">>, <<>>, [global]),
+        Default = binary:replace(DefaultNames, <<"xmlns:ds">>, <<"xmlns">>, [global]),
+        WrongData = test_helpers:replace_once(
+            Signed, <<"<ds:X509Data>">>, <<"<ds:X509Data xmlns:ds='urn:unrelated'>">>
+        ),
+        WrongCertificate = test_helpers:replace_once(
+            Signed,
+            <<"<ds:X509Certificate>">>,
+            <<"<ds:X509Certificate xmlns:ds='urn:unrelated'>">>
+        ),
+        %% These mutations exercise metadata lookup only; their RSA signatures
+        %% are not recalculated after changing namespace declarations or prefixes.
+        [
+            {Label, ?_assertEqual(Expected, extracted_key_info(Xml))}
+         || {Label, Xml, Expected} <- [
+                {"certificate under alternate DS names", Alias, #{x509_certificate => CertDer}},
+                {"certificate under default DS namespace", Default, #{x509_certificate => CertDer}},
+                {"X509Data in wrong namespace is ignored", WrongData, undefined},
+                {"X509Certificate in wrong namespace is ignored", WrongCertificate, undefined}
+            ]
+        ]
+    end}.
+
+transform_namespace_test_() ->
+    {setup, fun signature_fixture/0, fun(Config) ->
+        SignatureData = validated_signature_data(Config),
+        [
+            {Label, ?_test(assert_transform_namespace(SignatureData, Transform, Expected))}
+         || {Label, Transform, Expected} <- [
+                {"Transform declares its own DS namespace alias",
+                    {<<"local:Transform">>,
+                        [
+                            {<<"xmlns:local">>, ?DSIG_NAMESPACE_URI},
+                            {<<"Algorithm">>, ?DSIG_ENVELOPED_SIGNATURE_TRANSFORM_URI}
+                        ],
+                        []},
+                    [?DSIG_ENVELOPED_SIGNATURE_TRANSFORM_URI]},
+                {"Transform locally rebinds DS prefix to wrong URI",
+                    {<<"ds:Transform">>,
+                        [
+                            {<<"xmlns:ds">>, "urn:unrelated"},
+                            {<<"Algorithm">>, ?DSIG_ENVELOPED_SIGNATURE_TRANSFORM_URI}
+                        ],
+                        []},
+                    {error, invalid_signed_info}}
+            ]
+        ]
+    end}.
+
+assert_transform_namespace(#{signature_element := Signature} = Data, Transform, Expected) ->
+    Changed = replace_document_transforms(Signature, [Transform]),
+    ?assertNotEqual(Signature, Changed),
+    Message = message_with_signature(Data, Changed),
+    Result = signerl_verify:extract_signature_data(Message),
+    case Expected of
+        {error, _} ->
+            ?assertEqual(Expected, Result);
+        Algorithms ->
+            {ok, #{references := #{document := #{transforms := Actual}}}} = Result,
+            ?assertEqual(Algorithms, Actual)
+    end.
+
 %% Fixture setup and mutation helpers
+
+certificate_namespace_fixture() ->
+    Key = signerl_cert_helpers:signer_rsa_key(),
+    CertDer = signerl_cert_helpers:cert_der(signerl_cert_helpers:signer_rsa_cert_path()),
+    PublicKey = signerl_cert_helpers:rsa_public_key(CertDer),
+    {ok, Raw} = file:read_file(signerl_utils:file_path("test/examples/base/books.xml")),
+    Signed = signerl:sign(Raw, sha256, Key, CertDer),
+    Parsed = test_helpers:parse_verified_message(Signed, PublicKey),
+    {ok, #{key_info := #{x509_certificate := CertDer}}} =
+        signerl_verify:extract_signature_data(Parsed),
+    {Signed, CertDer}.
+
+extracted_key_info(Xml) ->
+    {ok, Parsed} = signerl_xml:parse_binary(Xml),
+    {ok, #{key_info := KeyInfo}} = signerl_verify:extract_signature_data(Parsed),
+    KeyInfo.
 
 signature_fixture() ->
     PublicKey = signerl_cert_helpers:rsa_public_key_from_cert(
@@ -499,3 +583,17 @@ corrupt_x509_certificate_child({<<"ds:X509Certificate">>, Attrs, _}, Replacement
     {<<"ds:X509Certificate">>, Attrs, Replacement};
 corrupt_x509_certificate_child(Other, _Replacement) ->
     Other.
+
+verify_rejects_transform_with_content(Config) ->
+    SignatureData = validated_signature_data(Config),
+    SignatureElement = maps:get(signature_element, SignatureData),
+    Broken = replace_document_transforms(SignatureElement, [
+        {<<"ds:Transform">>, [{<<"Algorithm">>, ?DSIG_ENVELOPED_SIGNATURE_TRANSFORM_URI}], [
+            {<<"ds:Unexpected">>, [], []}
+        ]}
+    ]),
+    ?assertNotEqual(SignatureElement, Broken),
+    ?assertEqual(
+        {error, invalid_signed_info},
+        signerl_verify:extract_signature_data(message_with_signature(SignatureData, Broken))
+    ).

@@ -26,3 +26,7 @@
 
 -define(SIGNATURE_ID, "Signature-1").
 -define(SIGNED_PROPERTIES_ID, "SignedProperties-1").
+
+% Expanded element names: namespace URI, local name (prefix-independent).
+-define(DSIG_NAME(Local), {<<?DSIG_NAMESPACE_URI>>, Local}).
+-define(XADES_NAME(Local), {<<?XADES_NAMESPACE_URI>>, Local}).

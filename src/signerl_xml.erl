@@ -1,5 +1,6 @@
 -module(signerl_xml).
 -include("signerl_xml.hrl").
+-include("signerl_dsig.hrl").
 
 -export([
     parse_file/1,
@@ -7,10 +8,16 @@
     parse_prolog/1,
     add_new_element/2,
     find_path/2,
+    find_children/2,
+    namespace_context/2,
+    with_namespace_context/2,
+    expanded_name/2,
+    expanded_names/1,
     single_text/1,
     attr_value/2,
     attr_value_or_undefined/2,
     is_signature_element/1,
+    is_signature_element/2,
     export_fragment/1,
     export/2,
     to_file/2
@@ -18,11 +25,20 @@
 
 % Public, transparent tree: callers construct and pattern-match these tuples.
 % Names and binary values are UTF-8; lists contain Unicode code points.
-% Namespace declaration values must be character lists for canonicalization.
 -type attribute_value() :: string() | binary() | integer() | atom().
 -type simplified_xml_item() :: simplified_xml() | string() | binary().
 -type simplified_xml() :: {binary(), [{binary(), attribute_value()}], [simplified_xml_item()]}.
--export_type([simplified_xml/0, attribute_value/0]).
+-type expanded_name() :: {binary() | undefined, binary()}.
+-type namespace_context() :: #{binary() => binary()}.
+-type expanded_xml() ::
+    {expanded_name(), [{binary(), attribute_value()}], [expanded_xml() | string() | binary()]}.
+-export_type([
+    simplified_xml/0,
+    attribute_value/0,
+    expanded_xml/0,
+    expanded_name/0,
+    namespace_context/0
+]).
 
 -spec parse_file(FileName) -> SimplifiedXml when
     FileName :: string(),
@@ -47,6 +63,10 @@ parse_binary(Message, Options) ->
         % NUL is illegal XML and also exposes BOM-less UTF-16/32 autodetection.
         nomatch = binary:match(Message, <<0>>),
         {ok, {[], [{document, [], [Root]}]}, Rest} = scan_xml(Message, Options),
+        % SAX normalizes invalid xmlns: into a default declaration. Check raw
+        % start-tag attributes as well as the parsed namespace tree.
+        nomatch = re:run(Message, ?XML_EMPTY_NAMESPACE_PREFIX_RE, [{capture, none}]),
+        ok = validate_namespaces([Root], #{}, []),
         ok = validate_remainder(Rest),
         {ok, Root}
     catch
@@ -125,6 +145,69 @@ xml_event({processingInstruction, _, _}, _, _) ->
 xml_event(_, _, State) ->
     State.
 
+% xmerl's SAX parser reports lexical names without enforcing all namespace
+% constraints. Validate them without changing prefixes or serialized attributes.
+validate_namespaces([], _Ns, []) ->
+    ok;
+validate_namespaces([], _Ns, [{Siblings, ParentNs} | Stack]) ->
+    validate_namespaces(Siblings, ParentNs, Stack);
+validate_namespaces([{Name, Attrs, Children} | Rest], ParentNs, Stack) ->
+    Ns = namespace_context(Attrs, ParentNs),
+    ok = validate_attributes(Attrs, Ns, #{}),
+    _ = validated_name(Name, Ns, element),
+    validate_namespaces(Children, Ns, [{Rest, ParentNs} | Stack]);
+validate_namespaces([_Text | Rest], Ns, Stack) ->
+    validate_namespaces(Rest, Ns, Stack).
+
+validate_attributes([], _Ns, _Seen) ->
+    ok;
+validate_attributes([{Name, Value} | Rest], Ns, Seen) ->
+    Expanded = validated_attribute(Name, Value, Ns),
+    false = maps:is_key(Expanded, Seen),
+    validate_attributes(Rest, Ns, Seen#{Expanded => true}).
+
+validated_attribute(<<"xmlns">>, Uri, _Ns) ->
+    ok = validate_binding(<<>>, unicode:characters_to_binary(Uri)),
+    {?XMLNS_NAMESPACE_URI, <<>>};
+validated_attribute(<<"xmlns:", Prefix/binary>>, Uri, _Ns) ->
+    ok = validate_ncname(Prefix),
+    ok = validate_binding(Prefix, unicode:characters_to_binary(Uri)),
+    {?XMLNS_NAMESPACE_URI, Prefix};
+validated_attribute(Name, _Value, Ns) ->
+    validated_name(Name, Ns, attribute).
+
+validate_binding(Prefix, Uri) ->
+    true = Prefix =/= <<"xmlns">>,
+    true = Uri =/= ?XMLNS_NAMESPACE_URI,
+    true = (Prefix =:= <<"xml">>) =:= (Uri =:= ?XML_NAMESPACE_URI),
+    true = Prefix =:= <<>> orelse Uri =/= <<>>,
+    case Uri of
+        <<>> ->
+            ok;
+        _ ->
+            #{scheme := _} = uri_string:parse(Uri),
+            ok
+    end.
+
+validated_name(Name, Ns, Kind) ->
+    case binary:split(Name, <<":">>, [global]) of
+        [Prefix, Local] ->
+            ok = validate_ncname(Prefix),
+            ok = validate_ncname(Local),
+            true = Prefix =/= <<"xmlns">>,
+            {maps:get(Prefix, Ns), Local};
+        [Local] ->
+            ok = validate_ncname(Local),
+            case Kind of
+                element -> {maps:get(<<>>, Ns), Local};
+                attribute -> {<<>>, Local}
+            end
+    end.
+
+validate_ncname(Name) ->
+    match = re:run(Name, ?XML_NCNAME_RE, [unicode, {capture, none}]),
+    ok.
+
 prepend_content(Item, {Tag, Attrs, Content}) ->
     {Tag, Attrs, [Item | Content]}.
 
@@ -172,9 +255,11 @@ add_new_element(NewElement, {Tag, Attrs, Content}) ->
     {Tag, Attrs, Content ++ [NewElement]}.
 
 -spec find_path(Path, Xml) -> Result when
-    Path :: [binary(), ...],
+    Path :: [binary(), ...] | [expanded_name(), ...],
     Xml :: simplified_xml(),
     Result :: {ok, simplified_xml()} | {error, not_found}.
+find_path([Name | _] = Path, Xml) when is_tuple(Name) ->
+    find_namespace_path(Path, Xml, #{});
 find_path([Tag], Xml) ->
     find_unique_child(Tag, Xml);
 find_path([Tag | Rest], Xml) ->
@@ -219,9 +304,97 @@ attr_value_or_undefined(Key, Attrs) ->
             undefined
     end.
 
+% Namespace selectors return a standalone subtree with its in-scope bindings.
+% Lexical binary selectors above retain the existing exact-name behavior.
+find_namespace_path([Name | Rest], {_, Attrs, _} = Xml, ParentNs) ->
+    CurrentNs = namespace_context(Attrs, ParentNs),
+    case matching_children(Name, Xml, CurrentNs) of
+        [Child] when Rest =:= [] ->
+            {ok, with_namespace_context(Child, CurrentNs)};
+        [Child] ->
+            find_namespace_path(Rest, Child, CurrentNs);
+        _ ->
+            {error, not_found}
+    end.
+
+-spec find_children(expanded_name(), simplified_xml()) -> [simplified_xml()].
+find_children(Name, {_, Attrs, _} = Xml) ->
+    CurrentNs = namespace_context(Attrs, #{}),
+    [with_namespace_context(Child, CurrentNs) || Child <- matching_children(Name, Xml, CurrentNs)].
+
+matching_children(Name, {_, _, Content}, CurrentNs) ->
+    [
+        Child
+     || Child = {Tag, _, _} <- Content,
+        is_binary(Tag),
+        expanded_name(Child, CurrentNs) =:= Name
+    ].
+
+-spec namespace_context([{binary(), attribute_value()}], namespace_context()) ->
+    namespace_context().
+namespace_context(Attrs, ParentNs) ->
+    Initial = maps:merge(#{<<>> => <<>>, <<"xml">> => ?XML_NAMESPACE_URI}, ParentNs),
+    lists:foldl(fun namespace_binding/2, Initial, Attrs).
+
+namespace_binding({<<"xmlns">>, Uri}, Ns) ->
+    Ns#{<<>> => unicode:characters_to_binary(Uri)};
+namespace_binding({<<"xmlns:", Prefix/binary>>, Uri}, Ns) ->
+    Ns#{Prefix => unicode:characters_to_binary(Uri)};
+namespace_binding(_, Ns) ->
+    Ns.
+
+-spec expanded_name(simplified_xml(), namespace_context()) -> expanded_name().
+expanded_name({Name, Attrs, _}, ParentNs) ->
+    CurrentNs = namespace_context(Attrs, ParentNs),
+    resolve_name(Name, CurrentNs).
+
+resolve_name(Name, Ns) ->
+    case binary:split(Name, <<":">>) of
+        [Prefix, Local] -> {maps:get(Prefix, Ns, undefined), Local};
+        [Local] -> {maps:get(<<>>, Ns), Local}
+    end.
+
+-spec with_namespace_context(simplified_xml(), namespace_context()) -> simplified_xml().
+with_namespace_context({Name, Attrs, Content}, ParentNs) ->
+    CurrentNs = namespace_context(Attrs, ParentNs),
+    Inherited = [
+        {namespace_attribute(Prefix), unicode:characters_to_list(Uri)}
+     || {Prefix, Uri} <- maps:to_list(CurrentNs),
+        Prefix =/= <<"xml">>,
+        Uri =/= <<>>,
+        not lists:keymember(namespace_attribute(Prefix), 1, Attrs)
+    ],
+    {Name, Attrs ++ Inherited, Content}.
+
+namespace_attribute(<<>>) -> <<"xmlns">>;
+namespace_attribute(Prefix) -> <<"xmlns:", Prefix/binary>>.
+
+% This projection is for metadata validation only. Canonicalization always uses
+% the original lexical names plus context, because prefixes affect signed bytes.
+-spec expanded_names(simplified_xml()) -> expanded_xml().
+expanded_names(Xml) ->
+    expand_content([Xml], #{}, [], []).
+
+expand_content([], _Ns, [], [Xml]) ->
+    Xml;
+expand_content([], _Ns, [{Name, Attrs, Siblings, ParentNs, Acc} | Stack], Children) ->
+    expand_content(Siblings, ParentNs, Stack, [{Name, Attrs, lists:reverse(Children)} | Acc]);
+expand_content([{Name, Attrs, Children} | Siblings], ParentNs, Stack, Acc) when is_binary(Name) ->
+    CurrentNs = namespace_context(Attrs, ParentNs),
+    Expanded = resolve_name(Name, CurrentNs),
+    expand_content(Children, CurrentNs, [{Expanded, Attrs, Siblings, ParentNs, Acc} | Stack], []);
+expand_content([Text | Rest], Ns, Stack, Acc) ->
+    expand_content(Rest, Ns, Stack, [Text | Acc]).
+
 -spec is_signature_element(term()) -> boolean().
-is_signature_element({<<"ds:Signature">>, _, _}) -> true;
-is_signature_element(_) -> false.
+is_signature_element(Element) ->
+    is_signature_element(Element, #{}).
+
+-spec is_signature_element(term(), namespace_context()) -> boolean().
+is_signature_element({Name, _, _} = Element, ParentNs) when is_binary(Name) ->
+    expanded_name(Element, ParentNs) =:= ?DSIG_NAME(<<"Signature">>);
+is_signature_element(_, _) ->
+    false.
 
 find_unique_child(Tag, {_, _, Content}) ->
     Children = [Element || Element = {TagValue, _, _} <- Content, TagValue =:= Tag],

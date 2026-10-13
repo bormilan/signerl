@@ -1,6 +1,7 @@
 -module(signerl_xml_test).
 
 -include_lib("eunit/include/eunit.hrl").
+-include("signerl_dsig.hrl").
 
 parse_test() ->
     Path = "test/examples/base/books.xml",
@@ -205,7 +206,7 @@ new_test_element() ->
     {NewTag, NewAttrs, NewContent}.
 
 is_signature_element_shared_test() ->
-    SigElement = {<<"ds:Signature">>, [], []},
+    SigElement = {<<"ds:Signature">>, [{<<"xmlns:ds">>, ?DSIG_NAMESPACE_URI}], []},
     NonSigElement = {<<"ds:SignedInfo">>, [], []},
     ?assertEqual(true, signerl_xml:is_signature_element(SigElement)),
     ?assertEqual(false, signerl_xml:is_signature_element(NonSigElement)),
@@ -435,3 +436,176 @@ xml_name_longer_than_atom_limit_test() ->
     Name = binary:copy(<<"n">>, 300),
     Xml = <<"<", Name/binary, " ", Name/binary, "='v'/>">>,
     ?assertEqual({ok, {Name, [{Name, "v"}], []}}, signerl_xml:parse_binary(Xml)).
+
+namespace_qualified_lookup_test_() ->
+    [
+        {Label, fun() ->
+            {ok, Root} = signerl_xml:parse_binary(Xml),
+            Result = signerl_xml:find_path(Path, Root),
+            case Expected of
+                not_found -> ?assertEqual({error, not_found}, Result);
+                Name -> ?assertMatch({ok, {Name, _, _}}, Result)
+            end
+        end}
+     || {Label, Xml, Path, Expected} <- [
+            {"inherited alias",
+                <<"<root xmlns:s='http://www.w3.org/2000/09/xmldsig#'><s:SignedInfo/></root>">>,
+                [?DSIG_NAME(<<"SignedInfo">>)], <<"s:SignedInfo">>},
+            {"default namespace",
+                <<"<root><SignedInfo xmlns='http://www.w3.org/2000/09/xmldsig#'/></root>">>,
+                [?DSIG_NAME(<<"SignedInfo">>)], <<"SignedInfo">>},
+            {"nested inherited binding",
+                <<"<root xmlns:s='", ?DSIG_NAMESPACE_URI,
+                    "'><s:Signature><s:SignedInfo/></s:Signature></root>">>,
+                [?DSIG_NAME(<<"Signature">>), ?DSIG_NAME(<<"SignedInfo">>)], <<"s:SignedInfo">>},
+            {"wrong URI decoy",
+                <<"<root xmlns:ds='urn:wrong' xmlns:s='", ?DSIG_NAMESPACE_URI,
+                    "'><ds:SignedInfo/><s:SignedInfo/></root>">>,
+                [?DSIG_NAME(<<"SignedInfo">>)], <<"s:SignedInfo">>},
+            {"subtree redeclaration",
+                <<"<root xmlns:s='", ?DSIG_NAMESPACE_URI,
+                    "'><s:Signature><s:SignedInfo xmlns:s='urn:wrong'/></s:Signature></root>">>,
+                [?DSIG_NAME(<<"Signature">>), ?DSIG_NAME(<<"SignedInfo">>)], not_found},
+            {"aliases are ambiguous",
+                <<"<root xmlns:a='", ?DSIG_NAMESPACE_URI, "' xmlns:b='", ?DSIG_NAMESPACE_URI,
+                    "'><a:SignedInfo/><b:SignedInfo/></root>">>,
+                [?DSIG_NAME(<<"SignedInfo">>)], not_found},
+            {"default undeclaration", <<"<root xmlns='urn:app'><child xmlns=''/></root>">>,
+                [{<<>>, <<"child">>}], <<"child">>},
+            {"wrong default URI", <<"<root xmlns='urn:app'><SignedInfo/></root>">>,
+                [?DSIG_NAME(<<"SignedInfo">>)], not_found},
+            {"missing intermediate node", <<"<root/>">>,
+                [?DSIG_NAME(<<"Signature">>), ?DSIG_NAME(<<"SignedInfo">>)], not_found}
+        ]
+    ].
+
+namespace_lookup_preserves_context_test() ->
+    {ok, Root} = signerl_xml:parse_binary(<<
+        "<root xmlns='urn:app' xmlns:s='http://www.w3.org/2000/09/xmldsig#' xmlns:q='urn:outer'>"
+        "<s:Signature xmlns:q='urn:inner'><s:SignedInfo><q:child/>"
+        "</s:SignedInfo></s:Signature></root>"
+    >>),
+    {ok, {<<"s:SignedInfo">>, Attrs, _} = Child} = signerl_xml:find_path(
+        [?DSIG_NAME(<<"Signature">>), ?DSIG_NAME(<<"SignedInfo">>)], Root
+    ),
+    ?assertEqual({ok, "urn:app"}, signerl_xml:attr_value(<<"xmlns">>, Attrs)),
+    ?assertEqual({ok, "urn:inner"}, signerl_xml:attr_value(<<"xmlns:q">>, Attrs)),
+    ?assertEqual({ok, ?DSIG_NAMESPACE_URI}, signerl_xml:attr_value(<<"xmlns:s">>, Attrs)),
+    ?assertEqual(
+        <<"<s:SignedInfo xmlns=\"urn:app\" xmlns:q=\"urn:inner\" xmlns:s=\"", ?DSIG_NAMESPACE_URI,
+            "\"><q:child></q:child></s:SignedInfo>">>,
+        signerl_c14n:canonicalize(Child)
+    ),
+    %% Existing binary selectors remain lexical and return the original tuple.
+    {ok, {<<"s:Signature">>, _, [Original]}} = signerl_xml:find_path([<<"s:Signature">>], Root),
+    ?assertEqual(
+        {ok, Original}, signerl_xml:find_path([<<"s:Signature">>, <<"s:SignedInfo">>], Root)
+    ).
+
+expanded_names_preserve_content_and_scope_test() ->
+    Attrs = [{<<"xmlns:p">>, "urn:outer"}],
+    InnerAttrs = [{<<"xmlns:p">>, <<"urn:inner">>}],
+    Root =
+        {<<"p:root">>, Attrs, [
+            "before",
+            {<<"p:child">>, InnerAttrs, [<<"text">>]},
+            {<<"p:child">>, [], []},
+            {<<"unbound:child">>, [], []},
+            "after"
+        ]},
+    ?assertEqual(
+        {{<<"urn:outer">>, <<"root">>}, Attrs, [
+            "before",
+            {{<<"urn:inner">>, <<"child">>}, InnerAttrs, [<<"text">>]},
+            {{<<"urn:outer">>, <<"child">>}, [], []},
+            {{undefined, <<"child">>}, [], []},
+            "after"
+        ]},
+        signerl_xml:expanded_names(Root)
+    ).
+
+namespace_signature_recognition_test_() ->
+    [
+        {Label, ?_assertEqual(Expected, signerl_xml:is_signature_element(Element))}
+     || {Label, Element, Expected} <- [
+            {"alias", {<<"sig:Signature">>, [{<<"xmlns:sig">>, ?DSIG_NAMESPACE_URI}], []}, true},
+            {"default", {<<"Signature">>, [{<<"xmlns">>, ?DSIG_NAMESPACE_URI}], []}, true},
+            {"undeclared prefix", {<<"ds:Signature">>, [], []}, false},
+            {"wrong namespace", {<<"ds:Signature">>, [{<<"xmlns:ds">>, "urn:wrong"}], []}, false},
+            {"text", "ds:Signature", false}
+        ]
+    ].
+
+parse_rejects_namespace_constraint_violations_test_() ->
+    [
+        {Label, ?_assertEqual({error, invalid_xml}, signerl_xml:parse_binary(Xml))}
+     || {Label, Xml} <- [
+            {"undeclared element prefix", <<"<p:root/>">>},
+            {"undeclared attribute prefix", <<"<root p:a='1'/>">>},
+            {"reserved xml rebinding",
+                <<"<xml:Signature xmlns:xml='http://www.w3.org/2000/09/xmldsig#'/>">>},
+            {"reserved xmlns prefix", <<"<root xmlns:xmlns='urn:wrong'/>">>},
+            {"reserved xmlns URI", <<"<root xmlns:p='http://www.w3.org/2000/xmlns/'/>">>},
+            {"XML URI on another prefix",
+                <<"<root xmlns:p='http://www.w3.org/XML/1998/namespace'/>">>},
+            {"XML URI as default", <<"<root xmlns='http://www.w3.org/XML/1998/namespace'/>">>},
+            {"empty prefixed declaration", <<"<root xmlns:p=''><p:child/></root>">>},
+            {"duplicate declaration", <<"<root xmlns:p='urn:one' xmlns:p='urn:two'/>">>},
+            {"duplicate expanded attributes",
+                <<"<root xmlns:a='urn:u' xmlns:b='urn:u' a:id='1' b:id='2'/>">>},
+            {"multiple QName colons", <<"<a:b:c xmlns:a='urn:a'/>">>},
+            {"empty QName local name", <<"<a: xmlns:a='urn:a'/>">>},
+            {"empty QName prefix", <<"<:root/>">>},
+            {"numeric QName local name", <<"<a:1 xmlns:a='urn:a'/>">>},
+            {"attribute QName colons", <<"<root xmlns:a='urn:a' a:b:c='1'/>">>},
+            {"numeric attribute local name", <<"<root xmlns:a='urn:a' a:1='1'/>">>},
+            {"xmlns element prefix", <<"<xmlns:root/>">>},
+            {"empty namespace declaration prefix", <<"<root xmlns:='urn:x'/>">>},
+            {"spaced empty namespace prefix", <<"<root label='ok' xmlns: = 'urn:x'/>">>},
+            {"nested empty namespace prefix",
+                <<"<root xmlns:p='urn:x'><child xmlns:='urn:y'/></root>">>},
+            {"relative prefixed URI", <<"<root xmlns:p='relative'/>">>},
+            {"relative default URI", <<"<root xmlns='../relative'/>">>},
+            {"fragment namespace URI", <<"<root xmlns:p='#local'/>">>},
+            {"reserved xmlns default URI", <<"<root xmlns='http://www.w3.org/2000/xmlns/'/>">>}
+        ]
+    ].
+
+parse_accepts_reserved_xml_and_rebound_namespaces_test() ->
+    Xml = <<
+        "<root xmlns:xml='http://www.w3.org/XML/1998/namespace' xml:lang='en' "
+        "xmlns:p='urn:outer'><p:child xmlns:p='urn:inner' p:id='1'/><p:child/></root>"
+    >>,
+    ?assertMatch(
+        {ok, {<<"root">>, _, [{<<"p:child">>, _, []}, {<<"p:child">>, _, []}]}},
+        signerl_xml:parse_binary(Xml)
+    ).
+
+parse_accepts_distinct_attribute_namespaces_test() ->
+    Xml = <<
+        "<root xmlns='urn:root' xmlns:p='urn:root' id='1' p:id='2' xml:lang='en'>"
+        "<child xmlns=''/></root>"
+    >>,
+    {ok, {<<"root">>, Attrs, [{<<"child">>, [{<<"xmlns">>, []}], []}]}} =
+        signerl_xml:parse_binary(Xml),
+    ?assertEqual({ok, "1"}, signerl_xml:attr_value(<<"id">>, Attrs)),
+    ?assertEqual({ok, "2"}, signerl_xml:attr_value(<<"p:id">>, Attrs)).
+
+parse_accepts_unicode_namespace_names_test() ->
+    Xml = unicode:characters_to_binary("<é:根 xmlns:é='urn:unicode' é:値='ok'/>"),
+    ?assertMatch({ok, {_, _, []}}, signerl_xml:parse_binary(Xml)).
+
+lexical_path_missing_ancestor_test() ->
+    Xml = {<<"root">>, [], [{<<"child">>, [], []}]},
+    ?assertEqual({error, not_found}, signerl_xml:find_path([<<"missing">>, <<"child">>], Xml)).
+
+namespace_like_literals_are_preserved_test_() ->
+    [
+        ?_assertMatch({ok, _}, signerl_xml:parse_binary(Xml))
+     || Xml <- [
+            <<"<root><!-- <child xmlns:='urn:x'/> --></root>">>,
+            <<"<root><![CDATA[<child xmlns:='urn:x'/>]]></root>">>,
+            <<"<root label=\"xmlns:='urn:x'\"/>">>,
+            <<"<root>xmlns: = 'urn:x'</root>">>
+        ]
+    ].
