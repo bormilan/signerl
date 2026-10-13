@@ -1,4 +1,5 @@
 -module(signerl_c14n).
+-include("signerl_xml.hrl").
 
 -export([canonicalize/1, canonicalize/2, remove_signature_elements/1]).
 
@@ -11,13 +12,18 @@ canonicalize(XmlTerm) ->
 
 -spec canonicalize(signerl_xml:simplified_xml(), c14n_mode()) -> binary().
 canonicalize(XmlTerm, c14n11) ->
-    unicode:characters_to_binary(c14n11_element(XmlTerm, #{}));
+    unicode:characters_to_binary(c14n11_element(XmlTerm, initial_namespaces()));
 canonicalize(XmlTerm, exc_c14n) ->
-    unicode:characters_to_binary(exc_element(XmlTerm, #{}, #{})).
+    InitialNs = initial_namespaces(),
+    unicode:characters_to_binary(exc_element(XmlTerm, InitialNs, InitialNs)).
+
+initial_namespaces() ->
+    #{"" => "", "xml" => unicode:characters_to_list(?XML_NAMESPACE_URI)}.
 
 -spec remove_signature_elements(signerl_xml:simplified_xml()) -> signerl_xml:simplified_xml().
 remove_signature_elements({Tag, Attrs, Children}) ->
-    Filtered = [C || C <- Children, not signerl_xml:is_signature_element(C)],
+    Namespaces = signerl_xml:namespace_context(Attrs, #{}),
+    Filtered = [C || C <- Children, not signerl_xml:is_signature_element(C, Namespaces)],
     {Tag, Attrs, Filtered}.
 
 %% ====================================================================
@@ -73,7 +79,7 @@ exc_need_emit(Prefix, InputNs, OutputParentNs) ->
     case {maps:find(Prefix, InputNs), maps:find(Prefix, OutputParentNs)} of
         {{ok, Uri}, {ok, Uri}} -> false;
         {{ok, Uri}, _} -> {true, {prefix_to_ns_decl(Prefix), Uri}};
-        {error, _} -> false
+        {error, _} -> error({undeclared_namespace_prefix, Prefix})
     end.
 
 prefix_to_ns_decl("") -> "xmlns";
@@ -90,7 +96,8 @@ partition_attrs([{Name, Value} | Rest], NsAcc, RegAcc) ->
     NameStr = unicode:characters_to_list(Name),
     case is_ns_decl(NameStr) of
         true ->
-            partition_attrs(Rest, [{NameStr, Value} | NsAcc], RegAcc);
+            Uri = namespace_uri(value_to_string(Value)),
+            partition_attrs(Rest, [{NameStr, Uri} | NsAcc], RegAcc);
         false ->
             partition_attrs(Rest, NsAcc, [{NameStr, Value} | RegAcc])
     end.
@@ -98,6 +105,12 @@ partition_attrs([{Name, Value} | Rest], NsAcc, RegAcc) ->
 is_ns_decl("xmlns") -> true;
 is_ns_decl("xmlns:" ++ _) -> true;
 is_ns_decl(_) -> false.
+
+namespace_uri([]) ->
+    [];
+namespace_uri(Uri) ->
+    #{scheme := _} = uri_string:parse(Uri),
+    Uri.
 
 %% --- Namespace tracking ---
 

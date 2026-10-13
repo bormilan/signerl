@@ -8,6 +8,7 @@
 ]).
 
 -include_lib("eunit/include/eunit.hrl").
+-include("signerl_dsig.hrl").
 
 %% Minimal extraction fixtures, not cryptographically valid signatures.
 signature_element(SignedSignaturePropertiesElements) ->
@@ -22,14 +23,15 @@ signature_element(SignedSignaturePropertiesElements, SignedDataObjectPropertiesE
     ]).
 
 signature_with_properties(Properties) ->
-    {<<"ds:Signature">>, [], [
-        {<<"ds:SignatureValue">>, [], ["AQID"]},
-        {<<"ds:Object">>, [], [
-            {<<"xades:QualifyingProperties">>, [], [
-                {<<"xades:SignedProperties">>, [], Properties}
+    {<<"ds:Signature">>,
+        [{<<"xmlns:ds">>, ?DSIG_NAMESPACE_URI}, {<<"xmlns:xades">>, ?XADES_NAMESPACE_URI}], [
+            {<<"ds:SignatureValue">>, [], ["AQID"]},
+            {<<"ds:Object">>, [], [
+                {<<"xades:QualifyingProperties">>, [], [
+                    {<<"xades:SignedProperties">>, [], Properties}
+                ]}
             ]}
-        ]}
-    ]}.
+        ]}.
 
 parse_verified_message(SignedMessage, PublicKey) ->
     ?assertEqual(true, signerl:verify(SignedMessage, sha256, PublicKey)),

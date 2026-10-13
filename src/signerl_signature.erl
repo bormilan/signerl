@@ -67,17 +67,34 @@ build_signature_element_with_method_uri(
     {ok, SignatureElement}.
 
 construct_signature_without_value(
-    Message, HashAlgorithm, DigestMethodUri, SignatureMethodUri, CertDer, SigningTime
+    {_, MessageAttrs, _} = Message,
+    HashAlgorithm,
+    DigestMethodUri,
+    SignatureMethodUri,
+    CertDer,
+    SigningTime
 ) ->
     SignedProperties = signed_properties(SigningTime, HashAlgorithm, DigestMethodUri, CertDer),
+    SignatureAttrs = [{<<"xmlns:ds">>, ?DSIG_NAMESPACE_URI}, {<<"Id">>, ?SIGNATURE_ID}],
+    SignatureNs = signerl_xml:namespace_context(
+        SignatureAttrs, signerl_xml:namespace_context(MessageAttrs, #{})
+    ),
+    PropertiesNs = signerl_xml:namespace_context(
+        [{<<"xmlns:xades">>, ?XADES_NAMESPACE_URI}], SignatureNs
+    ),
     SignedInfo = signed_info(
-        Message, SignedProperties, HashAlgorithm, DigestMethodUri, SignatureMethodUri
+        Message,
+        signerl_xml:with_namespace_context(SignedProperties, PropertiesNs),
+        HashAlgorithm,
+        DigestMethodUri,
+        SignatureMethodUri
     ),
     KeyInfoElement = key_info(CertDer),
     SignatureElement =
-        {<<"ds:Signature">>, [{<<"xmlns:ds">>, ?DSIG_NAMESPACE_URI}, {<<"Id">>, ?SIGNATURE_ID}],
+        {<<"ds:Signature">>, SignatureAttrs,
             [SignedInfo] ++ KeyInfoElement ++ [signature_object(SignedProperties)]},
-    {ok, SignatureElement, SignedInfo}.
+    % Sign the subtree in its actual document context; serialize the original tree.
+    {ok, SignatureElement, signerl_xml:with_namespace_context(SignedInfo, SignatureNs)}.
 
 key_info(undefined) ->
     [];

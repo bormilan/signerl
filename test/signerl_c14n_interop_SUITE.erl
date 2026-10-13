@@ -2,6 +2,7 @@
 
 -include_lib("eunit/include/eunit.hrl").
 -include_lib("common_test/include/ct.hrl").
+-include("signerl_xml.hrl").
 -compile([export_all, nowarn_export_all]).
 
 all() ->
@@ -18,7 +19,8 @@ groups() ->
             interop_mixed_content,
             interop_dsig_like,
             interop_utf8,
-            interop_preserved_content
+            interop_preserved_content,
+            interop_namespace_edges
         ]}
     ].
 
@@ -115,6 +117,35 @@ interop_preserved_content(Config) ->
             ?assertEqual(Expected, run_xmllint(OutputPath, Flag))
         end,
         [{c14n11, "--c14n11"}, {exc_c14n, "--exc-c14n"}]
+    ).
+
+interop_namespace_edges(Config) ->
+    Cases = [
+        {"empty-default", <<"<root xmlns=\"\"/>">>},
+        {"xml-attributes",
+            <<"<root xmlns:xml=\"", ?XML_NAMESPACE_URI/binary, "\" xml:a=\"1\" b=\"2\"/>">>},
+        {"default-undeclaration", <<
+            "<root xmlns=\"urn:parent\"><child xmlns=\"\">"
+            "<leaf/></child></root>"
+        >>},
+        {"prefix-redeclaration", <<
+            "<p:root xmlns:p=\"urn:parent\"><p:child xmlns:p=\"urn:child\"/>"
+            "<p:other/></p:root>"
+        >>}
+    ],
+    lists:foreach(
+        fun({Name, Raw}) ->
+            Path = filename:join(?config(priv_dir, Config), Name ++ ".xml"),
+            ok = file:write_file(Path, Raw),
+            {ok, Parsed} = signerl_xml:parse_binary(Raw),
+            lists:foreach(
+                fun({Mode, Flag}) ->
+                    ?assertEqual(run_xmllint(Path, Flag), signerl_c14n:canonicalize(Parsed, Mode))
+                end,
+                [{c14n11, "--c14n11"}, {exc_c14n, "--exc-c14n"}]
+            )
+        end,
+        Cases
     ).
 
 % xmllint's C14N mode writes stdout even with --output. Windows C stdio

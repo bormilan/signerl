@@ -74,6 +74,70 @@ default_namespace_test() ->
     Expected = <<"<root xmlns=\"http://example.org\"><child>text</child></root>">>,
     ?assertEqual(Expected, signerl_c14n:canonicalize(Input)).
 
+namespace_context_edges_test_() ->
+    EmptyDefault = {<<"root">>, [{<<"xmlns">>, ""}], []},
+    Undeclaration =
+        {<<"root">>, [{<<"xmlns">>, "urn:parent"}], [
+            {<<"child">>, [{<<"xmlns">>, ""}], [{<<"leaf">>, [], []}]}
+        ]},
+    XmlAttributes =
+        {<<"root">>, [{<<"xml:a">>, "1"}, {<<"b">>, "2"}], []},
+    ExplicitXml =
+        {<<"root">>, [{<<"xmlns:xml">>, "http://www.w3.org/XML/1998/namespace"}], []},
+    BinaryNamespace =
+        {<<"p:root">>, [{<<"xmlns:p">>, <<"urn:p">>}], [
+            {<<"p:child">>, [{<<"xmlns:p">>, "urn:p"}], []}
+        ]},
+    Cases = [
+        {"omits empty default namespace at root", EmptyDefault, <<"<root></root>">>},
+        {"preserves default namespace undeclaration", Undeclaration,
+            <<"<root xmlns=\"urn:parent\"><child xmlns=\"\"><leaf></leaf></child></root>">>},
+        {"sorts implicit XML namespace attributes", XmlAttributes,
+            <<"<root b=\"2\" xml:a=\"1\"></root>">>},
+        {"omits reserved XML namespace declaration", ExplicitXml, <<"<root></root>">>},
+        {"normalizes binary namespace values", BinaryNamespace,
+            <<"<p:root xmlns:p=\"urn:p\"><p:child></p:child></p:root>">>}
+    ],
+    [
+        {
+            atom_to_list(Mode) ++ " " ++ Name,
+            ?_assertEqual(Expected, signerl_c14n:canonicalize(Tree, Mode))
+        }
+     || Mode <- [c14n11, exc_c14n], {Name, Tree, Expected} <- Cases
+    ].
+
+rejects_relative_namespace_uris_test_() ->
+    [
+        {
+            atom_to_list(Mode) ++ " " ++ Name,
+            ?_assertException(
+                error,
+                {badmatch, _},
+                signerl_c14n:canonicalize({<<"root">>, [{<<"xmlns:p">>, Uri}], []}, Mode)
+            )
+        }
+     || Mode <- [c14n11, exc_c14n],
+        {Name, Uri} <- [
+            {"relative path", "relative"},
+            {"absolute path without scheme", "/namespace"},
+            {"fragment without scheme", <<"#namespace">>},
+            {"authority without scheme", "//example.test/namespace"}
+        ]
+    ].
+
+accepts_absolute_namespace_uris_test_() ->
+    [
+        {
+            atom_to_list(Mode) ++ " " ++ Uri,
+            ?_assertEqual(
+                unicode:characters_to_binary(["<p:root xmlns:p=\"", Uri, "\"></p:root>"]),
+                signerl_c14n:canonicalize({<<"p:root">>, [{<<"xmlns:p">>, Uri}], []}, Mode)
+            )
+        }
+     || Mode <- [c14n11, exc_c14n],
+        Uri <- ["https://example.test/namespace", "urn:example:namespace"]
+    ].
+
 attribute_sorting_by_ns_uri_test() ->
     Input =
         {<<"e5">>,
@@ -197,16 +261,40 @@ remove_signature_from_root_test() ->
     ?assertEqual(Expected, signerl_c14n:remove_signature_elements(Input)).
 
 remove_signature_preserves_other_children_test() ->
+    Attrs = [{<<"id">>, "1"}, {<<"xmlns:ds">>, "http://www.w3.org/2000/09/xmldsig#"}],
     Input =
-        {<<"root">>, [{<<"id">>, "1"}], [
+        {<<"root">>, Attrs, [
             {<<"a">>, [], []},
             {<<"b">>, [], []},
             {<<"ds:Signature">>, [], [{<<"value">>, [], ["sig"]}]},
             {<<"c">>, [], []}
         ]},
     Expected =
-        {<<"root">>, [{<<"id">>, "1"}], [{<<"a">>, [], []}, {<<"b">>, [], []}, {<<"c">>, [], []}]},
+        {<<"root">>, Attrs, [
+            {<<"a">>, [], []}, {<<"b">>, [], []}, {<<"c">>, [], []}
+        ]},
     ?assertEqual(Expected, signerl_c14n:remove_signature_elements(Input)).
+
+remove_signature_resolves_namespace_context_test() ->
+    Attrs = [
+        {<<"xmlns:s">>, "http://www.w3.org/2000/09/xmldsig#"},
+        {<<"xmlns:ds">>, "urn:decoy"}
+    ],
+    Decoy = {<<"ds:Signature">>, [], ["document content"]},
+    Rebound = {<<"s:Signature">>, [{<<"xmlns:s">>, "urn:decoy"}], []},
+    Input =
+        {<<"root">>, Attrs, [
+            "before",
+            {<<"s:Signature">>, [], []},
+            Decoy,
+            Rebound,
+            {<<"ds:Signature">>, [{<<"xmlns:ds">>, "http://www.w3.org/2000/09/xmldsig#"}], []},
+            <<"after">>
+        ]},
+    ?assertEqual(
+        {<<"root">>, Attrs, ["before", Decoy, Rebound, <<"after">>]},
+        signerl_c14n:remove_signature_elements(Input)
+    ).
 
 remove_signature_no_signature_present_test() ->
     Input = {<<"root">>, [], [{<<"child">>, [], ["text"]}]},
@@ -312,3 +400,9 @@ utf8_canonical_bytes_test_() ->
         }
      || Mode <- [c14n11, exc_c14n], {Kind, Value} <- [{"characters", Text}, {"UTF-8 bytes", Utf8}]
     ].
+
+exclusive_c14n_rejects_missing_prefix_context_test() ->
+    ?assertError(
+        {undeclared_namespace_prefix, "missing"},
+        signerl_c14n:canonicalize({<<"missing:child">>, [], []}, exc_c14n)
+    ).

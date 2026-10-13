@@ -87,6 +87,34 @@ The lower-level XML exporters also emit UTF-8; `export/2` raises if supplied
 an incompatible encoding declaration. `parse_file/1` raises for missing files
 or invalid input, while `parse_binary/1` returns `{error, invalid_xml}`.
 
+## XML namespaces
+
+Signature and XAdES element lookups match namespace URI plus local name. Alternate
+prefixes (such as `sig:` instead of `ds:`), default namespaces, and subtree
+redeclarations are supported. Application elements using the same lexical names
+in another namespace are retained and cannot supply signature metadata.
+Original prefixes are preserved because they affect canonical bytes.
+
+Signing and verification carry inherited namespace declarations into the detached
+`SignedInfo` and `SignedProperties` fragments used for canonicalization. C14N
+starts with the implicit `xml` binding and an empty default namespace; declarations
+and attributes are emitted in canonical order.
+
+The parser rejects undeclared prefixes, invalid qualified names, reserved
+namespace rebindings, and duplicate attributes with the same expanded name through
+`{error, invalid_xml}`. Default namespace undeclarations and ordinary prefix
+redeclarations remain valid. Namespace names must be absolute URIs for the
+supported canonicalization profile; relative namespace declarations return
+`{error, invalid_xml}` during parsing, signing, and verification. DTDs and
+processing instructions remain unsupported.
+
+Lower-level tuple names remain UTF-8 binaries. `find_path/2` accepts either exact
+lexical binary names (the existing behavior) or `{NamespaceUriBinary, LocalNameBinary}`
+selectors. Namespace selectors and `find_children/2` return standalone fragments
+with inherited bindings. Use those fragments when canonicalizing extracted
+subtrees; lexical lookup alone does not carry ancestor context. Canonicalizers
+expect namespace-valid trees; Exclusive C14N rejects missing prefix bindings.
+
 ## XML content profile
 
 File and binary inputs share the same parser. Element content retains whitespace,
@@ -161,8 +189,7 @@ opaque handle or required accessor layer. Its contract is:
 - Ordinary attribute values may be flat Unicode character lists, UTF-8 binaries,
   integers, or existing atoms. Export and canonicalization render integers in
   decimal and atoms by name. Floats are unsupported; the former `number()` type
-  was too broad. Namespace declaration values must be character lists for
-  canonicalization.
+  was too broad. Namespace declaration values may be character lists or UTF-8 binaries.
 
 For example, callers can build `{<<"root">>, [{<<"id">>, 42}], [<<"café"/utf8>>]}`
 and pass it to `signerl_xml:export/2` or `signerl_c14n:canonicalize/1`.

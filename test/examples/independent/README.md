@@ -20,16 +20,17 @@ Ordinary test runs only read these files and do not require `xmlsec1`.
 
 ## Scope
 
-The fixtures deliberately use explicit namespace declarations on SignedInfo and
-SignedProperties, ASCII content, and no inter-element indentation. This keeps
-their namespace context available to the current fragment canonicalizer. The
-Exclusive C14N setting applies to SignedInfo; neither fixture adds an Exclusive
-C14N transform to its references.
+The committed fixtures use explicit namespace declarations on SignedInfo and
+SignedProperties, ASCII content, and no inter-element indentation. Additional
+regressions remove the redundant fragment declarations and verify using the
+same namespace bindings inherited from Signature and QualifyingProperties.
+Their digest and signature values remain unchanged. Both forms also verify
+after a parse/export round trip.
 
-These are bounded interoperability regressions, not a claim of full XMLDSig or
-XAdES conformance. They do not resolve inherited namespace handling (#41), UTF-8
-handling (#49), or whitespace handling (#50). The bidirectional third-party CI
-pipeline remains separate post-1.0 work (#40).
+The Exclusive C14N setting applies to SignedInfo; neither fixture adds an
+Exclusive C14N transform to its references. These fixtures cover a bounded
+XMLDSig/XAdES profile. The bidirectional third-party CI pipeline remains separate
+post-1.0 work (#40).
 
 ## Verify the committed fixtures
 

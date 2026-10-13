@@ -1,6 +1,66 @@
 -module(signerl_signed_properties_test).
 
 -include_lib("eunit/include/eunit.hrl").
+-include("signerl_dsig.hrl").
+
+%% Namespace-aware extraction
+
+extract_accepts_namespace_aliases_and_defaults_test_() ->
+    [
+        {Name,
+            ?_assertEqual(
+                {ok, rich_signed_properties()},
+                signerl_signed_properties:extract(namespace_signature(DsigPrefix, XadesPrefix))
+            )}
+     || {Name, DsigPrefix, XadesPrefix} <- [
+            {"declared conventional prefixes", <<"ds">>, <<"xades">>},
+            {"nonstandard prefixes", <<"sig">>, <<"qual">>},
+            {"default XMLDSig namespace", <<>>, <<"qual">>},
+            {"default XAdES namespace", <<"sig">>, <<>>}
+        ]
+    ].
+
+extract_ignores_wrong_namespace_signing_time_test() ->
+    Decoy =
+        {<<"xades:SigningTime">>, [{<<"xmlns:xades">>, "urn:unrelated"}], [
+            "2000-01-01T00:00:00Z"
+        ]},
+    Signature = sig_element([Decoy]),
+    ?assertEqual(
+        {ok, #{signing_time => <<"2026-01-01T00:00:00Z">>}},
+        signerl_signed_properties:extract(Signature)
+    ).
+
+extract_ignores_wrong_namespace_nested_fields_test() ->
+    DecoyDigest = {<<"ds:DigestValue">>, [{<<"xmlns:ds">>, "urn:unrelated"}], ["invalid"]},
+    Cert = cert_v2_with_digest_value(["dGVzdA=="]),
+    {<<"xades:SigningCertificateV2">>, CertAttrs, [
+        {<<"xades:Cert">>, CertElementAttrs, [
+            {<<"xades:CertDigest">>, DigestAttrs, DigestChildren}
+        ]}
+    ]} = Cert,
+    CertWithDecoy =
+        {<<"xades:SigningCertificateV2">>, CertAttrs, [
+            {<<"xades:Cert">>, CertElementAttrs, [
+                {<<"xades:CertDigest">>, DigestAttrs, [DecoyDigest | DigestChildren]}
+            ]}
+        ]},
+    Place =
+        {<<"xades:SignatureProductionPlace">>, [], [
+            {<<"xades:City">>, [], ["Budapest"]},
+            {<<"xades:City">>, [{<<"xmlns:xades">>, "urn:unrelated"}], ["decoy"]}
+        ]},
+    ?assertEqual(
+        {ok, #{
+            signing_time => <<"2026-01-01T00:00:00Z">>,
+            signing_certificate_v2 => #{
+                digest_method => ?DSIG_DIGEST_SHA256_URI,
+                digest_value => <<"test">>
+            },
+            signature_production_place => #{city => <<"Budapest">>}
+        }},
+        signerl_signed_properties:extract(sig_element([CertWithDecoy, Place]))
+    ).
 
 %% Signing Time
 
@@ -481,9 +541,7 @@ extract_returns_error_with_missing_object_reference_test() ->
     ).
 
 extract_accepts_data_object_format_with_all_fields_test() ->
-    Format = data_object_format_element("#Ref-1", [
-        {description, "Invoice"}, {mime_type, "application/xml"}, {encoding, "UTF-8"}
-    ]),
+    Format = invoice_data_object_format(),
     SignatureElement = sig_element_with_data_obj([], [Format]),
     {ok, Props} = signerl_signed_properties:extract(SignatureElement),
     [F] = maps:get(data_object_formats, Props),
@@ -656,6 +714,81 @@ find_data_obj_props_returns_error_for_non_signature_test() ->
 
 %% Fixture helpers
 
+rich_signature_element() ->
+    test_helpers:signature_element(
+        [
+            signing_time_element(),
+            {<<"xades:SigningCertificate">>, [], []},
+            valid_signing_certificate_v2_element(),
+            explicit_policy_element([{<<"xades:Description">>, [], ["Policy"]}]),
+            production_place_element([
+                {city, "Budapest"}, {state, "Pest"}, {postal, "1234"}, {country, "HU"}
+            ]),
+            signer_role_element(["Manager", "Developer"], ["certified"])
+        ],
+        [
+            invoice_data_object_format(),
+            commitment_type_element("http://example.com/origin", all),
+            commitment_type_element("http://example.com/approval", {references, ["#Ref-1"]})
+        ]
+    ).
+
+rich_signed_properties() ->
+    #{
+        signing_time => <<"2026-01-01T00:00:00Z">>,
+        signing_certificate => present,
+        signing_certificate_v2 => #{
+            digest_method => ?DSIG_DIGEST_SHA256_URI,
+            digest_value => crypto:hash(sha256, <<"test-cert-der">>),
+            issuer_serial_v2 => <<"fake-issuer-serial">>
+        },
+        signature_policy_identifier => #{
+            type => explicit,
+            identifier => <<"http://example.com/policy/v1">>,
+            description => <<"Policy">>,
+            digest_method => ?DSIG_DIGEST_SHA256_URI,
+            digest_value => crypto:hash(sha256, <<"policy-doc">>)
+        },
+        signature_production_place => #{
+            city => <<"Budapest">>,
+            state_or_province => <<"Pest">>,
+            postal_code => <<"1234">>,
+            country_name => <<"HU">>
+        },
+        signer_role => #{
+            claimed_roles => [<<"Manager">>, <<"Developer">>],
+            certified_roles => [<<"certified">>]
+        },
+        data_object_formats => [
+            #{
+                object_reference => "#Ref-1",
+                description => <<"Invoice">>,
+                mime_type => <<"application/xml">>,
+                encoding => <<"UTF-8">>
+            }
+        ],
+        commitment_type_indications => [
+            #{identifier => <<"http://example.com/origin">>, scope => all},
+            #{identifier => <<"http://example.com/approval">>, scope => {references, ["#Ref-1"]}}
+        ]
+    }.
+
+namespace_signature(DsigPrefix, XadesPrefix) ->
+    Xml = signerl_xml:export([], rich_signature_element()),
+    WithDsig = replace_namespace_prefix(Xml, <<"ds">>, DsigPrefix),
+    WithXades = replace_namespace_prefix(WithDsig, <<"xades">>, XadesPrefix),
+    {ok, Signature} = signerl_xml:parse_binary(WithXades),
+    Signature.
+
+replace_namespace_prefix(Xml, OldPrefix, NewPrefix) ->
+    {QNamePrefix, Declaration} =
+        case NewPrefix of
+            <<>> -> {<<>>, <<"xmlns">>};
+            _ -> {<<NewPrefix/binary, ":">>, <<"xmlns:", NewPrefix/binary>>}
+        end,
+    WithNames = binary:replace(Xml, <<OldPrefix/binary, ":">>, QNamePrefix, [global]),
+    binary:replace(WithNames, <<"xmlns:", OldPrefix/binary>>, Declaration, [global]).
+
 signing_time_element() ->
     {<<"xades:SigningTime">>, [], ["2026-01-01T00:00:00Z"]}.
 
@@ -803,3 +936,8 @@ commitment_type_element(Identifier, Scope) ->
             none -> []
         end,
     {<<"xades:CommitmentTypeIndication">>, [], [IdElement | ScopeElements]}.
+
+invoice_data_object_format() ->
+    data_object_format_element("#Ref-1", [
+        {description, "Invoice"}, {mime_type, "application/xml"}, {encoding, "UTF-8"}
+    ]).
