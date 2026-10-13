@@ -32,7 +32,28 @@ true = signerl:verify(SignedMessage, sha256, PublicKey).
 - `<ds:Object>/<xades:QualifyingProperties>/<xades:SignedProperties Id="SignedProperties-1">`
 - `<xades:QualifyingProperties Target="#Signature-1">`
 
-`SigningTime` is currently strict UTC in `YYYY-MM-DDThh:mm:ssZ` format.
+`SigningTime` is strict UTC in `YYYY-MM-DDThh:mm:ssZ` format, with real Gregorian
+calendar dates and years 0001–9999. Fractional seconds, offsets, and leap seconds
+are unsupported. Signing and verification reject malformed or impossible dates
+with `{error, invalid_signing_time}`.
+
+`sign/3` and `sign/4` capture the current UTC second once per call. For a controlled
+signing time, use `sign/5` with a timestamp binary and an optional DER certificate
+(`undefined` omits the certificate):
+
+```erlang
+Time = <<"2024-02-29T03:04:05Z">>,
+Signed = signerl:sign(RawMessage, sha256, PrivateKey, undefined, Time),
+true = signerl:verify(Signed, sha256, PublicKey).
+```
+
+The same XML, RSA key, certificate, and fixed signing time produce identical bytes.
+Default calls made in different seconds can differ because signing time is signed
+metadata. XML normalization is deterministic; ECDSA signature generation is
+randomized, so its output must be checked by verification rather than byte equality.
+The lower-level signature builder also accepts the timestamp through
+`build_signature_element/5`. `signerl_utils:format_utc_timestamp/1` formats an
+already valid UTC `calendar:datetime()` without reading the clock.
 
 `verify/3` expects a signed XML message. It returns:
 - `true` when signature verification succeeds
@@ -50,7 +71,7 @@ Canonicalization always emits UTF-8 bytes for both C14N 1.1 and Exclusive C14N.
 Internally, parsed text and attribute values are Unicode character lists;
 binary text/attribute values supplied to the canonicalizer must contain UTF-8.
 
-`sign/3` and `sign/4` require an XML declaration at the start of the input,
+`sign/3`, `sign/4`, and `sign/5` require an XML declaration at the start of the input,
 without a byte-order mark (BOM). Its encoding may be omitted or specify UTF-8
 (case-insensitively). The accepted declaration is preserved in the signed output.
 Other declared encodings, including Latin-1 and UTF-16/32, return
@@ -96,7 +117,7 @@ Namespace/profile work remains tracked in #41.
 ## XML entity safety
 
 DTDs and custom entities are unsupported. Otherwise supported inputs containing
-a `DOCTYPE`, including an empty one, return `{error, invalid_xml}` from `sign/3`, `sign/4`, `verify/3`, and
+a `DOCTYPE`, including an empty one, return `{error, invalid_xml}` from `sign/3`, `sign/4`, `sign/5`, `verify/3`, and
 `parse_binary/1`. The lower-level `parse_file/1` raises for invalid XML as before.
 Both binary and file inputs use this policy, with no option to enable DTDs.
 DTD-derived default attributes and custom entity values are therefore unavailable.

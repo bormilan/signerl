@@ -25,6 +25,8 @@ groups() ->
             sign_with_self_signed_rsa,
             sign_with_self_signed_ecdsa,
             sign_deterministic,
+            sign_with_controlled_time_files_and_certificate,
+            sign_rejects_invalid_controlled_time,
             sign_utf8_binary_and_file,
             sign_preserves_content,
             processing_instructions_are_rejected,
@@ -224,9 +226,15 @@ sign_deterministic(Config) ->
     RawMessage = ?config(raw_message, Config),
     Key = ?config(rsa_key, Config),
 
-    SignedMessage1 = signerl:sign(RawMessage, sha256, Key),
-    SignedMessage2 = signerl:sign(RawMessage, sha256, Key),
-    ?assertEqual(SignedMessage1, SignedMessage2).
+    PublicKey = ?config(rsa_public_key, Config),
+    Time = <<"2000-02-29T03:04:05Z">>,
+    SignedMessage1 = signerl:sign(RawMessage, sha256, Key, undefined, Time),
+    SignedMessage2 = signerl:sign(RawMessage, sha256, Key, undefined, Time),
+    ?assertEqual(SignedMessage1, SignedMessage2),
+    test_helpers:parse_verified_message(SignedMessage1, PublicKey),
+    Changed = signerl:sign(RawMessage, sha256, Key, undefined, <<"2000-02-29T03:04:06Z">>),
+    ?assertNotEqual(SignedMessage1, Changed),
+    test_helpers:parse_verified_message(Changed, PublicKey).
 
 sign_uses_input_prolog_binary_and_file(Config) ->
     Key = ?config(rsa_key, Config),
@@ -1003,3 +1011,59 @@ dtd_file_input_is_rejected(Config) ->
     ?assertEqual({error, invalid_xml}, signerl:verify(Path, sha256, PublicKey)),
     ok = file:write_file(Path, <<Prolog/binary, "<!DOCTYPE root><root/>">>),
     ?assertEqual({error, invalid_xml}, signerl:sign(Path, sha256, Key)).
+
+sign_with_controlled_time_files_and_certificate(Config) ->
+    RawMessage = ?config(raw_message, Config),
+    Key = ?config(rsa_key, Config),
+    PublicKey = ?config(rsa_public_key, Config),
+    MessagePath = signerl_utils:file_path("test/examples/base/books.xml"),
+    KeyPath = signerl_cert_helpers:signer_rsa_key_path(),
+    Cert = signerl_cert_helpers:cert_der(signerl_cert_helpers:signer_rsa_cert_path()),
+    Time = <<"2024-02-29T00:00:00Z">>,
+    Signed = signerl:sign(RawMessage, sha256, Key, Cert, Time),
+    ?assertEqual(Signed, signerl:sign(MessagePath, sha256, KeyPath, Cert, Time)),
+    ?assertEqual(Signed, signerl:sign(RawMessage, sha256, KeyPath, Cert, Time)),
+    Parsed = test_helpers:parse_verified_message(Signed, PublicKey),
+    {ok, #{signed_properties := #{signing_time := Time}, key_info := #{x509_certificate := Cert}}} =
+        signerl_verify:extract_signature_data(Parsed),
+    EcdsaKey = ?config(ecdsa_key, Config),
+    EcdsaPublicKey = ?config(ecdsa_public_key, Config),
+    EcdsaSigned = signerl:sign(RawMessage, sha256, EcdsaKey, undefined, Time),
+    test_helpers:parse_verified_message(EcdsaSigned, EcdsaPublicKey).
+
+sign_rejects_invalid_controlled_time(Config) ->
+    Message = ?config(raw_message, Config),
+    Key = ?config(rsa_key, Config),
+    lists:foreach(
+        fun(Time) ->
+            ?assertEqual(
+                {error, invalid_signing_time}, signerl:sign(Message, sha256, Key, undefined, Time)
+            )
+        end,
+        [
+            <<"2026-02-31T12:00:00Z">>,
+            <<"2026-01-01T12:00:00+00:00">>,
+            <<"2026-01-01T12:00:00.5Z">>,
+            undefined
+        ]
+    ),
+    ?assertEqual(
+        {error, invalid_signing_time},
+        signerl_signature:build_signature_element(
+            {<<"root">>, [], []},
+            sha256,
+            Key,
+            undefined,
+            <<"1900-02-29T12:00:00Z">>
+        )
+    ),
+    Signed = signerl:sign(Message, sha256, Key, undefined, <<"2026-02-28T12:00:00Z">>),
+    InvalidDate = test_helpers:replace_once(
+        Signed,
+        <<"2026-02-28T12:00:00Z">>,
+        <<"2026-02-31T12:00:00Z">>
+    ),
+    ?assertEqual(
+        {error, invalid_signing_time},
+        signerl:verify(InvalidDate, sha256, ?config(rsa_public_key, Config))
+    ).

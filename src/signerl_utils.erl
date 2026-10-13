@@ -7,6 +7,7 @@
     load_key_from_file/1,
     valid_utc_timestamp/1,
     current_utc_timestamp/0,
+    format_utc_timestamp/1,
     is_byte_list/1
 ]).
 
@@ -36,9 +37,10 @@ valid_utc_timestamp(
     <<Y1, Y2, Y3, Y4, $-, M1, M2, $-, D1, D2, $T, H1, H2, $:, Min1, Min2, $:, S1, S2, $Z>>
 ) ->
     DateTimeDigits = [Y1, Y2, Y3, Y4, M1, M2, D1, D2, H1, H2, Min1, Min2, S1, S2],
+    Year = to_int(Y1, Y2) * 100 + to_int(Y3, Y4),
     all_digits(DateTimeDigits) andalso
-        in_range(to_int(M1, M2), 1, 12) andalso
-        in_range(to_int(D1, D2), 1, 31) andalso
+        in_range(Year, 1, 9999) andalso
+        calendar:valid_date({Year, to_int(M1, M2), to_int(D1, D2)}) andalso
         in_range(to_int(H1, H2), 0, 23) andalso
         in_range(to_int(Min1, Min2), 0, 59) andalso
         in_range(to_int(S1, S2), 0, 59);
@@ -46,7 +48,11 @@ valid_utc_timestamp(_) ->
     false.
 
 current_utc_timestamp() ->
-    {{Year, Month, Day}, {Hour, Minute, Second}} = calendar:universal_time(),
+    format_utc_timestamp(calendar:universal_time()).
+
+% Format an already valid UTC datetime; timestamp validation is separate.
+-spec format_utc_timestamp(calendar:datetime()) -> binary().
+format_utc_timestamp({{Year, Month, Day}, {Hour, Minute, Second}}) ->
     <<
         (pad4(Year))/binary,
         "-",
