@@ -16,9 +16,13 @@
     to_file/2
 ]).
 
--type simplified_xml_item() :: simplified_xml() | string().
--type simplified_xml() :: {binary(), [{binary(), string() | number()}], [simplified_xml_item()]}.
--export_type([simplified_xml/0]).
+% Public, transparent tree: callers construct and pattern-match these tuples.
+% Names and binary values are UTF-8; lists contain Unicode code points.
+% Namespace declaration values must be character lists for canonicalization.
+-type attribute_value() :: string() | binary() | integer() | atom().
+-type simplified_xml_item() :: simplified_xml() | string() | binary().
+-type simplified_xml() :: {binary(), [{binary(), attribute_value()}], [simplified_xml_item()]}.
+-export_type([simplified_xml/0, attribute_value/0]).
 
 -spec parse_file(FileName) -> SimplifiedXml when
     FileName :: string(),
@@ -193,8 +197,8 @@ single_text(_) ->
 
 -spec attr_value(Key, Attrs) -> Result when
     Key :: binary(),
-    Attrs :: [{binary(), string() | number()}],
-    Result :: {ok, string() | number()} | {error, missing_attribute}.
+    Attrs :: [{binary(), attribute_value()}],
+    Result :: {ok, attribute_value()} | {error, missing_attribute}.
 attr_value(Key, Attrs) ->
     case lists:keyfind(Key, 1, Attrs) of
         {Key, Value} ->
@@ -205,8 +209,8 @@ attr_value(Key, Attrs) ->
 
 -spec attr_value_or_undefined(Key, Attrs) -> Result when
     Key :: binary(),
-    Attrs :: [{binary(), string() | number()}],
-    Result :: string() | number() | undefined.
+    Attrs :: [{binary(), attribute_value()}],
+    Result :: attribute_value() | undefined.
 attr_value_or_undefined(Key, Attrs) ->
     case lists:keyfind(Key, 1, Attrs) of
         {Key, Value} ->
@@ -249,9 +253,14 @@ export_content([{Name, Attrs, Content} | Rest], Parents, Acc) ->
             export_content(Content, [{Name, Rest} | Parents], [["<", Name, Attributes, ">"] | Acc])
     end;
 export_content([Text | Rest], Parents, Acc) ->
-    Escaped = [export_character(Char, text) || Char <- xmerl_lib:export_text(Text)],
+    Escaped = [
+        export_character(Char, text)
+     || Char <- xmerl_lib:export_text(unicode:characters_to_list(Text))
+    ],
     export_content(Rest, Parents, [Escaped | Acc]).
 
+export_attribute(Value) when is_binary(Value) ->
+    export_attribute(unicode:characters_to_list(Value));
 export_attribute(Value) ->
     [export_character(Char, attribute) || Char <- xmerl_lib:export_attribute(Value)].
 

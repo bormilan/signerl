@@ -13,7 +13,7 @@ rebar3; there is no custom runner or manually maintained suite list.
 | `signerl_utils_test.erl` | 25 | UTC date validation, leap-year boundaries, and fixed datetime formatting. |
 | `signerl_signature_test.erl` | 5 | Signature construction contracts for RSA and ECDSA. |
 | `signerl_verify_test.erl` | 23 | Signature extraction, reference validation, algorithm selection, and malformed signature contracts. |
-| `signerl_xml_test.erl` | 80 | XML parsing, DTD/entity rejection, prologs, export, tree lookup, text values, and signature-element recognition. |
+| `signerl_xml_test.erl` | 85 | XML parsing, DTD/entity rejection, prologs, export, tree lookup, text values, and signature-element recognition. |
 | `signerl_xades_xml_test.erl` | 1 | XAdES tree lookup rejects a non-signature root. |
 | `signerl_cert_test.erl` | 1 | Exact issuer/serial DER against OTP ASN.1, including positive integer padding. |
 | `signerl_cert_helpers_test.erl` | 6 | Application fixture paths and clear missing/malformed PEM failures. |
@@ -21,7 +21,7 @@ rebar3; there is no custom runner or manually maintained suite list.
 | `signerl_c14n_interop_SUITE.erl` | 9 | Compare production parsing/canonicalization with `xmllint --c14n11`; Unicode and content preservation also cover `--exc-c14n`. |
 | `signerl_xml_SUITE.erl` | 9 | Real file export/read-back, encoding, missing files, controlled file/HTTP entity canaries, and isolated atom-growth measurement. |
 
-Total: **246 EUnit + 84 Common Test = 330 cases**. See the
+Total: **251 EUnit + 84 Common Test = 335 cases**. See the
 [migration log and case map](../docs/implementations/test_organization_2026-10-04.md)
 for the earlier suite locations and the
 [fixture cleanup log](../docs/implementations/test_fixtures_2026-10-04.md)
@@ -70,6 +70,13 @@ its request detector works, then checks that external subsets and general/parame
 entities make no request. These tests use only generated canary files and localhost,
 not real secrets or remote services. Public DTD rejection starts with a valid
 signature and includes one focused file-path case.
+
+The public XML tuple contract is transparent. Caller-built mixed-content trees
+cover UTF-8 binary text/attributes, character lists, integer/atom attributes,
+lookup values, exact escaped/exported bytes, and both canonicalizers. Parsing
+normalizes ordinary values back to character lists; tuple construction retains
+caller ownership. External Dialyzer consumers and negative controls are recorded
+in the XML-contract implementation log.
 
 XML-name contracts use UTF-8 binaries in tuple fixtures and lookup arguments.
 Unit tests assert exact Unicode element/attribute/namespace names and a valid
