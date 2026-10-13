@@ -36,6 +36,48 @@ export_test() ->
     ?assertEqual({ok, Prolog}, signerl_xml:parse_prolog(Binary)),
     ?assertEqual({ok, Root}, signerl_xml:parse_binary(Binary)).
 
+caller_constructed_tree_test() ->
+    Text = <<"árvíz & 東京"/utf8>>,
+    Attrs = [{<<"label">>, <<"café & \"tea\""/utf8>>}],
+    Root = {<<"root">>, Attrs, ["before ", {<<"child">>, [], [Text]}, " after"]},
+    Expected = <<
+        "<root label=\"café &amp; &quot;tea&quot;\">before "
+        "<child>árvíz &amp; 東京</child> after</root>"/utf8
+    >>,
+    ?assertEqual(<<Expected/binary, "\n">>, signerl_xml:export([], Root)),
+    ?assertEqual(
+        <<"<?xml version=\"1.0\"?>", Expected/binary>>, signerl_xml:export_fragment(Root)
+    ),
+    {ok, Child} = signerl_xml:find_path([<<"child">>], Root),
+    ?assertEqual({ok, Text}, signerl_xml:single_text(Child)),
+    {ok, Parsed} = signerl_xml:parse_binary(signerl_xml:export([], Root)),
+    ?assertEqual(Expected, signerl_c14n:canonicalize(Parsed)),
+    ?assertEqual(Expected, signerl_c14n:canonicalize(Root)),
+    ?assertEqual(Expected, signerl_c14n:canonicalize(Root, exc_c14n)).
+
+attribute_value_representations_test_() ->
+    [
+        {Name, fun() ->
+            Attrs = [{<<"value">>, Value}],
+            Root = {<<"root">>, Attrs, []},
+            ?assertEqual({ok, Value}, signerl_xml:attr_value(<<"value">>, Attrs)),
+            ?assertEqual(Value, signerl_xml:attr_value_or_undefined(<<"value">>, Attrs)),
+            ?assertEqual(
+                {ok, {<<"root">>, [{<<"value">>, ParsedValue}], []}},
+                signerl_xml:parse_binary(signerl_xml:export([], Root))
+            ),
+            Expected = unicode:characters_to_binary(["<root value=\"", ParsedValue, "\"></root>"]),
+            ?assertEqual(Expected, signerl_c14n:canonicalize(Root)),
+            ?assertEqual(Expected, signerl_c14n:canonicalize(Root, exc_c14n))
+        end}
+     || {Name, Value, ParsedValue} <- [
+            {"Unicode character list", "café", "café"},
+            {"UTF-8 binary", <<"café"/utf8>>, "café"},
+            {"integer", -42, "-42"},
+            {"atom", hello, "hello"}
+        ]
+    ].
+
 export_nested_content_order_test() ->
     Root =
         {<<"root">>, [{<<"id">>, "a&b"}], [

@@ -151,6 +151,30 @@ remain Unicode character lists. For example:
     signerl_xml:parse_binary(<<"<root id='1'><child>text</child></root>">>).
 ```
 
+`signerl_xml:simplified_xml()` is a **public, transparent type**. Callers may
+construct and pattern-match `{Name, Attributes, Children}` directly; there is no
+opaque handle or required accessor layer. Its contract is:
+
+- Names and attribute keys are UTF-8 binaries.
+- Children are element tuples, flat Unicode character lists, or UTF-8 binaries,
+  in document order. Mixed text and elements are allowed.
+- Ordinary attribute values may be flat Unicode character lists, UTF-8 binaries,
+  integers, or existing atoms. Export and canonicalization render integers in
+  decimal and atoms by name. Floats are unsupported; the former `number()` type
+  was too broad. Namespace declaration values must be character lists for
+  canonicalization.
+
+For example, callers can build `{<<"root">>, [{<<"id">>, 42}], [<<"café"/utf8>>]}`
+and pass it to `signerl_xml:export/2` or `signerl_c14n:canonicalize/1`.
+`single_text/1` returns a binary; `attr_value/2` and `attr_value_or_undefined/2`
+return the stored value without conversion. Parsing serialized XML returns
+character-list text and attribute values, so serialization does not preserve the
+caller's Erlang value types. Callers must supply valid XML names, characters,
+and namespace bindings; the type declaration is not an XML validator.
+
+The lint exception for this exported transparent type is intentional. XML tree
+construction and matching are shared across modules and are part of this API.
+
 This replaces the former atom-name representation. Callers constructing or
 pattern-matching XML tuples must use `<<"root">>` instead of `root`, and
 `<<"ds:Signature">>` instead of `'ds:Signature'`. Lookup paths and attribute keys
