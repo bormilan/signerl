@@ -1,7 +1,7 @@
 -module(signerl_signature).
 -include("signerl_dsig.hrl").
 
--export([build_signature_element/4]).
+-export([build_signature_element/4, build_signature_element/5]).
 
 -spec build_signature_element(Message, HashAlgorithm, Key, CertDer) ->
     {ok, signerl_xml:simplified_xml()} | {error, unsupported_hash | unsupported_key}
@@ -10,22 +10,54 @@ when
     HashAlgorithm :: atom(),
     Key :: public_key:private_key(),
     CertDer :: binary() | undefined.
-build_signature_element(Message, sha256, Key, CertDer) ->
-    case signerl_dsig_utils:signature_method_uri_for_key(Key) of
-        {ok, SignatureMethodUri} ->
+build_signature_element(Message, HashAlgorithm, Key, CertDer) ->
+    build_signature_element(
+        Message,
+        HashAlgorithm,
+        Key,
+        CertDer,
+        signerl_utils:current_utc_timestamp()
+    ).
+
+-spec build_signature_element(Message, HashAlgorithm, Key, CertDer, SigningTime) ->
+    {ok, signerl_xml:simplified_xml()}
+    | {error, unsupported_hash | unsupported_key | invalid_signing_time}
+when
+    Message :: signerl_xml:simplified_xml(),
+    HashAlgorithm :: atom(),
+    Key :: public_key:private_key(),
+    CertDer :: binary() | undefined,
+    SigningTime :: binary().
+build_signature_element(Message, sha256, Key, CertDer, SigningTime) ->
+    case
+        {
+            signerl_utils:valid_utc_timestamp(SigningTime),
+            signerl_dsig_utils:signature_method_uri_for_key(Key)
+        }
+    of
+        {false, _} ->
+            {error, invalid_signing_time};
+        {true, {ok, SignatureMethodUri}} ->
             build_signature_element_with_method_uri(
-                Message, sha256, Key, SignatureMethodUri, CertDer
+                Message, sha256, Key, SignatureMethodUri, CertDer, SigningTime
             );
-        error ->
+        {true, error} ->
             {error, unsupported_key}
     end;
-build_signature_element(_Message, _Hash, _Key, _CertDer) ->
+build_signature_element(_Message, _Hash, _Key, _CertDer, _SigningTime) ->
     {error, unsupported_hash}.
 
-build_signature_element_with_method_uri(Message, HashAlgorithm, Key, SignatureMethodUri, CertDer) ->
+build_signature_element_with_method_uri(
+    Message, HashAlgorithm, Key, SignatureMethodUri, CertDer, SigningTime
+) ->
     {ok, SignatureElementWithoutValue, SignedInfo} =
         construct_signature_without_value(
-            Message, HashAlgorithm, ?DSIG_DIGEST_SHA256_URI, SignatureMethodUri, CertDer
+            Message,
+            HashAlgorithm,
+            ?DSIG_DIGEST_SHA256_URI,
+            SignatureMethodUri,
+            CertDer,
+            SigningTime
         ),
     SignedInfoBytes = signerl_c14n:canonicalize(SignedInfo),
     SignatureBytes = public_key:sign(SignedInfoBytes, HashAlgorithm, Key),
@@ -35,9 +67,8 @@ build_signature_element_with_method_uri(Message, HashAlgorithm, Key, SignatureMe
     {ok, SignatureElement}.
 
 construct_signature_without_value(
-    Message, HashAlgorithm, DigestMethodUri, SignatureMethodUri, CertDer
+    Message, HashAlgorithm, DigestMethodUri, SignatureMethodUri, CertDer, SigningTime
 ) ->
-    SigningTime = signerl_utils:current_utc_timestamp(),
     SignedProperties = signed_properties(SigningTime, HashAlgorithm, DigestMethodUri, CertDer),
     SignedInfo = signed_info(
         Message, SignedProperties, HashAlgorithm, DigestMethodUri, SignatureMethodUri
