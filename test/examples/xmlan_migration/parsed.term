@@ -1,0 +1,14 @@
+% coding: utf-8
+{<<"invoice">>,
+ [{<<"xmlns">>,"urn:invoice"},
+  {<<"xmlns:p">>,"urn:items"},
+  {<<"xmlns:unused">>,"urn:unused"},
+  {<<"xml:space">>,"preserve"},
+  {<<"label">>,"café & \t\""}],
+ ["\n before ",
+  {<<"p:item">>,[{<<"p:code">>,[26481,20140]}],["árvíz & \r","<tea>"]},
+  " between ",
+  {<<"plain">>,
+   [{<<"xmlns">>,[]}],
+   [{<<"p:item">>,[{<<"xmlns:p">>,"urn:other"}],[[128512]]}]},
+  " after\n"]}.

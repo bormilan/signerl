@@ -3,3 +3,9 @@
 *.hrl text eol=lf
 *.app.src text eol=lf
 /rebar.config text eol=lf
+
+# XML migration goldens are byte oracles on every supported OS.
+test/examples/xmlan_migration/*.xml -text
+test/examples/xmlan_migration/*.pem text eol=lf
+test/examples/xmlan_migration/*.term text eol=lf
+test/examples/xmlan_migration/SHA256SUMS text eol=lf

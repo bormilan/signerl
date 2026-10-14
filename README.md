@@ -318,3 +318,12 @@ investigate, add behavioral validation, implement, test, review and simplify,
 then run all tests, coverage, lint, and Dialyzer. Push only after native
 `rebar3 tall` passes, and merge only after all six GitHub Actions jobs pass
 on the latest PR commit.
+
+## XML library extraction
+
+The next milestone moves generic XML parsing, serialization, namespace helpers,
+and canonicalization into [xmlan](https://github.com/bormilan/xmlan), then adds it
+as a pinned dependency. The [migration contract](docs/xmlan_migration_contract.md)
+defines ownership, preserved APIs/types/behavior, test responsibilities, and
+completion gates. Signature logic remains in Signerl. This milestone is in
+progress; the current release still owns its XML implementation.
