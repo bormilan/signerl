@@ -19,9 +19,10 @@ rebar3; there is no custom runner or manually maintained suite list.
 | `signerl_cert_helpers_test.erl` | 6 | Application fixture paths and clear missing/malformed PEM failures. |
 | `signerl_api_SUITE.erl` | 71 | Full public signing/verification, binary/file/key inputs, RSA/ECDSA certificate wiring, tampering, and independent signature fixtures. |
 | `signerl_c14n_interop_SUITE.erl` | 10 | Compare production parsing/canonicalization with `xmllint --c14n11`; Unicode and content preservation also cover `--exc-c14n`. |
+| `signerl_xmlan_contract_SUITE.erl` | 2 | Frozen pre-extraction XML values/bytes, frozen RSA output and fresh-key signing, and external caller compatibility. |
 | `signerl_xml_SUITE.erl` | 9 | Real file export/read-back, encoding, missing files, controlled file/HTTP entity canaries, and isolated atom-growth measurement. |
 
-Total: **336 EUnit + 90 Common Test = 426 cases**. See the
+Total: **336 EUnit + 92 Common Test = 428 cases**. See the
 [migration log and case map](../docs/implementations/test_organization_2026-10-04.md)
 for the earlier suite locations and the
 [fixture cleanup log](../docs/implementations/test_fixtures_2026-10-04.md)
@@ -140,7 +141,7 @@ Before pushing, run native `rebar3 flint`, `rebar3 dialyzer`, and `rebar3 tall`
 as required by [AGENTS.md](../AGENTS.md). `tall` includes `test`, lint, Xref, and
 Dialyzer. GitHub Actions runs the same gate on OTP 26/27/28 across Ubuntu and
 Windows. All six jobs must pass on the latest PR commit before merging.
-`xmllint` is required for the nine interoperability comparisons; an unavailable
+`xmllint` is required for the ten interoperability cases; an unavailable
 tool skips that group, which is not a complete validation run. Install it locally;
 Linux CI installs it automatically.
 
@@ -273,3 +274,16 @@ for the clean/warm checks and lint failure probes.
 
 Production behavior is unchanged by the test cleanup. Clock behavior is #56;
 bidirectional Python/Java interoperability CI remains post-1.0 work in #40.
+
+## XML extraction baseline
+
+The [xmlan migration contract](../docs/xmlan_migration_contract.md) maps every
+XML export/helper, caller, and test family to its future repository owner.
+`signerl_xmlan_contract_SUITE` runs the standalone `xmlan_contract_consumer`
+against the [frozen corpus](examples/xmlan_migration/README.md), captured before
+extraction. Expected parsed values, exported/canonical bytes, and fixed-time RSA
+output are read from committed files. Only the verification public key is
+committed; fresh signing keys stay in memory.
+Tests do not regenerate their oracle; keep the independent signatures and
+xmllint checks as complementary evidence. External compile/Dialyzer and
+changed-golden failure probes are documented in the migration contract/log.
