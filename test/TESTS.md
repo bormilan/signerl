@@ -1,149 +1,92 @@
 # Test responsibilities
 
-Use EUnit for module contracts and Common Test for public API workflows, real
-file output, and the external `xmllint` comparison. Tests are discovered by
-rebar3; there is no custom runner or manually maintained suite list.
+Use EUnit for Signerl protocol/module contracts and Common Test for actual
+signing/verification, file workflows, compatibility APIs, and runtime consumers.
+Generic XML algorithms and their pure tests are owned by
+[xmlan at the pinned revision](https://github.com/bormilan/xmlan/tree/1fe39f6d414217584f514e70e43b8e7b4171f1ef).
+Tests here execute the real Git dependency, with no path override or local copy.
 
 ## Where to put a test
 
 | File | Cases | Responsibility |
 | --- | ---: | --- |
-| `signerl_c14n_test.erl` | 63 | Canonicalization, namespace ordering, escaping, Exclusive C14N, and signature-removal transforms. |
+| `signerl_c14n_test.erl` | 4 | Protocol-specific enveloped-signature removal, inherited identity, and lookalike preservation. |
 | `signerl_signed_properties_test.erl` | 72 | XAdES property extraction and malformed Erlang/XML value boundaries. |
-| `signerl_utils_test.erl` | 25 | UTC date validation, leap-year boundaries, and fixed datetime formatting. |
-| `signerl_signature_test.erl` | 5 | Signature construction contracts for RSA and ECDSA. |
-| `signerl_verify_test.erl` | 30 | Signature extraction, reference validation, algorithm selection, and malformed signature contracts. |
-| `signerl_xml_test.erl` | 133 | XML parsing, DTD/entity rejection, prologs, export, tree lookup, text values, and signature-element recognition. |
+| `signerl_utils_test.erl` | 25 | UTC dates, leap-year boundaries, and fixed datetime formatting. |
+| `signerl_signature_test.erl` | 5 | RSA/ECDSA signature construction through xmlan. |
+| `signerl_verify_test.erl` | 30 | Signature extraction, references, algorithm routing, and malformed signature contracts. |
+| `signerl_xml_test.erl` | 6 | Namespace-aware signature identity, aliases/defaults/rebindings, and non-signature values. |
 | `signerl_xades_xml_test.erl` | 1 | XAdES tree lookup rejects a non-signature root. |
-| `signerl_cert_test.erl` | 1 | Exact issuer/serial DER against OTP ASN.1, including positive integer padding. |
-| `signerl_cert_helpers_test.erl` | 6 | Application fixture paths and clear missing/malformed PEM failures. |
-| `signerl_api_SUITE.erl` | 71 | Full public signing/verification, binary/file/key inputs, RSA/ECDSA certificate wiring, tampering, and independent signature fixtures. |
-| `signerl_c14n_interop_SUITE.erl` | 10 | Compare production parsing/canonicalization with `xmllint --c14n11`; Unicode and content preservation also cover `--exc-c14n`. |
-| `signerl_xmlan_contract_SUITE.erl` | 2 | Frozen pre-extraction XML values/bytes, frozen RSA output and fresh-key signing, and external caller compatibility. |
-| `signerl_xml_SUITE.erl` | 9 | Real file export/read-back, encoding, missing files, controlled file/HTTP entity canaries, and isolated atom-growth measurement. |
+| `signerl_cert_test.erl` | 1 | Exact issuer/serial DER against OTP ASN.1. |
+| `signerl_cert_helpers_test.erl` | 6 | Application fixture paths and missing/malformed PEM failures. |
+| `signerl_api_SUITE.erl` | 71 | Public binary/file/key workflows, RSA/ECDSA certificates, fixed time, encoding/content/DTD/namespace boundaries, tampering, and independent signatures. |
+| `signerl_xmlan_contract_SUITE.erl` | 4 | Frozen pre-extraction XML/RSA contracts, invalid-mode error, real compatibility file output, and fresh-VM transitive startup/consumer. |
+| `signerl_xml_SUITE.erl` | 1 | Zero persistent atom growth through the pinned parser/exporter/both canonicalizers and actual signing/verification. |
+| `xmlan_contract_consumer.erl` | Consumer support | All legacy generic exports, signature operations, five transparent XML aliases, canonical mode alias, and forwarded include path. |
 
-Total: **336 EUnit + 92 Common Test = 428 cases**. See the
-[migration log and case map](../docs/implementations/test_organization_2026-10-04.md)
-for the earlier suite locations and the
-[fixture cleanup log](../docs/implementations/test_fixtures_2026-10-04.md)
-for the named-case and fixture changes.
+Total: **150 EUnit + 76 Common Test = 226 cases**. There are no skipped required
+checks. The original pure parser/export/namespace and canonicalization cases,
+file/entity canaries, deep-tree tests, and all xmllint comparisons run in xmlan.
+Its validated commit has 259 passing cases, 100% coverage, and all six OTP/OS
+jobs green. No XML contract is discarded: only test ownership changes.
 
-Add a pure contract case as a descriptive `_test` function. When several inputs
-exercise the same operation and assertion, use a small `_test_` generator with
-one `{Name, ?_assertEqual(...)}` descriptor per input. Keep literal inputs visible
-and names specific; do not hide different contracts in a generic test runner.
-Builder and verifier fixtures use ordinary EUnit setup descriptors with an
-explicit name for every case. Public API/file workflows belong in the relevant
-CT group; share immutable input bytes, keys, and certificates in `init_per_group`.
+Signerl retains all 71 public API cases. They sign real data before tampering,
+verify frozen/independently supplied signatures, cover RSA/ECDSA and certificates,
+carry inherited namespace context into signed fragments, exercise file/key errors,
+and reject unsupported XML/prologs/encodings/entities through the dependency.
+The controlled-time cases preserve deterministic RSA bytes and Gregorian UTC
+validation. No profile, algorithm, certificate, or failure-policy redesign is
+part of this extraction.
 
-The UTF-8 regressions cover character-list and binary canonicalization, multilingual
-text/attributes, Unicode XML names, direct export, public `sign/3`/`sign/4` with
-binary/file inputs, verification with and without a declaration/BOM, and a
-Unicode mutation after successful verification. Encoding rejection covers
-unsupported declarations, UTF-16 bytes, and malformed UTF-8 sequences.
+The compatibility consumer reads original parsed/exported/canonical/signed bytes
+from committed files, verifies the frozen signature, and signs twice with a fresh
+in-memory key and fixed time. It verifies both outputs and compares serialized
+bytes against the baseline except for the necessarily different SignatureValue.
+A changed golden must fail its real assertion. Private generated keys are never
+published or persisted by the consumer. The five XML type aliases and mode alias
+are constructed/pattern-matched by an external Dialyzer consumer; the legacy XML
+header must resolve dependency-owned macros.
 
-Content-preservation regressions cover whitespace-only and mixed text, CDATA,
-`xml:space`, literal line-ending normalization versus character references, and
-attribute/text export round trips. Export tests also verify nested/sibling ordering
-and a 10,000-level tree. Public signing tests verify the untouched binary signature
-before mutating separating whitespace, mixed text, attribute controls, and a text
-CR. A single positive file-path verification covers that entry point; mutations
-are not repeated for the shared parser. Processing instructions are rejected
-before, inside, and after the root; PI-looking CDATA/comment text is not mistaken for an instruction.
-The interoperability fixture compares original and exported bytes through
-`xmllint` in both supported canonicalization modes. On Windows, the helper undoes
-only C stdio's LF-to-CRLF output translation before comparing bytes; fixture and
-production output bytes are untouched, and XML CR values remain `&#xD;`.
-
-Complete-document regressions append legal whitespace/comments or invalid suffixes
-to a successfully verified signature, then exercise signing with the same suffixes.
-Parser cases cover self-closing and nonempty roots, malformed trailing markup,
-CDATA/character references outside the root, non-XML whitespace, and misplaced
-BOMs. One file-path case checks an accepted comment suffix and second-root
-rejection through parsing, signing, and verification; the full binary suffix
-matrix is not duplicated for files.
-
-Entity-safety regressions reject bare/internal/external DTDs, custom and parameter
-entities, and bounded exponential/quadratic expansion payloads. Positive controls
-retain predefined/numeric references and DTD-looking comments/CDATA. File canaries
-exercise absolute `file://` and relative paths; a loopback HTTP canary first proves
-its request detector works, then checks that external subsets and general/parameter
-entities make no request. These tests use only generated canary files and localhost,
-not real secrets or remote services. Public DTD rejection starts with a valid
-signature and includes one focused file-path case.
-
-The public XML tuple contract is transparent. Caller-built mixed-content trees
-cover UTF-8 binary text/attributes, character lists, integer/atom attributes,
-lookup values, exact escaped/exported bytes, and both canonicalizers. Parsing
-normalizes ordinary values back to character lists; tuple construction retains
-caller ownership. External Dialyzer consumers and negative controls are recorded
-in the XML-contract implementation log.
-
-XML-name contracts use UTF-8 binaries in tuple fixtures and lookup arguments.
-Unit tests assert exact Unicode element/attribute/namespace names and a valid
-300-character name. The atom regression uses `peer` with a standard-I/O control
-connection to a fresh VM running the current OTP; no distributed node is needed.
-After warming all exercised paths, two batches of 25 fresh name sets must each
-have zero atom-count growth. Each set covers element, attribute, namespace
-prefix/declaration, and malformed-input names while exercising parsing, export,
-both canonicalizers, signing, and verification. A process boundary alone would
-not isolate the VM-wide counter, so this child VM is strictly a test mechanism.
-
-Controlled-time regressions use `sign/5` with fixed UTC timestamps. The RSA case
-checks byte equality for identical metadata, verifies both outputs, and checks that
-changing the signed time changes the output. File/key/certificate inputs preserve
-the supplied time; ECDSA is checked by verification only. Calendar tests include
-Gregorian century/leap-year boundaries, impossible month/day combinations, time
-ranges, and unsupported timestamp formats. Formatter expectations cover padded
-and unpadded fields without sleeps or dependence on wall-clock values.
-
-Namespace regressions cover URI/local-name lookup with aliases, defaults, local
-redeclarations, wrong-URI lookalikes, and inherited declarations on detached
-signed fragments. Independently supplied canonical bytes/signatures and existing
-xmlsec fixtures verify cryptographic behavior; tampering must fail. Both C14N
-modes agree with xmllint for implicit XML attributes, namespace undeclarations,
-and prefix rebinding. Parser cases reject undeclared/reserved prefixes, malformed
-QNames, duplicate expanded attributes, and the SAX-normalized empty `xmlns:`
-spelling, while preserving namespace-like literals in comments, CDATA, attributes,
-and text. Relative namespace URIs return `invalid_xml` through parsing and both public APIs.
-Missing lexical paths and malformed transform content remain covered.
+The fresh-VM application contract requires Signerl to depend on xmlan directly,
+xmerl to start transitively, and the frozen consumer to work using only installed
+application paths. The separate warmed atom probe exercises actual dependency
+parse/export/C14N and sign/verify with two disjoint batches of 25 fresh name sets;
+each must add zero permanent atoms, including malformed input.
 
 ## Run the tests
 
-Use the [pinned development toolchain](../README.md#development-toolchain):
-OTP 28.5.0.7 and rebar3 3.25.1. OTP 26/27 remain CI compatibility targets.
-
-Generate the test-only certificates before running the complete suite:
+Use OTP/rebar3 pinned in `.tool-versions`. Generate ignored test certificates:
 
 ```sh
 scripts/gen_certs.sh
+rebar3 eunit
+rebar3 ct
 rebar3 test
+rebar3 as test cover
+rebar3 flint
+rebar3 dialyzer
+rebar3 tall
 ```
 
-`test` checks formatting without rewriting source, resets coverage once, runs
-EUnit and CT with coverage, then checks **100% combined production-module coverage**. Both
-`eunit.coverdata` and `ct.coverdata` contribute. Neither framework alone is
-expected to cover all production modules after the split.
+`test` checks formatting, resets coverage once, combines fresh EUnit and CT data,
+and requires **100% Signerl production coverage**. xmlan owns its own complete
+coverage gate; dependency internals are not reimplemented or duplicated in this
+suite. `tall` adds lint, Xref, and Dialyzer. Run it natively before commit/push;
+all six latest-commit OTP 26/27/28 Ubuntu/Windows jobs must pass before merge.
+OpenSSL is required for generated test certificates; xmllint is required by
+xmlan's interop suite and is not needed by Signerl's ordinary suite.
 
-Run a focused module or suite while working:
+Focused examples:
 
 ```sh
 rebar3 eunit --module signerl_verify_test
 rebar3 ct --suite test/signerl_api_SUITE
-rebar3 ct --suite test/signerl_c14n_interop_SUITE
+rebar3 ct --suite test/signerl_xmlan_contract_SUITE
 ```
 
-Run all unit or integration cases with `rebar3 eunit` or `rebar3 ct`. These
-standalone commands do not replace the fresh combined coverage gate. Use
-`rebar3 as test cover` to inspect the most recently collected results.
-
-Before pushing, run native `rebar3 flint`, `rebar3 dialyzer`, and `rebar3 tall`
-as required by [AGENTS.md](../AGENTS.md). `tall` includes `test`, lint, Xref, and
-Dialyzer. GitHub Actions runs the same gate on OTP 26/27/28 across Ubuntu and
-Windows. All six jobs must pass on the latest PR commit before merging.
-`xmllint` is required for the ten interoperability cases; an unavailable
-tool skips that group, which is not a complete validation run. Install it locally;
-Linux CI installs it automatically.
+Focused runs do not replace the complete combined test/coverage gate. The
+[migration contract](../docs/xmlan_migration_contract.md) maps old tests to their
+new owners; historical implementation logs describe the pre-extraction layout.
 
 ## Existing build caches after the suite moves
 
@@ -269,8 +212,8 @@ for the clean/warm checks and lint failure probes.
 - `examples/independent/` contains signatures created by `xmlsec1`, alongside
   their public key and templates. See [provenance and scope](examples/independent/README.md).
   Ordinary tests read these fixtures and do not require `xmlsec1`.
-- Export unit tests run in memory. The file round-trip writes only to CT's
-  temporary directory. No test overwrites a tracked XML fixture.
+- Compatibility file output writes only to CT's temporary directory. Pure export
+  unit tests live in xmlan. No test overwrites a tracked XML fixture.
 
 Production behavior is unchanged by the test cleanup. Clock behavior is #56;
 bidirectional Python/Java interoperability CI remains post-1.0 work in #40.
@@ -285,5 +228,5 @@ extraction. Expected parsed values, exported/canonical bytes, and fixed-time RSA
 output are read from committed files. Only the verification public key is
 committed; fresh signing keys stay in memory.
 Tests do not regenerate their oracle; keep the independent signatures and
-xmllint checks as complementary evidence. External compile/Dialyzer and
+xmlan's xmllint checks as complementary evidence. External compile/Dialyzer and
 changed-golden failure probes are documented in the migration contract/log.

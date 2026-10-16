@@ -5,17 +5,17 @@
 -export([extract_signature_data/1, verify_reference_digests/2, c14n_mode/1]).
 
 -spec extract_signature_data(Message) -> Result when
-    Message :: signerl_xml:simplified_xml(),
+    Message :: xmlan:simplified_xml(),
     Result :: {ok, map()} | {error, atom()}.
 extract_signature_data({Tag, Attrs, Content}) ->
-    ParentNs = signerl_xml:namespace_context(Attrs, #{}),
+    ParentNs = xmlan:namespace_context(Attrs, #{}),
     {SignatureElements, UnsignedContent} = lists:partition(
         fun(Element) -> signerl_xml:is_signature_element(Element, ParentNs) end, Content
     ),
     case SignatureElements of
         [SignatureElement] ->
             decode_signature_data(
-                signerl_xml:with_namespace_context(SignatureElement, ParentNs),
+                xmlan:with_namespace_context(SignatureElement, ParentNs),
                 {Tag, Attrs, UnsignedContent}
             );
         _ ->
@@ -50,10 +50,10 @@ verify_reference_digests(
         ok ?= verify_cert_digest(SignedProperties, KeyInfo, HashAlgorithm),
         {ok, SignedPropertiesElement} ?=
             signerl_xades_xml:find_signed_properties_element(SignatureElement),
-        DocumentPayload = signerl_c14n:canonicalize(
+        DocumentPayload = xmlan_c14n:canonicalize(
             signerl_c14n:remove_signature_elements(UnsignedMessage)
         ),
-        SignedPropertiesPayload = signerl_c14n:canonicalize(SignedPropertiesElement),
+        SignedPropertiesPayload = xmlan_c14n:canonicalize(SignedPropertiesElement),
         DocumentDigest = crypto:hash(HashAlgorithm, DocumentPayload),
         SignedPropertiesDigest = crypto:hash(HashAlgorithm, SignedPropertiesPayload),
         case
@@ -96,7 +96,7 @@ decode_signature_data(SignatureElement, UnsignedMessage) ->
 
 signature_value(SignatureElement) ->
     decode_signature_value(
-        signerl_xml:find_path([?DSIG_NAME(<<"SignatureValue">>)], SignatureElement)
+        xmlan:find_path([?DSIG_NAME(<<"SignatureValue">>)], SignatureElement)
     ).
 
 decode_signature_value({ok, {_, _, [SignatureValue]}}) ->
@@ -107,7 +107,7 @@ decode_signature_value({error, not_found}) ->
     {error, missing_signature_value}.
 
 signed_info_element(SignatureElement) ->
-    case signerl_xml:find_path([?DSIG_NAME(<<"SignedInfo">>)], SignatureElement) of
+    case xmlan:find_path([?DSIG_NAME(<<"SignedInfo">>)], SignatureElement) of
         {ok, {_, _, _} = SignedInfoElement} ->
             {ok, SignedInfoElement};
         _ ->
@@ -117,13 +117,13 @@ signed_info_element(SignatureElement) ->
 signed_info_references(SignedInfoElement) ->
     maybe
         {ok, {_, C14NAttrs, _}} ?=
-            signerl_xml:find_path([?DSIG_NAME(<<"CanonicalizationMethod">>)], SignedInfoElement),
-        {ok, C14NAlgorithm} ?= signerl_xml:attr_value(<<"Algorithm">>, C14NAttrs),
+            xmlan:find_path([?DSIG_NAME(<<"CanonicalizationMethod">>)], SignedInfoElement),
+        {ok, C14NAlgorithm} ?= xmlan:attr_value(<<"Algorithm">>, C14NAttrs),
         {ok, {_, SignatureMethodAttrs, _}} ?=
-            signerl_xml:find_path([?DSIG_NAME(<<"SignatureMethod">>)], SignedInfoElement),
+            xmlan:find_path([?DSIG_NAME(<<"SignatureMethod">>)], SignedInfoElement),
         {ok, SignatureMethodAlgorithm} ?=
-            signerl_xml:attr_value(<<"Algorithm">>, SignatureMethodAttrs),
-        ReferenceElements = signerl_xml:find_children(
+            xmlan:attr_value(<<"Algorithm">>, SignatureMethodAttrs),
+        ReferenceElements = xmlan:find_children(
             ?DSIG_NAME(<<"Reference">>), SignedInfoElement
         ),
         {ok, DocumentReference, SignedPropertiesReference} ?=
@@ -144,13 +144,13 @@ decode_reference_elements(ReferenceElements) ->
         [
             Reference
          || Reference = {_, Attrs, _} <- ReferenceElements,
-            signerl_xml:attr_value(<<"URI">>, Attrs) =:= {ok, ""}
+            xmlan:attr_value(<<"URI">>, Attrs) =:= {ok, ""}
         ],
     SignedPropertiesReferences =
         [
             Reference
          || Reference = {_, Attrs, _} <- ReferenceElements,
-            signerl_xml:attr_value(<<"URI">>, Attrs) =:= {ok, "#" ++ ?SIGNED_PROPERTIES_ID}
+            xmlan:attr_value(<<"URI">>, Attrs) =:= {ok, "#" ++ ?SIGNED_PROPERTIES_ID}
         ],
     case {DocumentReferences, SignedPropertiesReferences} of
         {[DocumentReferenceElement], [SignedPropertiesReferenceElement]} ->
@@ -166,19 +166,19 @@ decode_reference_elements(ReferenceElements) ->
 
 decode_reference({_, Attrs, _} = ReferenceElement) ->
     maybe
-        {ok, Uri} ?= signerl_xml:attr_value(<<"URI">>, Attrs),
+        {ok, Uri} ?= xmlan:attr_value(<<"URI">>, Attrs),
         {ok, TransformUris} ?= transform_uris(ReferenceElement),
         {ok, DigestMethodElement} ?=
-            signerl_xml:find_path([?DSIG_NAME(<<"DigestMethod">>)], ReferenceElement),
+            xmlan:find_path([?DSIG_NAME(<<"DigestMethod">>)], ReferenceElement),
         {ok, DigestMethodUri} ?=
-            signerl_xml:attr_value(<<"Algorithm">>, element(2, DigestMethodElement)),
+            xmlan:attr_value(<<"Algorithm">>, element(2, DigestMethodElement)),
         {ok, DigestValueElement} ?=
-            signerl_xml:find_path([?DSIG_NAME(<<"DigestValue">>)], ReferenceElement),
-        {ok, DigestValueText} ?= signerl_xml:single_text(DigestValueElement),
+            xmlan:find_path([?DSIG_NAME(<<"DigestValue">>)], ReferenceElement),
+        {ok, DigestValueText} ?= xmlan:single_text(DigestValueElement),
         {ok, DigestValue} ?= decode_base64_binary(DigestValueText),
         {ok, #{
             uri => Uri,
-            type => signerl_xml:attr_value_or_undefined(<<"Type">>, Attrs),
+            type => xmlan:attr_value_or_undefined(<<"Type">>, Attrs),
             transforms => TransformUris,
             digest_method => DigestMethodUri,
             digest_value => DigestValue
@@ -189,9 +189,9 @@ decode_reference({_, Attrs, _} = ReferenceElement) ->
     end.
 
 transform_uris(ReferenceElement) ->
-    case signerl_xml:find_path([?DSIG_NAME(<<"Transforms">>)], ReferenceElement) of
+    case xmlan:find_path([?DSIG_NAME(<<"Transforms">>)], ReferenceElement) of
         {ok, {_, Attrs, TransformElements}} ->
-            decode_transform_uris(TransformElements, signerl_xml:namespace_context(Attrs, #{}), []);
+            decode_transform_uris(TransformElements, xmlan:namespace_context(Attrs, #{}), []);
         {error, not_found} ->
             {ok, []}
     end.
@@ -199,9 +199,9 @@ transform_uris(ReferenceElement) ->
 decode_transform_uris([], _ParentNs, Acc) ->
     {ok, lists:reverse(Acc)};
 decode_transform_uris([{Name, Attrs, []} = Element | Rest], ParentNs, Acc) when is_binary(Name) ->
-    case signerl_xml:expanded_name(Element, ParentNs) of
+    case xmlan:expanded_name(Element, ParentNs) of
         ?DSIG_NAME(<<"Transform">>) ->
-            case signerl_xml:attr_value(<<"Algorithm">>, Attrs) of
+            case xmlan:attr_value(<<"Algorithm">>, Attrs) of
                 {ok, Algorithm} -> decode_transform_uris(Rest, ParentNs, [Algorithm | Acc]);
                 {error, _} = Err -> Err
             end;
@@ -277,14 +277,14 @@ digest_method_uri(sha256) ->
 digest_method_uri(_) ->
     {error, unsupported_hash}.
 
--spec c14n_mode(map()) -> signerl_c14n:c14n_mode().
+-spec c14n_mode(map()) -> xmlan_c14n:c14n_mode().
 c14n_mode(#{references := #{c14n_algorithm := ?DSIG_EXC_C14N_ALGO_URI}}) ->
     exc_c14n;
 c14n_mode(_) ->
     c14n11.
 
 extract_key_info(SignatureElement) ->
-    case signerl_xml:find_path([?DSIG_NAME(<<"KeyInfo">>)], SignatureElement) of
+    case xmlan:find_path([?DSIG_NAME(<<"KeyInfo">>)], SignatureElement) of
         {ok, KeyInfoElement} ->
             extract_x509_certificate(KeyInfoElement);
         {error, not_found} ->
@@ -294,7 +294,7 @@ extract_key_info(SignatureElement) ->
 extract_x509_certificate(KeyInfoElement) ->
     maybe
         {ok, {_, _, [CertB64]}} ?=
-            signerl_xml:find_path(
+            xmlan:find_path(
                 [?DSIG_NAME(<<"X509Data">>), ?DSIG_NAME(<<"X509Certificate">>)], KeyInfoElement
             ),
         true ?= is_list(CertB64),

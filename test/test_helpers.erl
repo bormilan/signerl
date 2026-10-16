@@ -35,9 +35,9 @@ signature_with_properties(Properties) ->
 
 parse_verified_message(SignedMessage, PublicKey) ->
     ?assertEqual(true, signerl:verify(SignedMessage, sha256, PublicKey)),
-    {ok, Parsed} = signerl_xml:parse_binary(SignedMessage),
+    {ok, Parsed} = xmlan:parse_binary(SignedMessage),
     %% Verification accepts XML without a declaration, as do the reconstruction tests.
-    Rebuilt = signerl_xml:export([], Parsed),
+    Rebuilt = xmlan:export([], Parsed),
     ?assertEqual(true, signerl:verify(Rebuilt, sha256, PublicKey)),
     Parsed.
 

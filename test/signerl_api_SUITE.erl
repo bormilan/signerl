@@ -525,14 +525,14 @@ sign_with_certificate_includes_keyinfo(Config) ->
     RsaKey = ?config(rsa_key, Config),
     RsaCertDer = ?config(rsa_cert_der, Config),
     SignedMessage = signerl:sign(RawMessage, sha256, RsaKey, RsaCertDer),
-    {ok, Parsed} = signerl_xml:parse_binary(SignedMessage),
+    {ok, Parsed} = xmlan:parse_binary(SignedMessage),
     ?assertMatch(
         {ok, {<<"ds:KeyInfo">>, _, _}},
-        signerl_xml:find_path([<<"ds:Signature">>, <<"ds:KeyInfo">>], Parsed)
+        xmlan:find_path([<<"ds:Signature">>, <<"ds:KeyInfo">>], Parsed)
     ),
     ?assertMatch(
         {ok, {<<"ds:X509Certificate">>, _, [_]}},
-        signerl_xml:find_path(
+        xmlan:find_path(
             [<<"ds:Signature">>, <<"ds:KeyInfo">>, <<"ds:X509Data">>, <<"ds:X509Certificate">>],
             Parsed
         )
@@ -542,10 +542,10 @@ sign_without_certificate_omits_keyinfo(Config) ->
     RawMessage = ?config(raw_message, Config),
     RsaKey = ?config(rsa_key, Config),
     SignedMessage = signerl:sign(RawMessage, sha256, RsaKey),
-    {ok, Parsed} = signerl_xml:parse_binary(SignedMessage),
+    {ok, Parsed} = xmlan:parse_binary(SignedMessage),
     ?assertEqual(
         {error, not_found},
-        signerl_xml:find_path([<<"ds:Signature">>, <<"ds:KeyInfo">>], Parsed)
+        xmlan:find_path([<<"ds:Signature">>, <<"ds:KeyInfo">>], Parsed)
     ).
 
 sign_with_certificate_roundtrip_rsa(Config) ->
@@ -585,7 +585,7 @@ verify_extracts_certificate_from_keyinfo(Config) ->
     RsaKey = ?config(rsa_key, Config),
     RsaCertDer = ?config(rsa_cert_der, Config),
     SignedMessage = signerl:sign(RawMessage, sha256, RsaKey, RsaCertDer),
-    {ok, Parsed} = signerl_xml:parse_binary(SignedMessage),
+    {ok, Parsed} = xmlan:parse_binary(SignedMessage),
     {ok, #{key_info := KeyInfo}} = signerl_verify:extract_signature_data(Parsed),
     ?assertMatch(#{x509_certificate := RsaCertDer}, KeyInfo).
 
@@ -593,7 +593,7 @@ verify_extracts_no_keyinfo_when_absent(Config) ->
     RawMessage = ?config(raw_message, Config),
     RsaKey = ?config(rsa_key, Config),
     SignedMessage = signerl:sign(RawMessage, sha256, RsaKey),
-    {ok, Parsed} = signerl_xml:parse_binary(SignedMessage),
+    {ok, Parsed} = xmlan:parse_binary(SignedMessage),
     {ok, #{key_info := KeyInfo}} = signerl_verify:extract_signature_data(Parsed),
     ?assertEqual(undefined, KeyInfo).
 
@@ -602,20 +602,20 @@ sign_with_certificate_includes_signing_certificate_v2(Config) ->
     RsaKey = ?config(rsa_key, Config),
     RsaCertDer = ?config(rsa_cert_der, Config),
     SignedMessage = signerl:sign(RawMessage, sha256, RsaKey, RsaCertDer),
-    {ok, Parsed} = signerl_xml:parse_binary(SignedMessage),
+    {ok, Parsed} = xmlan:parse_binary(SignedMessage),
     ?assertMatch(
         {ok, {<<"xades:SigningCertificateV2">>, _, _}},
-        signerl_xml:find_path(signing_certificate_v2_path(), Parsed)
+        xmlan:find_path(signing_certificate_v2_path(), Parsed)
     ).
 
 sign_without_certificate_omits_signing_certificate_v2(Config) ->
     RawMessage = ?config(raw_message, Config),
     RsaKey = ?config(rsa_key, Config),
     SignedMessage = signerl:sign(RawMessage, sha256, RsaKey),
-    {ok, Parsed} = signerl_xml:parse_binary(SignedMessage),
+    {ok, Parsed} = xmlan:parse_binary(SignedMessage),
     ?assertEqual(
         {error, not_found},
-        signerl_xml:find_path(signing_certificate_v2_path(), Parsed)
+        xmlan:find_path(signing_certificate_v2_path(), Parsed)
     ).
 
 sign_with_certificate_extracts_cert_digest(Config) ->
@@ -623,7 +623,7 @@ sign_with_certificate_extracts_cert_digest(Config) ->
     RsaKey = ?config(rsa_key, Config),
     RsaCertDer = ?config(rsa_cert_der, Config),
     SignedMessage = signerl:sign(RawMessage, sha256, RsaKey, RsaCertDer),
-    {ok, Parsed} = signerl_xml:parse_binary(SignedMessage),
+    {ok, Parsed} = xmlan:parse_binary(SignedMessage),
     {ok, #{signed_properties := SignedProps}} = signerl_verify:extract_signature_data(Parsed),
     #{signing_certificate_v2 := CertV2} = SignedProps,
     ExpectedDigest = crypto:hash(sha256, RsaCertDer),
@@ -742,25 +742,25 @@ sign_with_ancestor_namespace_context(Config) ->
         "xmlns:xades=\"urn:application:xades\"><ds:record xades:status=\"draft\">"
         "<amount>42.00</amount></ds:record></invoice>"
     >>,
-    {ok, Original} = signerl_xml:parse_binary(Raw),
+    {ok, Original} = xmlan:parse_binary(Raw),
     Signed = signerl:sign(Raw, sha256, Key, Cert),
     Parsed = test_helpers:parse_verified_message(Signed, PublicKey),
     ?assertEqual(Original, signerl_c14n:remove_signature_elements(Parsed)),
     {ok, SignatureData} = signerl_verify:extract_signature_data(Parsed),
     #{signature_bytes := SignatureBytes, signature_element := SignatureElement} = SignatureData,
-    {ok, SignedInfo} = signerl_xml:find_path([<<"ds:SignedInfo">>], SignatureElement),
+    {ok, SignedInfo} = xmlan:find_path([<<"ds:SignedInfo">>], SignatureElement),
     ExpectedSignedInfo = fragment_with_bindings(SignedInfo, [
         {<<"xmlns">>, "urn:invoice"},
         {<<"xmlns:unused">>, "urn:unused"},
         {<<"xmlns:ds">>, ?DSIG_NAMESPACE_URI},
         {<<"xmlns:xades">>, "urn:application:xades"}
     ]),
-    SignedInfoBytes = signerl_c14n:canonicalize(ExpectedSignedInfo),
+    SignedInfoBytes = xmlan_c14n:canonicalize(ExpectedSignedInfo),
     ?assertEqual(
-        SignedInfoBytes, signerl_c14n:canonicalize(maps:get(signed_info_element, SignatureData))
+        SignedInfoBytes, xmlan_c14n:canonicalize(maps:get(signed_info_element, SignatureData))
     ),
     ?assertEqual(true, public_key:verify(SignedInfoBytes, sha256, SignatureBytes, PublicKey)),
-    {ok, SignedProperties} = signerl_xml:find_path(
+    {ok, SignedProperties} = xmlan:find_path(
         [<<"ds:Object">>, <<"xades:QualifyingProperties">>, <<"xades:SignedProperties">>],
         SignatureElement
     ),
@@ -770,12 +770,12 @@ sign_with_ancestor_namespace_context(Config) ->
         {<<"xmlns:ds">>, ?DSIG_NAMESPACE_URI},
         {<<"xmlns:xades">>, ?XADES_NAMESPACE_URI}
     ]),
-    SignedPropertiesBytes = signerl_c14n:canonicalize(ExpectedSignedProperties),
+    SignedPropertiesBytes = xmlan_c14n:canonicalize(ExpectedSignedProperties),
     #{references := #{signed_properties := #{digest_value := SignedPropertiesDigest}}} =
         SignatureData,
     ?assertEqual(crypto:hash(sha256, SignedPropertiesBytes), SignedPropertiesDigest),
     {ok, ContextualProperties} = signerl_xades_xml:find_signed_properties_element(SignatureElement),
-    ?assertEqual(SignedPropertiesBytes, signerl_c14n:canonicalize(ContextualProperties)).
+    ?assertEqual(SignedPropertiesBytes, xmlan_c14n:canonicalize(ContextualProperties)).
 
 fragment_with_bindings({Name, Attrs, Children}, Bindings) ->
     ContextAttrs = lists:foldl(
@@ -841,13 +841,13 @@ c14n_idempotent_after_sign(Config) ->
     RawMessage = ?config(raw_message, Config),
     RsaKey = ?config(rsa_key, Config),
     SignedMessage = signerl:sign(RawMessage, sha256, RsaKey),
-    {ok, ParsedSigned} = signerl_xml:parse_binary(SignedMessage),
-    {ok, SignedInfoElement} = signerl_xml:find_path(
+    {ok, ParsedSigned} = xmlan:parse_binary(SignedMessage),
+    {ok, SignedInfoElement} = xmlan:find_path(
         [?DSIG_NAME(<<"Signature">>), ?DSIG_NAME(<<"SignedInfo">>)], ParsedSigned
     ),
-    C14N1 = signerl_c14n:canonicalize(SignedInfoElement),
-    {ok, ReParsed} = signerl_xml:parse_binary(C14N1),
-    C14N2 = signerl_c14n:canonicalize(ReParsed),
+    C14N1 = xmlan_c14n:canonicalize(SignedInfoElement),
+    {ok, ReParsed} = xmlan:parse_binary(C14N1),
+    C14N2 = xmlan_c14n:canonicalize(ReParsed),
     ?assertEqual(C14N1, C14N2).
 
 %% Workflow helpers
@@ -864,10 +864,10 @@ signing_certificate_v2_path() ->
 
 tamper_keyinfo_certificate(SignedMessage, NewCertDer) ->
     NewCertB64 = binary_to_list(base64:encode(NewCertDer)),
-    {ok, Parsed} = signerl_xml:parse_binary(SignedMessage),
+    {ok, Parsed} = xmlan:parse_binary(SignedMessage),
     Tampered = replace_x509_certificate(Parsed, NewCertB64),
     ?assertNotEqual(Parsed, Tampered),
-    signerl_xml:export(<<"<?xml version=\"1.0\" encoding=\"UTF-8\"?>">>, Tampered).
+    xmlan:export(<<"<?xml version=\"1.0\" encoding=\"UTF-8\"?>">>, Tampered).
 
 replace_x509_certificate({<<"ds:X509Certificate">>, Attrs, _}, NewCertB64) ->
     {<<"ds:X509Certificate">>, Attrs, [NewCertB64]};
@@ -877,10 +877,10 @@ replace_x509_certificate(Other, _NewCertB64) ->
     Other.
 
 strip_keyinfo_certificate(SignedMessage) ->
-    {ok, Parsed} = signerl_xml:parse_binary(SignedMessage),
+    {ok, Parsed} = xmlan:parse_binary(SignedMessage),
     Stripped = remove_x509_data(Parsed),
     ?assertNotEqual(Parsed, Stripped),
-    signerl_xml:export(<<"<?xml version=\"1.0\" encoding=\"UTF-8\"?>">>, Stripped).
+    xmlan:export(<<"<?xml version=\"1.0\" encoding=\"UTF-8\"?>">>, Stripped).
 
 remove_x509_data({<<"ds:X509Data">>, _Attrs, _Content}) ->
     removed;
@@ -899,10 +899,10 @@ remove_x509_data(Other) ->
     Other.
 
 tamper_cert_digest_method(SignedMessage) ->
-    {ok, Parsed} = signerl_xml:parse_binary(SignedMessage),
+    {ok, Parsed} = xmlan:parse_binary(SignedMessage),
     Tampered = replace_cert_digest_method(Parsed),
     ?assertNotEqual(Parsed, Tampered),
-    signerl_xml:export(<<"<?xml version=\"1.0\" encoding=\"UTF-8\"?>">>, Tampered).
+    xmlan:export(<<"<?xml version=\"1.0\" encoding=\"UTF-8\"?>">>, Tampered).
 
 replace_cert_digest_method({<<"xades:SigningCertificateV2">>, Attrs, Content}) ->
     {<<"xades:SigningCertificateV2">>, Attrs, replace_cert_digest_method_inner(Content)};
@@ -955,14 +955,14 @@ sign_utf8_binary_and_file(Config) ->
     PublicKey = ?config(rsa_public_key, Config),
     Path = signerl_utils:file_path("test/examples/c14n/utf8.xml"),
     {ok, Raw} = file:read_file(Path),
-    {ok, ExpectedTree} = signerl_xml:parse_binary(Raw),
+    {ok, ExpectedTree} = xmlan:parse_binary(Raw),
     Cert = signerl_cert_helpers:cert_der(signerl_cert_helpers:signer_rsa_cert_path()),
     DefaultEncoding = test_helpers:replace_once(Raw, <<" encoding=\"UTF-8\"">>, <<>>),
     lists:foreach(
         fun(Signed) ->
             ?assert(is_binary(Signed)),
             ?assertEqual(true, signerl:verify(Signed, sha256, PublicKey)),
-            {ok, Parsed} = signerl_xml:parse_binary(Signed),
+            {ok, Parsed} = xmlan:parse_binary(Signed),
             ?assertEqual(ExpectedTree, signerl_c14n:remove_signature_elements(Parsed)),
             Tampered = test_helpers:replace_once(Signed, <<">café"/utf8>>, <<">cafè"/utf8>>),
             ?assertEqual(false, signerl:verify(Tampered, sha256, PublicKey))
@@ -1026,10 +1026,10 @@ sign_preserves_content(Config) ->
     PublicKey = ?config(rsa_public_key, Config),
     Path = signerl_utils:file_path("test/examples/c14n/preserved_content.xml"),
     {ok, Raw} = file:read_file(Path),
-    {ok, Original} = signerl_xml:parse_binary(Raw),
+    {ok, Original} = xmlan:parse_binary(Raw),
     Signed = signerl:sign(Raw, sha256, Key),
     ?assertEqual(true, signerl:verify(Signed, sha256, PublicKey)),
-    {ok, Parsed} = signerl_xml:parse_binary(Signed),
+    {ok, Parsed} = xmlan:parse_binary(Signed),
     ?assertEqual(Original, signerl_c14n:remove_signature_elements(Parsed)),
     FileSigned = signerl:sign(Path, sha256, Key),
     ?assertEqual(true, signerl:verify(FileSigned, sha256, PublicKey)),
@@ -1122,12 +1122,12 @@ complete_document_file_boundary(Config) ->
     InputPath = filename:join(?config(priv_dir, Config), "complete-input.xml"),
     SignedPath = filename:join(?config(priv_dir, Config), "complete-signed.xml"),
     ok = file:write_file(InputPath, Raw),
-    ?assertEqual({<<"root">>, [], []}, signerl_xml:parse_file(InputPath)),
+    ?assertEqual({<<"root">>, [], []}, xmlan:parse_file(InputPath)),
     Signed = signerl:sign(InputPath, sha256, Key),
     ok = file:write_file(SignedPath, <<Signed/binary, " \t<!-- allowed -->\n">>),
     ?assertEqual(true, signerl:verify(SignedPath, sha256, PublicKey)),
     ok = file:write_file(InputPath, <<Raw/binary, "<extra/>">>),
-    ?assertException(error, _, signerl_xml:parse_file(InputPath)),
+    ?assertException(error, _, xmlan:parse_file(InputPath)),
     ?assertEqual({error, invalid_xml}, signerl:sign(InputPath, sha256, Key)),
     ok = file:write_file(SignedPath, <<Signed/binary, "<extra/>">>),
     ?assertEqual({error, invalid_xml}, signerl:verify(SignedPath, sha256, PublicKey)).

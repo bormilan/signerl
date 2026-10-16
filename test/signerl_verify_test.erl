@@ -151,7 +151,7 @@ reference_digests_are_independent_of_signed_info_c14n(Config) ->
     ),
     ?assertEqual(true, signerl_verify:verify_reference_digests(ExcData, sha256)),
     %% SignedInfo changed, so the unchanged SignatureValue must no longer verify.
-    Modified = signerl_xml:export([], Message),
+    Modified = xmlan:export([], Message),
     ?assertEqual(
         false, signerl:verify(Modified, sha256, proplists:get_value(rsa_public_key, Config))
     ).
@@ -232,7 +232,7 @@ verify_rejects_duplicate_reference_attributes(Config) ->
     SignatureData = validated_signature_data(Config),
     SignatureElement = maps:get(signature_element, SignatureData),
     Message = message_with_signature(SignatureData, SignatureElement),
-    SignedMessage = signerl_xml:export([], Message),
+    SignedMessage = xmlan:export([], Message),
     %% Duplicate attributes are invalid XML; exercise the parser through the public API.
     Duplicate = test_helpers:replace_once(
         SignedMessage, <<"Type=">>, <<"Type=\"duplicate\" Type=">>
@@ -285,7 +285,7 @@ verify_reference_digests_returns_error_with_invalid_signature_data(_Config) ->
     ).
 
 extract_signature_returns_error_without_signature_element_direct_test() ->
-    Message = signerl_xml:parse_file("test/examples/base/books.xml"),
+    Message = xmlan:parse_file("test/examples/base/books.xml"),
     ?assertEqual({error, missing_signature}, signerl_verify:extract_signature_data(Message)).
 
 c14n_mode_returns_exc_for_exc_c14n_algorithm_test() ->
@@ -310,13 +310,13 @@ extract_x509_certificate_returns_undefined_for_invalid_cert_test() ->
         {<<"invalid">>, [], []}, {<<"extra">>, [], []}
     ]),
     ?assertNotEqual(Parsed, CorruptedStructure),
-    {ok, ParsedStructure} = signerl_xml:parse_binary(signerl_xml:export([], CorruptedStructure)),
+    {ok, ParsedStructure} = xmlan:parse_binary(xmlan:export([], CorruptedStructure)),
     {ok, #{key_info := KeyInfo1}} = signerl_verify:extract_signature_data(ParsedStructure),
     ?assertEqual(undefined, KeyInfo1),
     %% Test 2: Corrupt cert to invalid base64 (single list child → decode error)
     CorruptedBase64 = corrupt_x509_certificate(Parsed, ["!!!not-base64!!!"]),
     ?assertNotEqual(Parsed, CorruptedBase64),
-    {ok, ParsedBase64} = signerl_xml:parse_binary(signerl_xml:export([], CorruptedBase64)),
+    {ok, ParsedBase64} = xmlan:parse_binary(xmlan:export([], CorruptedBase64)),
     {ok, #{key_info := KeyInfo2}} = signerl_verify:extract_signature_data(ParsedBase64),
     ?assertEqual(undefined, KeyInfo2).
 
@@ -400,7 +400,7 @@ certificate_namespace_fixture() ->
     {Signed, CertDer}.
 
 extracted_key_info(Xml) ->
-    {ok, Parsed} = signerl_xml:parse_binary(Xml),
+    {ok, Parsed} = xmlan:parse_binary(Xml),
     {ok, #{key_info := KeyInfo}} = signerl_verify:extract_signature_data(Parsed),
     KeyInfo.
 
@@ -417,7 +417,7 @@ validated_signature_data(Config) ->
     SignatureElement = maps:get(signature_element, SignatureData),
     Message = message_with_signature(SignatureData, SignatureElement),
     test_helpers:parse_verified_message(
-        signerl_xml:export([], Message), proplists:get_value(rsa_public_key, Config)
+        xmlan:export([], Message), proplists:get_value(rsa_public_key, Config)
     ),
     SignatureData.
 
@@ -431,7 +431,7 @@ compute_valid_signature_data(PublicKey) ->
     SignatureData.
 
 message_with_signature(#{unsigned_message := Message}, SignatureElement) ->
-    signerl_xml:add_new_element(SignatureElement, Message).
+    xmlan:add_new_element(SignatureElement, Message).
 
 remove_c14n_from_signature(
     {<<"ds:Signature">>, Attrs, [SignedInfo, SignatureValue, SignatureObject]}
