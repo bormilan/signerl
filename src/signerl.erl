@@ -52,14 +52,14 @@ sign(Message, HashAlgorithm, Key, CertDer, SigningTime) when is_binary(Message) 
 
 sign_impl(Message, HashAlgorithm, Key, CertDer, SigningTime) ->
     maybe
-        {ok, Prolog} ?= signerl_xml:parse_prolog(Message),
-        {ok, ParsedMessage} ?= signerl_xml:parse_binary(Message),
+        {ok, Prolog} ?= xmlan:parse_prolog(Message),
+        {ok, ParsedMessage} ?= xmlan:parse_binary(Message),
         {ok, SignatureElement} ?=
             signerl_signature:build_signature_element(
                 ParsedMessage, HashAlgorithm, Key, CertDer, SigningTime
             ),
-        SignedMessage = signerl_xml:add_new_element(SignatureElement, ParsedMessage),
-        signerl_xml:export(Prolog, SignedMessage)
+        SignedMessage = xmlan:add_new_element(SignatureElement, ParsedMessage),
+        xmlan:export(Prolog, SignedMessage)
     else
         {error, Reason} -> {error, Reason}
     end.
@@ -85,13 +85,13 @@ verify(FilePath, HashAlgorithm, Key) when is_list(FilePath) ->
     end;
 verify(SignedMessage, HashAlgorithm, Key) when is_binary(SignedMessage) ->
     maybe
-        {ok, ParsedMessage} ?= signerl_xml:parse_binary(SignedMessage),
+        {ok, ParsedMessage} ?= xmlan:parse_binary(SignedMessage),
         {ok, SignatureData} ?= signerl_verify:extract_signature_data(ParsedMessage),
         {ok, SignatureBytes} ?= maps:find(signature_bytes, SignatureData),
         {ok, SignedInfoElement} ?= maps:find(signed_info_element, SignatureData),
         true ?= signerl_verify:verify_reference_digests(SignatureData, HashAlgorithm),
         C14NMode = signerl_verify:c14n_mode(SignatureData),
-        SignedInfoBytes = signerl_c14n:canonicalize(SignedInfoElement, C14NMode),
+        SignedInfoBytes = xmlan_c14n:canonicalize(SignedInfoElement, C14NMode),
         public_key:verify(SignedInfoBytes, HashAlgorithm, SignatureBytes, Key)
     else
         false ->

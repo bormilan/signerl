@@ -1,6 +1,7 @@
 -module(xmlan_contract_consumer).
 
 -include_lib("stdlib/include/assert.hrl").
+-include_lib("signerl/include/signerl_xml.hrl").
 -include_lib("public_key/include/public_key.hrl").
 
 -export([run/1]).
@@ -9,6 +10,7 @@
 run(Dir) ->
     check_xml(Dir),
     check_helpers(),
+    check_aliases(),
     check_failures(Dir),
     check_signature(Dir).
 
@@ -144,3 +146,30 @@ replace_signature_value(Signed, ExpectedValue) ->
 read(Dir, Name) ->
     {ok, Bytes} = file:read_file(filename:join(Dir, Name)),
     Bytes.
+
+-spec alias_values() ->
+    {
+        signerl_xml:attribute_value(),
+        signerl_xml:expanded_name(),
+        signerl_xml:expanded_xml(),
+        signerl_xml:namespace_context(),
+        signerl_c14n:c14n_mode()
+    }.
+alias_values() ->
+    Value = <<"café"/utf8>>,
+    Name = {<<"urn:alias">>, <<"root">>},
+    {Value, Name, {Name, [{<<"label">>, Value}], [Value]}, #{<<"p">> => <<"urn:alias">>}, exc_c14n}.
+
+check_aliases() ->
+    {Value, Name, Expanded, Context, Mode} = alias_values(),
+    Tree = {<<"p:root">>, [{<<"label">>, Value}], [Value]},
+    WithContext = signerl_xml:with_namespace_context(Tree, Context),
+    ?assertEqual(Name, signerl_xml:expanded_name(Tree, Context)),
+    {ExpandedName, _, [Value]} = Expanded,
+    ?assertEqual(Name, ExpandedName),
+    ?assertMatch({{<<"urn:alias">>, <<"root">>}, _, _}, signerl_xml:expanded_names(WithContext)),
+    ?assertEqual(?XML_NAMESPACE_URI, maps:get(<<"xml">>, signerl_xml:namespace_context([], #{}))),
+    ?assertEqual(
+        <<"<p:root xmlns:p=\"urn:alias\" label=\"café\">café</p:root>"/utf8>>,
+        signerl_c14n:canonicalize(WithContext, Mode)
+    ).

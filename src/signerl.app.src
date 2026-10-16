@@ -7,7 +7,7 @@
         stdlib,
         crypto,
         public_key,
-        xmerl
+        xmlan
     ]},
     {env, []},
     {modules, []},

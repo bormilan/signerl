@@ -774,10 +774,10 @@ rich_signed_properties() ->
     }.
 
 namespace_signature(DsigPrefix, XadesPrefix) ->
-    Xml = signerl_xml:export([], rich_signature_element()),
+    Xml = xmlan:export([], rich_signature_element()),
     WithDsig = replace_namespace_prefix(Xml, <<"ds">>, DsigPrefix),
     WithXades = replace_namespace_prefix(WithDsig, <<"xades">>, XadesPrefix),
-    {ok, Signature} = signerl_xml:parse_binary(WithXades),
+    {ok, Signature} = xmlan:parse_binary(WithXades),
     Signature.
 
 replace_namespace_prefix(Xml, OldPrefix, NewPrefix) ->

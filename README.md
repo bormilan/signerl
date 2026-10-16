@@ -13,6 +13,24 @@ Early development. APIs may change and XML-DSig compliance is not complete yet.
 - Sign an XML message using a private key.
 - Verify a signature using a public key.
 
+## XML dependency
+
+Generic XML parsing, serialization, namespaces, and canonicalization are provided
+by [xmlan](https://github.com/bormilan/xmlan), pinned to validated commit
+`1fe39f6d414217584f514e70e43b8e7b4171f1ef` in
+[rebar.config](rebar.config) and [rebar.lock](rebar.lock). Builds fetch that exact
+Git revision; no sibling checkout or path override is needed. Add `signerl` to a
+consumer application's runtime dependencies. `application:ensure_all_started(signerl)`
+starts xmlan and its OTP xmerl dependency transitively.
+
+The existing generic `signerl_xml` exports and `signerl_c14n:canonicalize/1,2`
+remain direct compatibility delegates. Their exported types are transparent
+aliases to xmlan's types, preserving caller-built tuples and pattern matching.
+`include/signerl_xml.hrl` forwards to the dependency's XML constants. New generic
+XML code can call `xmlan` and `xmlan_c14n` directly. Signerl retains signature
+identity/removal, XMLDSig/XAdES builders/validators, references, algorithm routing,
+signing time, and cryptography; it contains no local generic XML fallback.
+
 ## Quick Start
 
 ```erlang
@@ -179,7 +197,8 @@ remain Unicode character lists. For example:
     signerl_xml:parse_binary(<<"<root id='1'><child>text</child></root>">>).
 ```
 
-`signerl_xml:simplified_xml()` is a **public, transparent type**. Callers may
+`signerl_xml:simplified_xml()` is a **public, transparent alias** of
+`xmlan:simplified_xml()`. Callers may
 construct and pattern-match `{Name, Attributes, Children}` directly; there is no
 opaque handle or required accessor layer. Its contract is:
 
@@ -210,11 +229,11 @@ also use binaries, for example `find_path([<<"ds:Object">>], Signature)` and
 exporters and both canonicalizers consume it. The public `sign/3`, `sign/4`, and
 `verify/3` arguments and return shapes are unchanged.
 
-The SAX parser supplies character-list names, which SignErl converts directly
+The SAX parser supplies character-list names, which xmlan converts directly
 to UTF-8 binaries. It does not intern names, consult existing atoms, or use an
 input-dependent atom vocabulary. Arbitrary names therefore cannot grow the VM's
 permanent atom table, including when a document is rejected after its root.
-Names keep their lexical prefixes; matching namespace URIs remains #41.
+Names keep their lexical prefixes; generic namespace resolution is owned by xmlan.
 
 A bounded regression runs the production parse/export/canonicalize/sign/verify
 path in a fresh VM on each supported OTP 26/27/28 CI runtime. After warm-up,
@@ -243,8 +262,9 @@ asdf install
 The Erlang plugin builds OTP from source; follow its
 [platform prerequisites](https://github.com/asdf-vm/asdf-erlang#before-asdf-install).
 Alternatively, install the pinned OTP and rebar3 releases directly. Native
-testing also requires OpenSSL for certificates and `xmllint` for canonicalization
-comparisons (`libxml2-utils` on Debian/Ubuntu). CI installs the Linux prerequisite.
+testing also requires OpenSSL for test certificates. Pure XML tests and xmllint
+canonicalization comparisons are owned by xmlan's suite and validated at the
+pinned revision; the Signerl suite needs no xmllint executable.
 
 [rebar3 3.25.1](https://github.com/erlang/rebar3/releases/tag/3.25.1) supports the
 retained OTP 26–28 matrix and includes Windows fixes for OTP 28. The
@@ -321,9 +341,10 @@ on the latest PR commit.
 
 ## XML library extraction
 
-The next milestone moves generic XML parsing, serialization, namespace helpers,
-and canonicalization into [xmlan](https://github.com/bormilan/xmlan), then adds it
-as a pinned dependency. The [migration contract](docs/xmlan_migration_contract.md)
-defines ownership, preserved APIs/types/behavior, test responsibilities, and
-completion gates. Signature logic remains in Signerl. This milestone is in
-progress; the current release still owns its XML implementation.
+Generic XML code and its pure tests now live in xmlan. The dependency integration
+preserves Signerl's public APIs, compatibility exports/types, and existing XML
+profile. The [migration contract](docs/xmlan_migration_contract.md) records the
+ownership boundary and frozen baseline; Signerl retains real dependency-backed
+signature, tamper, independent-fixture, consumer, and runtime-startup checks.
+The milestone's remaining equivalence/security sweep (#88) and final consumer/
+ownership audit (#89) follow this integration.

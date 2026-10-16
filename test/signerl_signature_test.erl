@@ -24,10 +24,10 @@ add_signature_element_inserts_signature_value(Config) ->
     {ok, SignatureElement} = signerl_signature:build_signature_element(
         Message, sha256, Key, undefined
     ),
-    SignedMessage = signerl_xml:add_new_element(SignatureElement, Message),
+    SignedMessage = xmlan:add_new_element(SignatureElement, Message),
     ?assertMatch(
         {ok, {<<"ds:SignatureValue">>, [], [_]}},
-        signerl_xml:find_path(
+        xmlan:find_path(
             [
                 <<"ds:Signature">>,
                 <<"ds:SignatureValue">>
@@ -42,8 +42,8 @@ add_signature_element_inserts_signed_properties(Config) ->
     {ok, SignatureElement} = signerl_signature:build_signature_element(
         Message, sha256, Key, undefined
     ),
-    SignedMessage = signerl_xml:add_new_element(SignatureElement, Message),
-    SignedMessageBin = signerl_xml:export(
+    SignedMessage = xmlan:add_new_element(SignatureElement, Message),
+    SignedMessageBin = xmlan:export(
         ["<?xml version=\"1.0\" encoding=\"UTF-8\"?>"], SignedMessage
     ),
     ?assertMatch({_, _}, binary:match(SignedMessageBin, <<"<ds:SignedInfo>">>)),
@@ -51,7 +51,7 @@ add_signature_element_inserts_signed_properties(Config) ->
     ?assertMatch({_, _}, binary:match(SignedMessageBin, <<"<xades:QualifyingProperties ">>)),
     ?assertMatch({_, _}, binary:match(SignedMessageBin, <<"<xades:SignedProperties ">>)),
     ?assertMatch({_, _}, binary:match(SignedMessageBin, <<"<xades:SigningTime>">>)),
-    {ok, SigningTimeElement} = signerl_xml:find_path(
+    {ok, SigningTimeElement} = xmlan:find_path(
         [
             <<"ds:Signature">>,
             <<"ds:Object">>,
@@ -62,7 +62,7 @@ add_signature_element_inserts_signed_properties(Config) ->
         ],
         SignedMessage
     ),
-    {ok, SigningTime} = signerl_xml:single_text(SigningTimeElement),
+    {ok, SigningTime} = xmlan:single_text(SigningTimeElement),
     ?assertEqual(true, signerl_utils:valid_utc_timestamp(SigningTime)).
 
 add_signature_element_extracts_signature_value(Config) ->
@@ -71,7 +71,7 @@ add_signature_element_extracts_signature_value(Config) ->
     {ok, SignatureElement} = signerl_signature:build_signature_element(
         Message, sha256, Key, undefined
     ),
-    SignedMessage = signerl_xml:add_new_element(SignatureElement, Message),
+    SignedMessage = xmlan:add_new_element(SignatureElement, Message),
     {ok, #{
         signature_bytes := SignatureBytes,
         unsigned_message := Message,
@@ -116,7 +116,7 @@ build_signature_element_returns_error_with_invalid_hash_or_key(Config) ->
 %% Fixture setup and mutation helpers
 
 builder_fixture() ->
-    Message = signerl_xml:parse_file("test/examples/base/books.xml"),
+    Message = xmlan:parse_file("test/examples/base/books.xml"),
     RsaKey = signerl_cert_helpers:signer_rsa_key(),
     EcdsaKey = signerl_cert_helpers:signer_ecdsa_key(),
     [{message, Message}, {rsa_key, RsaKey}, {ecdsa_key, EcdsaKey}].
@@ -124,5 +124,5 @@ builder_fixture() ->
 assert_has_signed_info(SignatureElement) ->
     ?assertMatch(
         {ok, {<<"ds:SignedInfo">>, _, _}},
-        signerl_xml:find_path([<<"ds:SignedInfo">>], SignatureElement)
+        xmlan:find_path([<<"ds:SignedInfo">>], SignatureElement)
     ).

@@ -154,8 +154,10 @@ After `rebar3 compile`, from the checkout root (POSIX shell):
 
 ```sh
 consumer_probe_dir="$(mktemp -d)"
-erlc +debug_info -o "$consumer_probe_dir" test/xmlan_contract_consumer.erl
-erl -noshell -pa "$consumer_probe_dir" _build/default/lib/signerl/ebin \
+erlc -pa _build/default/lib/signerl/ebin -pa _build/default/lib/xmlan/ebin \
+  +debug_info -o "$consumer_probe_dir" test/xmlan_contract_consumer.erl
+erl -noshell -enable-feature maybe_expr -pa "$consumer_probe_dir" \
+  _build/default/lib/signerl/ebin _build/default/lib/xmlan/ebin \
   -eval 'ok = xmlan_contract_consumer:run("test/examples/xmlan_migration"), halt().'
 ```
 
@@ -201,3 +203,20 @@ and clean consumers exhibit the same supported behavior. Compatibility delegates
 must call xmlan directly; they cannot hide a second maintained implementation.
 Broader XML standards support and #64/#58/#59 profile/API/failure redesign remain
 separate. Any intentional API removal requires separately approved scope.
+
+## Integrated dependency (#87)
+
+Signerl's configuration and generated lockfile pin xmlan
+`1fe39f6d414217584f514e70e43b8e7b4171f1ef`, the reviewed #86 implementation with
+native tall, 100% coverage, and all six CI jobs verified. That commit is reachable
+from merged xmlan `dev`; it is used directly so the dependency SHA equals the
+validated implementation SHA. No branch/path override is used.
+
+Generic production callers/types now refer to xmlan directly. Legacy generic
+exports are single-call delegates; public types are transparent remote aliases,
+and `signerl_xml.hrl` only forwards to the dependency header. The signature
+identity predicates and immediate-child enveloped-signature removal stay local.
+Signerl starts xmlan, which starts xmerl; Signerl has no direct xmerl calls or
+application requirement. Pure generic test ownership moved in #85/#86; Signerl
+retains the dependency-backed protocol/API/consumer checks in `test/TESTS.md`.
+The broader #88 equivalence sweep and #89 final audit remain separate tasks.

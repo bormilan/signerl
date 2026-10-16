@@ -5,14 +5,14 @@
 -export([extract/1]).
 
 -spec extract(SignatureElement) -> Result when
-    SignatureElement :: signerl_xml:simplified_xml(),
+    SignatureElement :: xmlan:simplified_xml(),
     Result :: {ok, map()} | {error, term()}.
 extract(SignatureElement) ->
     maybe
         {ok, SigPropsElement} ?=
             signerl_xades_xml:find_signed_signature_properties(SignatureElement),
         {?XADES_NAME(<<"SignedSignatureProperties">>), _, SigProps} =
-            signerl_xml:expanded_names(SigPropsElement),
+            xmlan:expanded_names(SigPropsElement),
         {ok, Validated} ?= validate_signed_signature_properties(SigProps, #{}),
         DataObjProps = signerl_xades_xml:find_signed_data_object_properties(SignatureElement),
         {ok, WithDataObj} ?= validate_signed_data_object_properties(DataObjProps, Validated),
@@ -92,7 +92,7 @@ validate_signed_data_object_properties({error, _}, Acc) ->
     {ok, Acc};
 validate_signed_data_object_properties({ok, Element}, Acc) ->
     {?XADES_NAME(<<"SignedDataObjectProperties">>), _, Content} =
-        signerl_xml:expanded_names(Element),
+        xmlan:expanded_names(Element),
     validate_data_object_elements(Content, Acc).
 
 validate_data_object_elements([], Acc) ->
@@ -320,7 +320,7 @@ build_role_map(ClaimedRoles, CertifiedRoles) ->
 %%--- DataObjectFormat ---
 
 validate_data_object_format(Attrs, Content) ->
-    case signerl_xml:attr_value(<<"ObjectReference">>, Attrs) of
+    case xmlan:attr_value(<<"ObjectReference">>, Attrs) of
         {ok, ObjectRef} ->
             Format = extract_data_format_fields(Content, #{object_reference => ObjectRef}),
             {ok, Format};
@@ -384,7 +384,7 @@ extract_digest(DigestContent) ->
     maybe
         {ok, {?DSIG_NAME(<<"DigestMethod">>), DigestMethodAttrs, _}} ?=
             find_element(?DSIG_NAME(<<"DigestMethod">>), DigestContent),
-        {ok, DigestMethodUri} ?= signerl_xml:attr_value(<<"Algorithm">>, DigestMethodAttrs),
+        {ok, DigestMethodUri} ?= xmlan:attr_value(<<"Algorithm">>, DigestMethodAttrs),
         {ok, {?DSIG_NAME(<<"DigestValue">>), _, [DigestValueText]}} ?=
             find_element(?DSIG_NAME(<<"DigestValue">>), DigestContent),
         {ok, DigestValue} ?= decode_base64_text(DigestValueText),
