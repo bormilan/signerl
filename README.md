@@ -346,5 +346,7 @@ preserves Signerl's public APIs, compatibility exports/types, and existing XML
 profile. The [migration contract](docs/xmlan_migration_contract.md) records the
 ownership boundary and frozen baseline; Signerl retains real dependency-backed
 signature, tamper, independent-fixture, consumer, and runtime-startup checks.
-The milestone's remaining equivalence/security sweep (#88) and final consumer/
-ownership audit (#89) follow this integration.
+The [equivalence/security report](docs/xmlan_equivalence_report.md) records the
+same-key historical comparison and complete baseline test ownership. Run
+`scripts/prepare_xml_baseline.sh` before Common Test or tall to prepare its pinned
+test oracle. The milestone's final consumer/ownership audit remains #89.

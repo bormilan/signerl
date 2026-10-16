@@ -30,3 +30,11 @@ The standalone consumer commands are in
 [the migration contract](../../../docs/xmlan_migration_contract.md).
 Changing a frozen artifact during extraction requires investigating the behavior
 difference rather than automatically replacing the expected result.
+
+The #88 historical comparison also uses `baseline_sources.term` (SHA-256 of all
+25 original production/header/test sources) and `ownership.term` (all 257 original
+test functions/generators/cases, with explicit multiple owners for split contracts).
+These are source/inventory manifests, not replacements for the frozen outputs or
+new private-key fixtures. Run `scripts/prepare_xml_baseline.sh`, then
+`rebar3 ct --suite test/signerl_xmlan_equivalence_SUITE`; see the
+[reproducible report](../../../docs/xmlan_equivalence_report.md).

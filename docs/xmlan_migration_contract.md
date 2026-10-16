@@ -219,4 +219,6 @@ identity predicates and immediate-child enveloped-signature removal stay local.
 Signerl starts xmlan, which starts xmerl; Signerl has no direct xmerl calls or
 application requirement. Pure generic test ownership moved in #85/#86; Signerl
 retains the dependency-backed protocol/API/consumer checks in `test/TESTS.md`.
-The broader #88 equivalence sweep and #89 final audit remain separate tasks.
+The [#88 equivalence/security report](xmlan_equivalence_report.md) documents the
+same-key comparison, public security canaries, and complete executable baseline
+test map. The final #89 ownership/consumer audit remains separate.
