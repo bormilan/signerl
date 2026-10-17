@@ -5,7 +5,7 @@ Signerl now owns signature logic and consumes generic XML functionality from
 lockfile both pin the immutable Git revision
 [`1fe39f6d414217584f514e70e43b8e7b4171f1ef`](https://github.com/bormilan/xmlan/tree/1fe39f6d414217584f514e70e43b8e7b4171f1ef)
 over HTTPS. The application version is `0.1.0`; the validated Git revision is the
-consumer's identity. Hex publication or a new release is not required.
+dependency's identity. Hex publication or a new release is not required.
 
 The acceptance baseline is Signerl
 [`5927e41bab8674b875c51df1a1ec956d42676992`](https://github.com/bormilan/signerl/tree/5927e41bab8674b875c51df1a1ec956d42676992).
@@ -47,48 +47,24 @@ and CI run without Signerl. No private xmlan implementation access is needed.
 These seam checks complement the complete source review; they are not a claim to
 classify arbitrary future algorithms automatically.
 
-## Clean external consumer
+## Regression validation
 
-From a checkout with the pinned OTP/rebar3 toolchain, Bash and HTTPS Git access:
+The ordinary Signerl suites exercise the actual pinned xmlan dependency. All 71
+public API cases remain, covering signing/verification arities, binary/file and
+certificate inputs, RSA/ECDSA, reconstruction, tampering and wrong-key rejection.
+The equivalence suite compares historical and extracted behavior with identical
+keys, certificates, inputs and signing time, including exact RSA output bytes.
 
-```sh
-scripts/check_external_consumer.sh <published-Signerl-full-SHA> <new-directory>
-```
+`signerl_xmlan_contract_SUITE` checks frozen parsed/exported/canonical bytes,
+frozen RSA verification and deterministic fresh signing directly in Common Test.
+It constructs values through the public compatibility aliases and resolves the
+forwarded include. A separate fresh VM checks transitive application startup.
+The ownership suite requires all six aliases to remain transparent and exported.
+Generated signing keys stay in memory; the original golden files are unchanged.
 
-The directory must not exist. The script creates an ordinary rebar3 application
-with a single HTTPS/Git Signerl dependency at the supplied full SHA. xmlan is
-resolved transitively through Signerl's committed configuration/lockfile. It
-clears inherited Erlang paths/flags and rebar overrides, uses empty global
-configuration and its own cache, and copies only the two public consumer test
-modules into its own `src/`. It uses no local checkout dependency, source link,
-patch, test-helper code path, or private library function.
-
-`rebar3 compile`, actual runtime assertions, and the consumer's own
-`rebar3 dialyzer` must pass. The consumer directly uses Signerl/xmlan/public_key,
-so its application metadata declares those runtime applications; its dependency
-configuration still names only Signerl. Fetched Git HEADs, HTTPS remotes, both
-lock levels, and unchanged dependency sources/configuration are checked.
-Normal generated `ebin/*.beam` and `ebin/*.app` output is allowed; tracked
-changes and unexpected untracked source files fail. Host-wide Git ignore rules
-cannot hide files from this check. Signerl's public
-headers/types are resolved from the fetched package.
-
-The consumer exercises `sign/3`, `sign/4`, `sign/5`, and `verify/3` with binary/file
-XML, fresh in-memory RSA keys and a matching certificate. It verifies valid and
-reconstructed documents before requiring tampering and wrong-key rejection. It
-also runs the original frozen consumer: every compatibility export, six public
-transparent types, the forwarding include, exact parsed/exported/canonical bytes,
-frozen signature verification, and fixed-time fresh signing. No private key is
-written or published. Independent fixtures and ECDSA remain in the full native/
-CI equivalence suite. CI runs the clean external consumer after tall on every
-OTP 26/27/28 Ubuntu/Windows job using the actual published PR head.
-
-Native clean-fetch validation first used merged Signerl
-`cf4fd4f80822d30e7c1154e43b73941d7ecd7e55`. Production/configuration are unchanged
-by #89. The PR records the repeat against its exact published head and all six
-CI consumer results. A separate opaque-only compatibility copy makes the same
-external Dialyzer consumer fail with actual opacity findings; the positive fetch
-remains unmodified except for ordinary compiler output.
+At the user's request, the separate external test application, standalone test
+modules, installation/type-analysis scripts and associated CI step are removed.
+Validation uses the normal library test suites and quality gates.
 
 ## Test ownership and final gates
 
@@ -103,11 +79,11 @@ and [xmlan's tests](https://github.com/bormilan/xmlan/blob/1fe39f6d414217584f514
   native tall and all six [final CI jobs](https://github.com/bormilan/xmlan/actions/runs/39013046603)
   pass, including xmllint. The Signerl pin equals that tested revision exactly.
 - Four temporary ownership mutations fail the new gates: a hidden helper, altered
-  delegate arguments, direct xmerl import, and private dependency call. The opaque
-  control fails external Dialyzer. All are restored/isolated before final gates.
-- All six latest-head Signerl jobs must pass tall **and** the clean consumer,
-  without skipped required checks. Exact-head job logs and consumer/type results
-  are recorded in the PR and persistent implementation recovery.
+  delegate arguments, direct xmerl import, and private dependency call. All are
+  restored before final gates.
+- All six latest-head Signerl jobs must pass tall without skipped required
+  checks. Exact-head results are recorded in the PR and persistent implementation
+  recovery.
 
 No coverage exclusions, weakened assertions, skipped required checks, duplicate
 engines, signature-profile/algorithm/certificate/failure-policy redesign, or new

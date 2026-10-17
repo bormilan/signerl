@@ -12,5 +12,3 @@ test/examples/xmlan_migration/SHA256SUMS text eol=lf
 
 # The portable baseline preparation script is also executed by Git Bash.
 scripts/prepare_xml_baseline.sh text eol=lf
-scripts/check_external_consumer.sh text eol=lf
-scripts/check_dependency_tree.sh text eol=lf

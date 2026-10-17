@@ -13,10 +13,10 @@ Captured on 14 October 2026 from unchanged Signerl `dev` commit
 - `signed-rsa.xml`: exact Signerl RSA-SHA256 output for `input.xml`, a generated test
   key, no certificate (`undefined`), and `2026-10-13T12:34:56Z`.
 - `rsa-public.pem`: the public key for verifying the frozen signature. Its
-  private key is absent from the repository. The consumer generates a fresh RSA
-  key in memory, verifies the new signature, proves fixed-input determinism, and
+  private key is absent from the repository. The Common Test suite generates a
+  fresh RSA key in memory, verifies the new signature, proves fixed-input determinism, and
   compares every output byte except its necessarily different SignatureValue
-  against the frozen result. No generated key is persisted by the consumer.
+  against the frozen result. No generated key is persisted by the tests.
 - `SHA256SUMS`: the original artifact hashes. Golden bytes are read as files;
   the tests do not regenerate them from the implementation being tested.
 
@@ -26,8 +26,6 @@ this regression. Certificate and ECDSA behavior remain covered by the existing
 API tests; ECDSA output is verified rather than compared byte-for-byte.
 
 Run the probe with `rebar3 ct --suite test/signerl_xmlan_contract_SUITE`.
-The standalone consumer commands are in
-[the migration contract](../../../docs/xmlan_migration_contract.md).
 Changing a frozen artifact during extraction requires investigating the behavior
 difference rather than automatically replacing the expected result.
 
@@ -40,5 +38,5 @@ new private-key fixtures. Run `scripts/prepare_xml_baseline.sh`, then
 [reproducible report](../../../docs/xmlan_equivalence_report.md).
 
 The [final migration acceptance report](../../../docs/xmlan_migration_acceptance.md)
-records source/compiled ownership and clean HTTPS consumers of the pinned library.
+records source/compiled ownership and regression results for the pinned library.
 The original frozen bytes and hashes remain unchanged through the final audit.

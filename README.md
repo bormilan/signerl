@@ -19,8 +19,8 @@ Generic XML parsing, serialization, namespaces, and canonicalization are provide
 by [xmlan](https://github.com/bormilan/xmlan), pinned to validated commit
 `1fe39f6d414217584f514e70e43b8e7b4171f1ef` in
 [rebar.config](rebar.config) and [rebar.lock](rebar.lock). Builds fetch that exact
-Git revision; no sibling checkout or path override is needed. Add `signerl` to a
-consumer application's runtime dependencies. `application:ensure_all_started(signerl)`
+Git revision; no sibling checkout or path override is needed. Add `signerl` to
+your application's runtime dependencies. `application:ensure_all_started(signerl)`
 starts xmlan and its OTP xmerl dependency transitively.
 
 The existing generic `signerl_xml` exports and `signerl_c14n:canonicalize/1,2`
@@ -345,11 +345,9 @@ Generic XML code and its pure tests now live in xmlan. The dependency integratio
 preserves Signerl's public APIs, compatibility exports/types, and existing XML
 profile. The [migration contract](docs/xmlan_migration_contract.md) records the
 ownership boundary and frozen baseline; Signerl retains real dependency-backed
-signature, tamper, independent-fixture, consumer, and runtime-startup checks.
+signature, tamper, independent-fixture, compatibility, and runtime-startup checks.
 The [equivalence/security report](docs/xmlan_equivalence_report.md) records the
 same-key historical comparison and complete baseline test ownership. Run
 `scripts/prepare_xml_baseline.sh` before Common Test or tall to prepare its pinned
-test oracle. The [final acceptance report](docs/xmlan_migration_acceptance.md) records source/
-compiled ownership, clean HTTPS consumers, and the merge-gated milestone closure.
-Run `scripts/check_external_consumer.sh <published-Signerl-full-SHA> <new-directory>`
-to reproduce public API/type compatibility without local dependency overrides.
+test oracle. The [final acceptance report](docs/xmlan_migration_acceptance.md) records
+source/compiled ownership, regression results, and the merge-gated milestone closure.

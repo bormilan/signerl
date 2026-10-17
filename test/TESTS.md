@@ -1,7 +1,7 @@
 # Test responsibilities
 
 Use EUnit for Signerl protocol/module contracts and Common Test for actual
-signing/verification, file workflows, compatibility APIs, and runtime consumers.
+signing/verification, file workflows, compatibility APIs, and application startup.
 Generic XML algorithms and their pure tests are owned by
 [xmlan at the pinned revision](https://github.com/bormilan/xmlan/tree/1fe39f6d414217584f514e70e43b8e7b4171f1ef).
 Tests here execute the real Git dependency, with no path override or local copy.
@@ -20,12 +20,10 @@ Tests here execute the real Git dependency, with no path override or local copy.
 | `signerl_cert_test.erl` | 1 | Exact issuer/serial DER against OTP ASN.1. |
 | `signerl_cert_helpers_test.erl` | 6 | Application fixture paths and missing/malformed PEM failures. |
 | `signerl_api_SUITE.erl` | 71 | Public binary/file/key workflows, RSA/ECDSA certificates, fixed time, encoding/content/DTD/namespace boundaries, tampering, and independent signatures. |
-| `signerl_xmlan_contract_SUITE.erl` | 4 | Frozen pre-extraction XML/RSA contracts, invalid-mode error, real compatibility file output, and fresh-VM transitive startup/consumer. |
+| `signerl_xmlan_contract_SUITE.erl` | 4 | Frozen pre-extraction XML/RSA contracts, invalid-mode error, real compatibility file output, and fresh-VM transitive startup. |
 | `signerl_xmlan_equivalence_SUITE.erl` | 8 | Hash-checked historical comparison, complete baseline ownership map, same-key RSA bytes, EC/independent cross-verification, public errors, and file/HTTP canaries. |
 | `signerl_xmlan_ownership_SUITE.erl` | 2 | Direct delegate/type/header ownership, immutable config/lock, compiled public dependency calls, no xmerl/reverse import. |
-| `signerl_external_consumer.erl` | Consumer support | All public signing arities, binary/file/certificate workflows, valid reconstruction, tampering/wrong-key rejection, and clean dependency/lock checks outside the test profile. |
 | `signerl_xml_SUITE.erl` | 1 | Zero persistent atom growth through the pinned parser/exporter/both canonicalizers and actual signing/verification. |
-| `xmlan_contract_consumer.erl` | Consumer support | All legacy generic exports, signature operations, five transparent XML aliases, canonical mode alias, and forwarded include path. |
 
 Total: **150 EUnit + 86 Common Test = 236 cases**. There are no skipped required
 checks. The original pure parser/export/namespace and canonicalization cases,
@@ -41,19 +39,18 @@ The controlled-time cases preserve deterministic RSA bytes and Gregorian UTC
 validation. No profile, algorithm, certificate, or failure-policy redesign is
 part of this extraction.
 
-The compatibility consumer reads original parsed/exported/canonical/signed bytes
-from committed files, verifies the frozen signature, and signs twice with a fresh
+The compatibility Common Test suite reads original parsed/exported/canonical/
+signed bytes from committed files, verifies the frozen signature, and signs twice with a fresh
 in-memory key and fixed time. It verifies both outputs and compares serialized
 bytes against the baseline except for the necessarily different SignatureValue.
 A changed golden must fail its real assertion. Private generated keys are never
-published or persisted by the consumer. The five XML type aliases and mode alias
-are constructed/pattern-matched by an external Dialyzer consumer; the legacy XML
-header must resolve dependency-owned macros.
+published or persisted by the tests. The suite constructs and pattern-matches
+values using the five XML aliases and mode alias; the legacy XML header resolves
+dependency-owned macros. The ownership suite requires transparent exported aliases.
 
 The fresh-VM application contract requires Signerl to depend on xmlan directly,
-xmerl to start transitively, and the frozen consumer to work using only installed
-application paths. The separate warmed atom probe exercises actual dependency
-parse/export/C14N and sign/verify with two disjoint batches of 25 fresh name sets;
+xmerl to start transitively using only installed application paths. The separate
+warmed atom probe exercises actual dependency parse/export/C14N and sign/verify with two disjoint batches of 25 fresh name sets;
 each must add zero permanent atoms, including malformed input.
 
 ## Run the tests
@@ -235,32 +232,19 @@ bidirectional Python/Java interoperability CI remains post-1.0 work in #40.
 
 The [xmlan migration contract](../docs/xmlan_migration_contract.md) maps every
 XML export/helper, caller, and test family to its future repository owner.
-`signerl_xmlan_contract_SUITE` runs the standalone `xmlan_contract_consumer`
-against the [frozen corpus](examples/xmlan_migration/README.md), captured before
-extraction. Expected parsed values, exported/canonical bytes, and fixed-time RSA
+`signerl_xmlan_contract_SUITE` checks the
+[frozen corpus](examples/xmlan_migration/README.md), captured before extraction. Expected parsed values, exported/canonical bytes, and fixed-time RSA
 output are read from committed files. Only the verification public key is
 committed; fresh signing keys stay in memory.
 Tests do not regenerate their oracle; keep the independent signatures and
-xmlan's xmllint checks as complementary evidence. External compile/Dialyzer and
-changed-golden failure probes are documented in the migration contract/log.
+xmlan's xmllint checks as complementary evidence. A changed golden must fail
+the existing regression assertion.
 
-## Final ownership and external acceptance
+## Final ownership audit
 
 `rebar3 ct --suite test/signerl_xmlan_ownership_SUITE` checks compatibility source,
 transparent exported types/header, immutable config/lock and compiled public
 imports. This is part of tall. The complete source/AST review and exhaustive moved
 test map are in the [final acceptance report](../docs/xmlan_migration_acceptance.md).
 
-Run `scripts/check_external_consumer.sh <published-Signerl-full-SHA> <new-directory>`
-for a clean HTTPS Git fetch, runtime public/compatibility assertions and external
-Dialyzer. It clears inherited overrides and uses an empty global configuration
-and separate cache. `REBAR3=/absolute/path/to/rebar3` may select the pinned tool.
-The directory must not exist; no existing work is removed. No private keys are
-written. The consumer needs no generated repository certificates or baseline
-checkout. All six CI jobs run it at their actual PR head after tall; both steps
-are required and no test/check may skip.
-
-The external source audit permits normal untracked `ebin/*.beam`/`ebin/*.app`
-compiler output. `scripts/check_dependency_tree.sh` rejects all tracked changes
-and unexpected untracked files, with host-wide Git excludes disabled. It does
-not patch the fetched repositories' ignore files or change the xmlan pin.
+All six CI jobs run the ordinary `rebar3 tall` gate.

@@ -66,8 +66,8 @@ are trees, character lists, or binaries. Parsing produces character-list values;
 caller-built trees preserve their representations until serialization. The
 unexported recursive `simplified_xml_item/0` moves with the tree type. Expanded
 names are `{BinaryURI | undefined, BinaryLocal}` and context maps have binary
-prefixes/URIs. Preserve tuple construction, pattern matching, and external
-Dialyzer compatibility through remote transparent aliases.
+prefixes/URIs. Preserve tuple construction, pattern matching, and transparent
+remote aliases checked by the ownership suite.
 
 Move all generic constants to `xmlan/include/xmlan.hrl`. If consumers include
 `signerl_xml.hrl`, preserve that path with a direct `include_lib` forwarding to
@@ -111,7 +111,7 @@ with xmlan after all direct calls move.
 | `signerl_signed_properties` | Expanded projection and attribute lookup use xmlan. | Property identities/cardinalities, dates, certificate metadata and semantic validation. |
 | `signerl_xades_xml` | Generic path/context lookup delegates to xmlan. | XAdES paths, signature-root requirement and `missing_element` mapping. |
 | Compatibility modules | Generic bodies become one direct call or transparent alias. | Signature recognition and enveloped signature removal only. |
-| Test helpers/consumers | Generic test calls switch to xmlan in moved tests; retained compatibility probes continue using existing Signerl exports. | Signature builders/mutations, certificate fixtures and public API controls. |
+| Test helpers | Generic test calls switch to xmlan in moved tests; retained compatibility probes continue using existing Signerl exports. | Signature builders/mutations, certificate fixtures and public API controls. |
 
 ## Baseline contract and test ownership matrix
 
@@ -121,7 +121,7 @@ not a completion condition. Keep pure XML and protocol tests separate.
 
 | Contract | Existing executable evidence | Future owner/evidence |
 | --- | --- | --- |
-| Transparent values, UTF-8 parsing/export, prologs, exact escaping/order | `signerl_xml_test`: caller construction, value representations, UTF-8/prolog/export cases; new frozen consumer corpus. | xmlan pure contracts; Signerl type/delegate consumer and public API integration. |
+| Transparent values, UTF-8 parsing/export, prologs, exact escaping/order | `signerl_xml_test`: caller construction, value representations, UTF-8/prolog/export cases; new frozen regression corpus. | xmlan pure contracts; Signerl type/delegate checks and public API integration. |
 | Whitespace/mixed content/CDATA, XML line endings and references, 10,000-level export | `signerl_xml_test`: content/order/deep-tree cases; `signerl_api_SUITE`: content-preservation mutations. | xmlan parsing/export; retain Signerl actual-signature preservation/tamper checks. No new arbitrary-depth canonicalization guarantee. |
 | Full-document consumption, encoding/BOM and DTD/PI restrictions | `signerl_xml_test`; XML CT file entry points; API suffix/prolog/encoding/DTD cases. | xmlan generic parser/file cases; Signerl sign/verify error boundaries. Parsing accepts UTF-8 BOM where tested; prolog extraction/signing still reject it. |
 | QName/declaration/expanded-attribute constraints and literal lexical guard | `signerl_xml_test`: namespace constraint, Unicode, duplicate, and literal-text matrices. | xmlan; preserve absolute URI policy (except empty default undeclaration) and no rewriting lexical prefixes. |
@@ -133,12 +133,12 @@ not a completion condition. Keep pure XML and protocol tests separate.
 | Fixed-time signing, key/certificate/file inputs, errors | `signerl_api_SUITE`, `signerl_signature_test`, `signerl_utils_test`, certificate helpers; new frozen RSA verification/fresh-key output probe. | Signerl. RSA bytes remain identical for fixed inputs/key/cert/time; ECDSA is checked by verification. |
 | Independent signatures, reconstruction, digests, tampering and wrong keys | `examples/independent/`, API interop/tamper groups, `signerl_verify_test`. | Signerl; use actual serialized XML and pinned xmlan, never substitute precomputed canonical data. |
 | XAdES/certificate/date/reference/algorithm behavior | `signerl_signed_properties_test`, `signerl_verify_test`, `signerl_xades_xml_test`, cert/utils/signature tests. | Signerl without profile or failure-policy redesign. |
-| Frozen parsed/export/canonical/signed output and lower-level caller contracts | `signerl_xmlan_contract_SUITE`, `xmlan_contract_consumer`, `examples/xmlan_migration/`. | Retain a Signerl dependency-backed consumer; move generic fixture checks to xmlan as appropriate without regenerating the baseline. |
+| Frozen parsed/export/canonical/signed output and lower-level caller contracts | `signerl_xmlan_contract_SUITE`, `examples/xmlan_migration/`. | Retain Signerl dependency-backed regression assertions; move generic fixture checks to xmlan as appropriate without regenerating the baseline. |
 
 The new fixture [provenance](../test/examples/xmlan_migration/README.md) records
 exact outputs captured before extraction and original hashes. Only its public
-verification key is committed. The consumer verifies the frozen signature, signs
-with a fresh in-memory key, checks deterministic repeated output and verification,
+verification key is committed. The Common Test suite verifies the frozen
+signature, signs with a fresh in-memory key, checks deterministic repeated output and verification,
 and compares all serialized bytes except SignatureValue against the baseline.
 For #88, compare the old baseline and extracted implementation using the same
 freshly generated key/certificate/time in one validation run to require exact RSA
@@ -146,27 +146,20 @@ signature bytes without publishing or persisting a private key. This baseline
 probe complements existing independent conformance/interoperability checks.
 Do not update a golden to hide a migration difference.
 
-## Executable consumer probes
+## Executable regression checks
 
-The consumer only uses exported functions/types and ordinary OTP services; it
-can run outside rebar's test VM and without test_helpers or generated certificates.
-After `rebar3 compile`, from the checkout root (POSIX shell):
+Run the frozen public/compatibility contracts in the normal Common Test suite:
 
 ```sh
-consumer_probe_dir="$(mktemp -d)"
-erlc -pa _build/default/lib/signerl/ebin -pa _build/default/lib/xmlan/ebin \
-  +debug_info -o "$consumer_probe_dir" test/xmlan_contract_consumer.erl
-erl -noshell -enable-feature maybe_expr -pa "$consumer_probe_dir" \
-  _build/default/lib/signerl/ebin _build/default/lib/xmlan/ebin \
-  -eval 'ok = xmlan_contract_consumer:run("test/examples/xmlan_migration"), halt().'
+rebar3 ct --suite test/signerl_xmlan_contract_SUITE
 ```
 
-`rebar3 ct --suite test/signerl_xmlan_contract_SUITE` runs the same assertions in
-CI. External Dialyzer checking of the compiled consumer against production BEAMs
-must remain clean, including caller-built tuples; an opaque replacement must
-fail the negative type probe. The integration issue repeats this check against
-Signerl's remote xmlan type aliases. A modified exported-byte golden must make
-the consumer fail; the check cannot silently recapture expected output.
+The suite uses exported functions/types and ordinary OTP services. It reads the
+original fixture files rather than regenerating expected bytes. A modified
+exported-byte golden must fail the corresponding assertion. The ownership suite
+checks that the remote XML type aliases remain exported and transparent.
+Application startup is checked in a fresh VM with installed application paths.
+There is no separate test application or external dependency-installation gate.
 
 ## Immutable dependency and delivery sequence
 
@@ -188,7 +181,8 @@ the consumer fail; the check cannot silently recapture expected output.
    callers/app startup/types/docs, and validates against the actual dependency.
    Only direct compatibility delegates/aliases and protocol operations remain.
 6. #88 compares the frozen contracts and full security/API corpus; #89 audits
-   source/compiled calls, exact dependency revisions and an external clean consumer.
+   source/compiled calls, exact dependency revisions and existing regression
+   results.
 
 Each implementation issue has its own focused PR and mandatory local gates;
 no PR is automatically merged. Both repositories require native `rebar3 tall`,
@@ -199,8 +193,8 @@ its default branch is `main`; verify/close completed issues after confirmed merg
 
 The milestone is complete only when Signerl production sources contain no generic
 parser, serializer, namespace validator/resolver, canonicalizer, or fallback copy,
-and clean consumers exhibit the same supported behavior. Compatibility delegates
-must call xmlan directly; they cannot hide a second maintained implementation.
+and Signerl's regression suite confirms the same supported behavior.
+Compatibility delegates must call xmlan directly; they cannot hide a second maintained implementation.
 Broader XML standards support and #64/#58/#59 profile/API/failure redesign remain
 separate. Any intentional API removal requires separately approved scope.
 
@@ -218,8 +212,8 @@ and `signerl_xml.hrl` only forwards to the dependency header. The signature
 identity predicates and immediate-child enveloped-signature removal stay local.
 Signerl starts xmlan, which starts xmerl; Signerl has no direct xmerl calls or
 application requirement. Pure generic test ownership moved in #85/#86; Signerl
-retains the dependency-backed protocol/API/consumer checks in `test/TESTS.md`.
+retains the dependency-backed protocol/API/compatibility checks in `test/TESTS.md`.
 The [#88 equivalence/security report](xmlan_equivalence_report.md) documents the
 same-key comparison, public security canaries, and complete executable baseline
 test map. The [final #89 acceptance report](xmlan_migration_acceptance.md) records source/compiled
-ownership, clean HTTPS consumers and post-merge milestone closure.
+ownership, regression results and post-merge milestone closure.

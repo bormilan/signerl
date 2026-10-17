@@ -110,4 +110,4 @@ Native OTP 28.4.2 / rebar3 3.25.1:
   comparison suite in tall. Required tests/checks must pass without skips.
 
 The [final #89 acceptance report](xmlan_migration_acceptance.md) supplies the
-source/compiled-call and clean-consumer ownership audit and closure procedure.
+source/compiled-call ownership audit and closure procedure.
