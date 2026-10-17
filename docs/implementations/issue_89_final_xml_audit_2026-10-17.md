@@ -69,6 +69,14 @@ change. No additional XML/profile/algorithm/failure-policy work is included.
   Signerl jobs to pass tall plus the consumer. Verify saved PR metadata after
   creation/update. Do not close the milestone before this PR merges.
 
+## CI follow-up
+
+The initial matrix passed tall but failed a post-runtime consumer metadata guard
+without identifying the assertion. Consumer checks now report the exact failed
+revision/origin/working-tree check, without printing credentials or private keys.
+The matrix keeps all six jobs running so a platform failure cannot cancel the
+remaining required evidence. Native gates are rerun before publishing the change.
+
 ## Recovery
 
 Persistent attached source worktree:

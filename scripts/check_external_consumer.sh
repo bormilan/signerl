@@ -27,11 +27,12 @@ cd "$consumer_dir"
 "${REBAR3:-rebar3}" compile
 erl -noshell -enable-feature maybe_expr -pa _build/default/lib/*/ebin \
   -eval 'ok = signerl_external_consumer:run(filename:join([code:lib_dir(signerl), "test", "examples", "xmlan_migration"]), "."), halt().'
-[[ "$(git -C _build/default/lib/signerl rev-parse HEAD)" == "$revision" ]]
-[[ "$(git -C _build/default/lib/xmlan rev-parse HEAD)" == "$(cat xmlan.expected-ref)" ]]
-[[ "$(git -C _build/default/lib/signerl remote get-url origin)" == 'https://github.com/bormilan/signerl.git' ]]
-[[ "$(git -C _build/default/lib/xmlan remote get-url origin)" == 'https://github.com/bormilan/xmlan.git' ]]
-[[ -z "$(git -C _build/default/lib/signerl status --porcelain)" ]]
-[[ -z "$(git -C _build/default/lib/xmlan status --porcelain)" ]]
+echo 'Consumer runtime assertions passed; checking fetched revisions and working trees.'
+[[ "$(git -C _build/default/lib/signerl rev-parse HEAD)" == "$revision" ]] || { echo 'Signerl fetched HEAD mismatch' >&2; exit 1; }
+[[ "$(git -C _build/default/lib/xmlan rev-parse HEAD)" == "$(cat xmlan.expected-ref)" ]] || { echo 'xmlan fetched HEAD mismatch' >&2; exit 1; }
+[[ "$(git -C _build/default/lib/signerl remote get-url origin)" == 'https://github.com/bormilan/signerl.git' ]] || { echo 'Signerl HTTPS origin mismatch' >&2; exit 1; }
+[[ "$(git -C _build/default/lib/xmlan remote get-url origin)" == 'https://github.com/bormilan/xmlan.git' ]] || { echo 'xmlan HTTPS origin mismatch' >&2; exit 1; }
+[[ -z "$(git -C _build/default/lib/signerl status --porcelain)" ]] || { echo 'Signerl dependency working tree changed:' >&2; git -C _build/default/lib/signerl status --short >&2; exit 1; }
+[[ -z "$(git -C _build/default/lib/xmlan status --porcelain)" ]] || { echo 'xmlan dependency working tree changed:' >&2; git -C _build/default/lib/xmlan status --short >&2; exit 1; }
 "${REBAR3:-rebar3}" dialyzer
 printf 'Clean HTTPS consumer passed: Signerl %s; xmlan %s\n' "$revision" "$(cat xmlan.expected-ref)"

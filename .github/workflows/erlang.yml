@@ -12,6 +12,7 @@ jobs:
     name: OTP ${{matrix.otp_vsn}} on ${{matrix.os}}
     runs-on: ${{matrix.os}}
     strategy:
+      fail-fast: false
       matrix:
         otp_vsn: ['26', '27', '28']
         os: [ubuntu-24.04, windows-2022]
