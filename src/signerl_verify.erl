@@ -10,7 +10,7 @@
 extract_signature_data({Tag, Attrs, Content}) ->
     ParentNs = xmlan:namespace_context(Attrs, #{}),
     {SignatureElements, UnsignedContent} = lists:partition(
-        fun(Element) -> signerl_xml:is_signature_element(Element, ParentNs) end, Content
+        fun(Element) -> signerl_dsig_utils:is_signature_element(Element, ParentNs) end, Content
     ),
     case SignatureElements of
         [SignatureElement] ->
@@ -51,7 +51,7 @@ verify_reference_digests(
         {ok, SignedPropertiesElement} ?=
             signerl_xades_xml:find_signed_properties_element(SignatureElement),
         DocumentPayload = xmlan_c14n:canonicalize(
-            signerl_c14n:remove_signature_elements(UnsignedMessage)
+            signerl_dsig_utils:remove_signature_elements(UnsignedMessage)
         ),
         SignedPropertiesPayload = xmlan_c14n:canonicalize(SignedPropertiesElement),
         DocumentDigest = crypto:hash(HashAlgorithm, DocumentPayload),

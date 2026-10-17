@@ -1,75 +1,62 @@
-# Final xmlan ownership audit — #89
+# Finish XML extraction and remove generic XML maintenance — #89
 
 Tracking: https://github.com/bormilan/signerl/issues/89
 
-## Changes and acceptance reasoning
+## Scope and implementation
 
-`test/signerl_xmlan_ownership_SUITE.erl` adds two executable ownership checks to
-native tall/CI. They require the compatibility modules to contain only 18 direct
-argument-preserving delegates plus the three documented signature operations;
-all six aliases remain exported and transparent. The legacy header only forwards
-to the dependency. Compiled imports enforce no direct xmerl/dynamic apply, local
-signature-only compatibility calls and public xmlan exports. Application/config/
-lock checks enforce an immutable matching HTTPS pin and no reverse dependency.
-`test/xmlan_audit.hrl` names the static public API/type inventories.
+The user clarified that Signerl must not test or maintain xmlan's generic XML
+behavior. This supersedes the earlier compatibility/consumer/ownership-test scope.
 
-The acceptance report, README, migration contract, fixture provenance and test
-responsibilities document source/test ownership, the exact revision, public
-usage, validation and post-merge closure. Production sources, public behavior,
-original goldens, dependency pin and lockfile are unchanged.
+- Removed `src/signerl_xml.erl`, `src/signerl_c14n.erl` and the forwarded
+  `include/signerl_xml.hrl`, including all generic delegates and type aliases.
+- Moved only namespace-aware signature recognition and enveloped-signature
+  removal into the existing `signerl_dsig_utils` module. Updated verifier/XAdES
+  callers and moved their ten protocol-only EUnit cases to its test module.
+- Deleted the XML contract, equivalence, ownership and atom-growth suites,
+  `xmlan_audit.hrl`, migration golden corpus/manifests, historical baseline script
+  and CI preparation step. No assertions from those suites are relocated.
+- Removed the canonicalizer-idempotence case and direct parse-file assertions
+  from the public API suite. The remaining cases exercise Signerl behavior.
+- Moved UTF-8/content inputs to `test/examples/payloads`; they support actual
+  signing/verification/tampering rather than standalone XML tests.
+- Removed obsolete generic XML contract/equivalence guides, lint exceptions,
+  fixture attributes and the parser-maintenance skill. Removed obsolete XML-only
+  implementation reports and the parser task note; Git history preserves the prior
+  work. Updated README, test map, acceptance report and issue/milestone/PR scope.
 
-## Removal of standalone test application
+Generic callers now use xmlan's API/types directly. Removing the former generic
+compatibility APIs/header is an intentional scope change requested by the user.
+Public signing/verification interfaces, algorithms, certificates, supported
+signature behavior and the immutable xmlan dependency pin are unchanged.
 
-The user requested complete removal of the external integration test. Removed
-`test/signerl_external_consumer.erl`, `test/xmlan_contract_consumer.erl`,
-`scripts/check_external_consumer.sh` and `scripts/check_dependency_tree.sh`, the
-extra CI step and its matrix-strategy change, script attributes and obsolete
-lint exemptions. No test application
-is generated, no fresh Signerl installation is performed by CI, and no separate
-external Dialyzer check remains.
+## Validation
 
-The existing frozen regression assertions now run directly in
-`signerl_xmlan_contract_SUITE`. Its startup case checks only installed application
-startup in a fresh VM, without loading a standalone test module. The normal
-public API, equivalence, compatibility and ownership suites retain their coverage.
-Documentation and issue/PR scope are updated to remove the external gate.
+Before implementation, the ten signature-only tests failed with `undef` against
+their new utility-module location. The removal probe also failed on the generic
+modules/header/tests/fixtures and baseline CI wiring, proving they were present.
 
-## Investigation and validation
+After implementation, all ten signature-only unit cases pass. The removal probe
+passes, payload files are byte-identical after their directory move, and current
+document links are valid. Review confirms eight signature production modules,
+one signature header, no direct xmerl use and no calls to removed modules.
 
-- Confirmed PR #92 merged at `cf4fd4f80822d30e7c1154e43b73941d7ecd7e55` and
-  issue #88 actually closed. All #83–#88 issues are closed; only #89 remains.
-  The exact validated xmlan pin is `1fe39f6d414217584f514e70e43b8e7b4171f1ef`.
-- Four ownership negative probes reject a hidden helper, swapped delegate
-  arguments, direct xmerl import and private xmlan import; all restored.
-- Preprocessed AST audit confirms all 104 functions in the other eight Signerl
-  modules match baseline after retargeting public XML calls. All 41 generic XML
-  and 30 generic C14N functions are preserved in xmlan.
-- The executable absence/reference probe failed before removal and passes after
-  removal: all four files and their active CI/configuration/documentation wiring
-  are absent; the normal CI tall gate remains. Updated document links are valid.
-- Targeted Common Test: all six contract/ownership cases pass. Moving the frozen
-  assertions into one suite exposed duplicated fixture-loading code in lint; a
-  shared assertion helper resolves it without discarding assertions. The affected
-  suites pass again after that change.
-- Native complete tests, flint, Dialyzer, final tall and explicit test-profile
-  cover pass: 150 EUnit + 86 CT = 236 cases, all ten production modules and total
-  100% coverage, no skipped tests or required checks.
-- All six latest-head Signerl CI jobs must pass tall before merge; their updated
-  results are recorded in PR #93 after publishing this removal.
-- Exact-pin xmlan is unchanged: native tall and all six jobs passed with 259
-  tests, 100% coverage and no required skips (run `39013046603`).
+Native clean/test/cover/flint/Dialyzer/final tall all pass: **150 EUnit + 70 CT =
+220 cases, 100% coverage of every production module and total, no skips**. The
+removed test-profile cache was reset so deleted suites cannot be loaded. No test
+of dependency internals was added to restore coverage. The final six-job CI
+result is recorded in PR #93 after publishing this revision.
 
 ## Recovery
 
-Persistent attached worktree:
+Persistent implementation worktree:
 `/Users/milanbor/.codex/worktrees/signerl-issue-56/signerl`, branch
 `codex/issue-89-final-xml-audit`.
 
 Recovery outside temporary storage:
-`/Users/milanbor/projects/signerl/.recovery/issue-89/` preserves the earlier
-commits/evidence. The `remove-consumer/` directory holds this revision's tracked
-diff, source archive and validation logs; the executable removal probe is
-`remove-consumer-probe.py` in its parent. Recovery archives exclude generated
-keys/certificates, the historical checkout and build output. The original
-checkout's user changes remain untouched. Milestone closure waits for confirmed
-merge and actual issue/check verification.
+`/Users/milanbor/projects/signerl/.recovery/issue-89/xml-cleanup/` holds tracked
+changes, untracked source, source archive, removal probe and validation logs.
+The earlier `remove-consumer/` recovery retains previous history/evidence. The
+ignored historical baseline checkout is moved into this recovery directory;
+there is no historical parser source left under Signerl's `priv/` directory.
+Original-checkout user changes remain untouched. PR #93 targets dev; issue and
+milestone closure wait for a confirmed merge and actual state verification.

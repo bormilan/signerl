@@ -23,7 +23,7 @@ find_signed_properties_element(SignatureElement) ->
     find_properties([], SignatureElement).
 
 find_properties(Tail, SignatureElement) ->
-    case signerl_xml:is_signature_element(SignatureElement) of
+    case signerl_dsig_utils:is_signature_element(SignatureElement) of
         true ->
             Path = [
                 ?DSIG_NAME(<<"Object">>),

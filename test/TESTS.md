@@ -1,65 +1,39 @@
 # Test responsibilities
 
-Use EUnit for Signerl protocol/module contracts and Common Test for actual
-signing/verification, file workflows, compatibility APIs, and application startup.
-Generic XML algorithms and their pure tests are owned by
-[xmlan at the pinned revision](https://github.com/bormilan/xmlan/tree/1fe39f6d414217584f514e70e43b8e7b4171f1ef).
-Tests here execute the real Git dependency, with no path override or local copy.
+Signerl tests its own signing, verification, XMLDSig/XAdES rules, certificate
+handling and public API errors. Generic XML parsing, serialization, namespace
+validation and canonicalization are owned and tested by
+[xmlan](https://github.com/bormilan/xmlan).
+
+Tests may use xmlan to build or inspect signed documents. They do not assert
+standalone parser/exporter/canonicalizer behavior, dependency internals, generic
+type aliases or installation contracts.
 
 ## Where to put a test
 
 | File | Cases | Responsibility |
 | --- | ---: | --- |
-| `signerl_c14n_test.erl` | 4 | Protocol-specific enveloped-signature removal, inherited identity, and lookalike preservation. |
-| `signerl_signed_properties_test.erl` | 72 | XAdES property extraction and malformed Erlang/XML value boundaries. |
-| `signerl_utils_test.erl` | 25 | UTC dates, leap-year boundaries, and fixed datetime formatting. |
-| `signerl_signature_test.erl` | 5 | RSA/ECDSA signature construction through xmlan. |
-| `signerl_verify_test.erl` | 30 | Signature extraction, references, algorithm routing, and malformed signature contracts. |
-| `signerl_xml_test.erl` | 6 | Namespace-aware signature identity, aliases/defaults/rebindings, and non-signature values. |
-| `signerl_xades_xml_test.erl` | 1 | XAdES tree lookup rejects a non-signature root. |
+| `signerl_dsig_utils_test.erl` | 10 | Signature identity, inherited namespace context, enveloped-signature removal and lookalike preservation. |
+| `signerl_signed_properties_test.erl` | 72 | XAdES property extraction and malformed signed-property values. |
+| `signerl_utils_test.erl` | 25 | UTC dates, leap-year boundaries and fixed datetime formatting. |
+| `signerl_signature_test.erl` | 5 | RSA/ECDSA signature construction. |
+| `signerl_verify_test.erl` | 30 | Signature extraction, references, algorithm routing and malformed signatures. |
+| `signerl_xades_xml_test.erl` | 1 | XAdES lookup rejects a non-signature root. |
 | `signerl_cert_test.erl` | 1 | Exact issuer/serial DER against OTP ASN.1. |
-| `signerl_cert_helpers_test.erl` | 6 | Application fixture paths and missing/malformed PEM failures. |
-| `signerl_api_SUITE.erl` | 71 | Public binary/file/key workflows, RSA/ECDSA certificates, fixed time, encoding/content/DTD/namespace boundaries, tampering, and independent signatures. |
-| `signerl_xmlan_contract_SUITE.erl` | 4 | Frozen pre-extraction XML/RSA contracts, invalid-mode error, real compatibility file output, and fresh-VM transitive startup. |
-| `signerl_xmlan_equivalence_SUITE.erl` | 8 | Hash-checked historical comparison, complete baseline ownership map, same-key RSA bytes, EC/independent cross-verification, public errors, and file/HTTP canaries. |
-| `signerl_xmlan_ownership_SUITE.erl` | 2 | Direct delegate/type/header ownership, immutable config/lock, compiled public dependency calls, no xmerl/reverse import. |
-| `signerl_xml_SUITE.erl` | 1 | Zero persistent atom growth through the pinned parser/exporter/both canonicalizers and actual signing/verification. |
+| `signerl_cert_helpers_test.erl` | 6 | Fixture paths and missing/malformed PEM failures. |
+| `signerl_api_SUITE.erl` | 70 | Public binary/file/key/certificate workflows, RSA/ECDSA, fixed time, content preservation, public input errors, tampering and independent signatures. |
 
-Total: **150 EUnit + 86 Common Test = 236 cases**. There are no skipped required
-checks. The original pure parser/export/namespace and canonicalization cases,
-file/entity canaries, deep-tree tests, and all xmllint comparisons run in xmlan.
-Its validated commit has 259 passing cases, 100% coverage, and all six OTP/OS
-jobs green. No XML contract is discarded: only test ownership changes.
-
-Signerl retains all 71 public API cases. They sign real data before tampering,
-verify frozen/independently supplied signatures, cover RSA/ECDSA and certificates,
-carry inherited namespace context into signed fragments, exercise file/key errors,
-and reject unsupported XML/prologs/encodings/entities through the dependency.
-The controlled-time cases preserve deterministic RSA bytes and Gregorian UTC
-validation. No profile, algorithm, certificate, or failure-policy redesign is
-part of this extraction.
-
-The compatibility Common Test suite reads original parsed/exported/canonical/
-signed bytes from committed files, verifies the frozen signature, and signs twice with a fresh
-in-memory key and fixed time. It verifies both outputs and compares serialized
-bytes against the baseline except for the necessarily different SignatureValue.
-A changed golden must fail its real assertion. Private generated keys are never
-published or persisted by the tests. The suite constructs and pattern-matches
-values using the five XML aliases and mode alias; the legacy XML header resolves
-dependency-owned macros. The ownership suite requires transparent exported aliases.
-
-The fresh-VM application contract requires Signerl to depend on xmlan directly,
-xmerl to start transitively using only installed application paths. The separate
-warmed atom probe exercises actual dependency parse/export/C14N and sign/verify with two disjoint batches of 25 fresh name sets;
-each must add zero permanent atoms, including malformed input.
+Total: **150 EUnit + 70 Common Test = 220 cases**. Required coverage is **100%**
+of Signerl production modules. The independent xmlsec1 signatures stay in
+`examples/independent/`; `examples/payloads/` contains inputs used for actual
+sign/verify/tamper cases.
 
 ## Run the tests
 
-Use OTP/rebar3 pinned in `.tool-versions`. Generate ignored test certificates:
+Use the OTP/rebar3 versions in `.tool-versions` and generate test certificates:
 
 ```sh
 scripts/gen_certs.sh
-scripts/prepare_xml_baseline.sh
 rebar3 eunit
 rebar3 ct
 rebar3 test
@@ -69,34 +43,19 @@ rebar3 dialyzer
 rebar3 tall
 ```
 
-`test` checks formatting, resets coverage once, combines fresh EUnit and CT data,
-and requires **100% Signerl production coverage**. xmlan owns its own complete
-coverage gate; dependency internals are not reimplemented or duplicated in this
-suite. `tall` adds lint, Xref, and Dialyzer. Run it natively before commit/push;
-all six latest-commit OTP 26/27/28 Ubuntu/Windows jobs must pass before merge.
-OpenSSL is required for generated test certificates; xmllint is required by
-xmlan's interop suite and is not needed by Signerl's ordinary suite.
-
-The historical comparison requires a one-time HTTPS/Git fetch of the exact
-baseline via the script above; subsequent runs reuse its clean ignored checkout
-in `priv/xml-baseline`. Missing/modified baseline source fails CT. All six CI jobs
-prepare it before tall. Current production uses only the pinned xmlan dependency;
-the historical oracle runs only in an isolated test VM. See the
-[equivalence/security report](../docs/xmlan_equivalence_report.md) and exhaustive
-[baseline ownership map](examples/xmlan_migration/ownership.term).
+`test` checks formatting, resets coverage, combines EUnit and Common Test data,
+and requires 100% Signerl coverage. `tall` adds lint, Xref and Dialyzer. Run it
+natively before commit/push. All six latest-head OTP 26/27/28 Ubuntu/Windows jobs
+must pass before merge. The suite needs OpenSSL for certificates and does not
+fetch or compile a historical XML implementation.
 
 Focused examples:
 
 ```sh
+rebar3 eunit --module signerl_dsig_utils_test
 rebar3 eunit --module signerl_verify_test
 rebar3 ct --suite test/signerl_api_SUITE
-rebar3 ct --suite test/signerl_xmlan_contract_SUITE
-rebar3 ct --suite test/signerl_xmlan_equivalence_SUITE
 ```
-
-Focused runs do not replace the complete combined test/coverage gate. The
-[migration contract](../docs/xmlan_migration_contract.md) maps old tests to their
-new owners; historical implementation logs describe the pre-extraction layout.
 
 ## Existing build caches after the suite moves
 
@@ -190,8 +149,8 @@ its Elvis dependency as well. Do not edit generated plugin files by hand.
 CI's build and package-cache keys include `rebar.config` and `elvis.config`, so
 this migration gets fresh caches and subsequent runs reuse the matching versions.
 
-The existing exceptions remain limited to the transparent simplified XML tree
-type and OTP ASN.1 record/field spelling in the certificate modules. Their reasons
+The remaining exceptions cover OTP ASN.1 record/field spelling in certificate
+modules and fixtures. Their reasons
 are documented beside the rules in `elvis.config`; no new rule is disabled for
 this upgrade. See the [implementation log](../docs/implementations/lint_upgrade_2026-10-05.md)
 for the clean/warm checks and lint failure probes.
@@ -222,29 +181,8 @@ for the clean/warm checks and lint failure probes.
 - `examples/independent/` contains signatures created by `xmlsec1`, alongside
   their public key and templates. See [provenance and scope](examples/independent/README.md).
   Ordinary tests read these fixtures and do not require `xmlsec1`.
-- Compatibility file output writes only to CT's temporary directory. Pure export
-  unit tests live in xmlan. No test overwrites a tracked XML fixture.
+- File workflow tests write outputs only to CT's temporary directory. No test
+  overwrites a tracked XML fixture.
 
-Production behavior is unchanged by the test cleanup. Clock behavior is #56;
+Public signing/verification behavior is unchanged. Clock behavior is #56;
 bidirectional Python/Java interoperability CI remains post-1.0 work in #40.
-
-## XML extraction baseline
-
-The [xmlan migration contract](../docs/xmlan_migration_contract.md) maps every
-XML export/helper, caller, and test family to its future repository owner.
-`signerl_xmlan_contract_SUITE` checks the
-[frozen corpus](examples/xmlan_migration/README.md), captured before extraction. Expected parsed values, exported/canonical bytes, and fixed-time RSA
-output are read from committed files. Only the verification public key is
-committed; fresh signing keys stay in memory.
-Tests do not regenerate their oracle; keep the independent signatures and
-xmlan's xmllint checks as complementary evidence. A changed golden must fail
-the existing regression assertion.
-
-## Final ownership audit
-
-`rebar3 ct --suite test/signerl_xmlan_ownership_SUITE` checks compatibility source,
-transparent exported types/header, immutable config/lock and compiled public
-imports. This is part of tall. The complete source/AST review and exhaustive moved
-test map are in the [final acceptance report](../docs/xmlan_migration_acceptance.md).
-
-All six CI jobs run the ordinary `rebar3 tall` gate.
