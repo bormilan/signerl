@@ -65,5 +65,4 @@ If a required gate is unavailable, continue independent work, record the exact b
 - Include file references for significant changes.
 
 ## Skills
-- `xml-debugger`: `.codex/skills/xml-debugger/SKILL.md`
 - `ferike`: `.codex/skills/ferike/SKILL.md`

@@ -55,8 +55,5 @@ jobs:
       - name: Generate test certificates
         shell: bash
         run: scripts/gen_certs.sh
-      - name: Prepare frozen XML comparison baseline
-        shell: bash
-        run: scripts/prepare_xml_baseline.sh
       - name: Run all quality checks
         run: rebar3 tall

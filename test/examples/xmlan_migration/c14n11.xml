@@ -1,3 +1,0 @@
-<invoice xmlns="urn:invoice" xmlns:p="urn:items" xmlns:unused="urn:unused" label="café &amp; &#x9;&quot;" xml:space="preserve">
- before <p:item p:code="東京">árvíz &amp; &#xD;&lt;tea&gt;</p:item> between <plain xmlns=""><p:item xmlns:p="urn:other">😀</p:item></plain> after
-</invoice>
