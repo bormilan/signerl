@@ -109,4 +109,5 @@ Native OTP 28.4.2 / rebar3 3.25.1:
   Signerl's PR records its own six-job latest-head result, including this complete
   comparison suite in tall. Required tests/checks must pass without skips.
 
-The final source/compiled-call and clean-consumer ownership audit remains #89.
+The [final #89 acceptance report](xmlan_migration_acceptance.md) supplies the
+source/compiled-call and clean-consumer ownership audit and closure procedure.

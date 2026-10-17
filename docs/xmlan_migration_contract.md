@@ -221,4 +221,5 @@ application requirement. Pure generic test ownership moved in #85/#86; Signerl
 retains the dependency-backed protocol/API/consumer checks in `test/TESTS.md`.
 The [#88 equivalence/security report](xmlan_equivalence_report.md) documents the
 same-key comparison, public security canaries, and complete executable baseline
-test map. The final #89 ownership/consumer audit remains separate.
+test map. The [final #89 acceptance report](xmlan_migration_acceptance.md) records source/compiled
+ownership, clean HTTPS consumers and post-merge milestone closure.

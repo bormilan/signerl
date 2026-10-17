@@ -22,10 +22,12 @@ Tests here execute the real Git dependency, with no path override or local copy.
 | `signerl_api_SUITE.erl` | 71 | Public binary/file/key workflows, RSA/ECDSA certificates, fixed time, encoding/content/DTD/namespace boundaries, tampering, and independent signatures. |
 | `signerl_xmlan_contract_SUITE.erl` | 4 | Frozen pre-extraction XML/RSA contracts, invalid-mode error, real compatibility file output, and fresh-VM transitive startup/consumer. |
 | `signerl_xmlan_equivalence_SUITE.erl` | 8 | Hash-checked historical comparison, complete baseline ownership map, same-key RSA bytes, EC/independent cross-verification, public errors, and file/HTTP canaries. |
+| `signerl_xmlan_ownership_SUITE.erl` | 2 | Direct delegate/type/header ownership, immutable config/lock, compiled public dependency calls, no xmerl/reverse import. |
+| `signerl_external_consumer.erl` | Consumer support | All public signing arities, binary/file/certificate workflows, valid reconstruction, tampering/wrong-key rejection, and clean dependency/lock checks outside the test profile. |
 | `signerl_xml_SUITE.erl` | 1 | Zero persistent atom growth through the pinned parser/exporter/both canonicalizers and actual signing/verification. |
 | `xmlan_contract_consumer.erl` | Consumer support | All legacy generic exports, signature operations, five transparent XML aliases, canonical mode alias, and forwarded include path. |
 
-Total: **150 EUnit + 84 Common Test = 234 cases**. There are no skipped required
+Total: **150 EUnit + 86 Common Test = 236 cases**. There are no skipped required
 checks. The original pure parser/export/namespace and canonicalization cases,
 file/entity canaries, deep-tree tests, and all xmllint comparisons run in xmlan.
 Its validated commit has 259 passing cases, 100% coverage, and all six OTP/OS
@@ -241,3 +243,19 @@ committed; fresh signing keys stay in memory.
 Tests do not regenerate their oracle; keep the independent signatures and
 xmlan's xmllint checks as complementary evidence. External compile/Dialyzer and
 changed-golden failure probes are documented in the migration contract/log.
+
+## Final ownership and external acceptance
+
+`rebar3 ct --suite test/signerl_xmlan_ownership_SUITE` checks compatibility source,
+transparent exported types/header, immutable config/lock and compiled public
+imports. This is part of tall. The complete source/AST review and exhaustive moved
+test map are in the [final acceptance report](../docs/xmlan_migration_acceptance.md).
+
+Run `scripts/check_external_consumer.sh <published-Signerl-full-SHA> <new-directory>`
+for a clean HTTPS Git fetch, runtime public/compatibility assertions and external
+Dialyzer. It clears inherited overrides and uses an empty global configuration
+and separate cache. `REBAR3=/absolute/path/to/rebar3` may select the pinned tool.
+The directory must not exist; no existing work is removed. No private keys are
+written. The consumer needs no generated repository certificates or baseline
+checkout. All six CI jobs run it at their actual PR head after tall; both steps
+are required and no test/check may skip.

@@ -38,3 +38,7 @@ These are source/inventory manifests, not replacements for the frozen outputs or
 new private-key fixtures. Run `scripts/prepare_xml_baseline.sh`, then
 `rebar3 ct --suite test/signerl_xmlan_equivalence_SUITE`; see the
 [reproducible report](../../../docs/xmlan_equivalence_report.md).
+
+The [final migration acceptance report](../../../docs/xmlan_migration_acceptance.md)
+records source/compiled ownership and clean HTTPS consumers of the pinned library.
+The original frozen bytes and hashes remain unchanged through the final audit.

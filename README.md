@@ -349,4 +349,7 @@ signature, tamper, independent-fixture, consumer, and runtime-startup checks.
 The [equivalence/security report](docs/xmlan_equivalence_report.md) records the
 same-key historical comparison and complete baseline test ownership. Run
 `scripts/prepare_xml_baseline.sh` before Common Test or tall to prepare its pinned
-test oracle. The milestone's final consumer/ownership audit remains #89.
+test oracle. The [final acceptance report](docs/xmlan_migration_acceptance.md) records source/
+compiled ownership, clean HTTPS consumers, and the merge-gated milestone closure.
+Run `scripts/check_external_consumer.sh <published-Signerl-full-SHA> <new-directory>`
+to reproduce public API/type compatibility without local dependency overrides.

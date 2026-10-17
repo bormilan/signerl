@@ -60,3 +60,8 @@ jobs:
         run: scripts/prepare_xml_baseline.sh
       - name: Run all quality checks
         run: rebar3 tall
+      - name: Check clean external consumer
+        shell: bash
+        env:
+          SIGNERL_CONSUMER_REVISION: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: scripts/check_external_consumer.sh "$SIGNERL_CONSUMER_REVISION" "$RUNNER_TEMP/signerl-consumer"
