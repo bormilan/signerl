@@ -21,10 +21,11 @@ Tests here execute the real Git dependency, with no path override or local copy.
 | `signerl_cert_helpers_test.erl` | 6 | Application fixture paths and missing/malformed PEM failures. |
 | `signerl_api_SUITE.erl` | 71 | Public binary/file/key workflows, RSA/ECDSA certificates, fixed time, encoding/content/DTD/namespace boundaries, tampering, and independent signatures. |
 | `signerl_xmlan_contract_SUITE.erl` | 4 | Frozen pre-extraction XML/RSA contracts, invalid-mode error, real compatibility file output, and fresh-VM transitive startup/consumer. |
+| `signerl_xmlan_equivalence_SUITE.erl` | 8 | Hash-checked historical comparison, complete baseline ownership map, same-key RSA bytes, EC/independent cross-verification, public errors, and file/HTTP canaries. |
 | `signerl_xml_SUITE.erl` | 1 | Zero persistent atom growth through the pinned parser/exporter/both canonicalizers and actual signing/verification. |
 | `xmlan_contract_consumer.erl` | Consumer support | All legacy generic exports, signature operations, five transparent XML aliases, canonical mode alias, and forwarded include path. |
 
-Total: **150 EUnit + 76 Common Test = 226 cases**. There are no skipped required
+Total: **150 EUnit + 84 Common Test = 234 cases**. There are no skipped required
 checks. The original pure parser/export/namespace and canonicalization cases,
 file/entity canaries, deep-tree tests, and all xmllint comparisons run in xmlan.
 Its validated commit has 259 passing cases, 100% coverage, and all six OTP/OS
@@ -59,6 +60,7 @@ Use OTP/rebar3 pinned in `.tool-versions`. Generate ignored test certificates:
 
 ```sh
 scripts/gen_certs.sh
+scripts/prepare_xml_baseline.sh
 rebar3 eunit
 rebar3 ct
 rebar3 test
@@ -76,12 +78,21 @@ all six latest-commit OTP 26/27/28 Ubuntu/Windows jobs must pass before merge.
 OpenSSL is required for generated test certificates; xmllint is required by
 xmlan's interop suite and is not needed by Signerl's ordinary suite.
 
+The historical comparison requires a one-time HTTPS/Git fetch of the exact
+baseline via the script above; subsequent runs reuse its clean ignored checkout
+in `priv/xml-baseline`. Missing/modified baseline source fails CT. All six CI jobs
+prepare it before tall. Current production uses only the pinned xmlan dependency;
+the historical oracle runs only in an isolated test VM. See the
+[equivalence/security report](../docs/xmlan_equivalence_report.md) and exhaustive
+[baseline ownership map](examples/xmlan_migration/ownership.term).
+
 Focused examples:
 
 ```sh
 rebar3 eunit --module signerl_verify_test
 rebar3 ct --suite test/signerl_api_SUITE
 rebar3 ct --suite test/signerl_xmlan_contract_SUITE
+rebar3 ct --suite test/signerl_xmlan_equivalence_SUITE
 ```
 
 Focused runs do not replace the complete combined test/coverage gate. The
