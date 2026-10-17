@@ -31,7 +31,7 @@ by this decision, but ECDSA XMLDSig wire-format correctness remains
 The distinction between SignedInfo canonicalization and reference processing
 comes from [XML Signature processing](https://www.w3.org/TR/xmldsig-core1/#sec-ReferenceProcessingModel).
 The XAdES object/target relationship is described in
-[XAdES QualifyingProperties](https://www.w3.org/TR/XAdES/#Syntax_for_XAdES_The_QualifyingProperties_element).
+[XAdES QualifyingProperties](https://www.w3.org/TR/XAdES/).
 The exact two-reference and transform allowlists above are this project's profile.
 
 ## Public API retained
