@@ -79,6 +79,15 @@ already valid UTC `calendar:datetime()` without reading the clock.
 `verify/3` validates `ds:Reference` digest values (document + signed properties) before verifying
 `ds:SignatureValue`.
 
+## Supported profile work
+
+The 1.0 scope keeps **XAdES signed properties, signing time and certificate
+properties** with enveloped RSA-SHA256 signing. See the
+[selected profile and implementation sequence](docs/signing_profile.md) for the
+public API, required reference/algorithm checks and known work still open.
+The profile document distinguishes intended behavior from current capabilities;
+it does not claim complete XMLDSig/XAdES conformance.
+
 ## Signing input
 
 Signerl accepts UTF-8 XML as a binary or file path. `sign/3`, `sign/4` and
