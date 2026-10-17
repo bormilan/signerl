@@ -24,7 +24,7 @@ byte/signature contracts. No generated private key is persisted.
 `scripts/check_external_consumer.sh` creates that application in a new directory,
 fetches only HTTPS Git dependencies at a supplied full Signerl SHA, clears global
 configuration/overrides and Erlang path flags, and checks actual Git heads/remotes,
-lock levels and clean dependency trees. It runs compile/runtime/Dialyzer. Directly
+lock levels and unchanged tracked dependency files. It runs compile/runtime/Dialyzer. Directly
 used runtime applications are declared by the consumer; there is only one rebar
 package dependency, Signerl. No sibling checkout, patch, private API or local
 source override is used. CI repeats the consumer on each actual PR head after
@@ -75,7 +75,16 @@ The initial matrix passed tall but failed a post-runtime consumer metadata guard
 without identifying the assertion. Consumer checks now report the exact failed
 revision/origin/working-tree check, without printing credentials or private keys.
 The matrix keeps all six jobs running so a platform failure cannot cancel the
-remaining required evidence. Native gates are rerun before publishing the change.
+remaining required evidence. The diagnostic identified normal untracked `xmlan/ebin/` compiler output: the
+pinned library does not ignore that directory. `check_dependency_tree.sh` now
+checks every tracked file and allows only ordinary untracked root ebin BEAM/app
+artifacts outside repository ignore rules. Host-wide excludes are disabled for
+this audit; unexpected source/config additions still fail. No library ignore
+file or source is patched and the validated pin stays unchanged. Executable
+controls accept build output and reject tracked edits/untracked sources, including
+files concealed by a host ignore rule. All seven source-tree probe outcomes matched expectations, the corrected clean
+consumer passed compile/runtime/Dialyzer, and native flint/Dialyzer/tall passed
+again (236 tests, 100%, no skips) before publishing.
 
 ## Recovery
 

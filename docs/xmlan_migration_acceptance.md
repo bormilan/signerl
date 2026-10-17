@@ -67,7 +67,10 @@ patch, test-helper code path, or private library function.
 `rebar3 dialyzer` must pass. The consumer directly uses Signerl/xmlan/public_key,
 so its application metadata declares those runtime applications; its dependency
 configuration still names only Signerl. Fetched Git HEADs, HTTPS remotes, both
-lock levels, and clean dependency working trees are checked. Signerl's public
+lock levels, and unchanged dependency sources/configuration are checked.
+Normal generated `ebin/*.beam` and `ebin/*.app` output is allowed; tracked
+changes and unexpected untracked source files fail. Host-wide Git ignore rules
+cannot hide files from this check. Signerl's public
 headers/types are resolved from the fetched package.
 
 The consumer exercises `sign/3`, `sign/4`, `sign/5`, and `verify/3` with binary/file
@@ -85,7 +88,7 @@ Native clean-fetch validation first used merged Signerl
 by #89. The PR records the repeat against its exact published head and all six
 CI consumer results. A separate opaque-only compatibility copy makes the same
 external Dialyzer consumer fail with actual opacity findings; the positive fetch
-remains unmodified.
+remains unmodified except for ordinary compiler output.
 
 ## Test ownership and final gates
 

@@ -259,3 +259,8 @@ The directory must not exist; no existing work is removed. No private keys are
 written. The consumer needs no generated repository certificates or baseline
 checkout. All six CI jobs run it at their actual PR head after tall; both steps
 are required and no test/check may skip.
+
+The external source audit permits normal untracked `ebin/*.beam`/`ebin/*.app`
+compiler output. `scripts/check_dependency_tree.sh` rejects all tracked changes
+and unexpected untracked files, with host-wide Git excludes disabled. It does
+not patch the fetched repositories' ignore files or change the xmlan pin.
