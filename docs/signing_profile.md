@@ -4,7 +4,8 @@ The maintainer confirmed on 17 October 2026 that XAdES signing-time and
 certificate properties stay in the 1.0 scope. This document records the selected
 profile and the work needed to enforce it. It does not claim that the unfinished
 checks below already pass. [Issue #64](https://github.com/bormilan/signerl/issues/64)
-remains open until the profile is implemented and validated.
+is complete as profile definition. The 0.3 milestone and implementation tasks
+below remain open until the selected behavior is implemented and validated.
 
 ## Selected profile
 
@@ -27,6 +28,9 @@ These restrictions select a small application profile; they are not a claim to
 implement every XMLDSig or XAdES option. The existing ECDSA path is not removed
 by this decision, but ECDSA XMLDSig wire-format correctness remains
 [#53](https://github.com/bormilan/signerl/issues/53), outside the RSA MVP.
+[#59](https://github.com/bormilan/signerl/issues/59) must decide its supported
+release status: fix the format before release if supported, otherwise explicitly
+exclude it from the supported contract and decide unsupported-call behavior.
 
 The distinction between SignedInfo canonicalization and reference processing
 comes from [XML Signature processing](https://www.w3.org/TR/xmldsig-core1/#sec-ReferenceProcessingModel).
@@ -68,27 +72,36 @@ application or dependency-installation check.
 
 ## Implementation sequence and current gaps
 
-1. [#52](https://github.com/bormilan/signerl/issues/52): enforce every reference,
+1. [#59](https://github.com/bormilan/signerl/issues/59): settle the public
+   algorithm/failure/compatibility contract before correctness changes and
+   refactoring. Reconcile [#37](https://github.com/bormilan/signerl/issues/37)
+   with PR #48 and decide supported versus deferred optional semantics. Finish
+   the documentation against the implemented behavior later in this milestone.
+2. [#52](https://github.com/bormilan/signerl/issues/52): enforce every reference,
    unique actual IDs/targets, declared algorithms/key agreement and transform
    chains. Current reference decoding can ignore extra references, IDs/targets
    are incompletely bound and method validation is only an allowlist. Generated
    references currently omit explicit canonicalization transforms; update them
    before treating the selected profile as complete. Existing implicit-reference
    signatures need an explicit compatibility decision in this work.
-2. [#54](https://github.com/bormilan/signerl/issues/54): distinguish absent,
+3. [#54](https://github.com/bormilan/signerl/issues/54): distinguish absent,
    malformed and valid certificate metadata; complete key/certificate binding.
    A successful signature check alone does not establish chain trust, validity
    periods or revocation status.
-3. [#55](https://github.com/bormilan/signerl/issues/55): reject ambiguous or
+4. [#55](https://github.com/bormilan/signerl/issues/55): reject ambiguous or
    malformed known signed-property containers. Keep unknown-extension policy
    separate from known-field validation. [#37](https://github.com/bormilan/signerl/issues/37)
    must be reconciled with already merged structural validators and remaining
    semantic work; it is not automatically complete.
-4. [#58](https://github.com/bormilan/signerl/issues/58): simplify ownership after
+5. [#58](https://github.com/bormilan/signerl/issues/58): simplify ownership after
    correctness fixes, while keeping these XAdES features. The timestamp work in
    [#56](https://github.com/bormilan/signerl/issues/56) is already complete.
-5. Finish #64/#59 documentation against the implemented behavior and complete
+6. Finish #59 documentation against the implemented behavior, then complete
    release acceptance in [#65](https://github.com/bormilan/signerl/issues/65).
+   #65 includes the ECDSA support decision, release-branch integration and the
+   initial distribution choice. Hex packaging in
+   [#43](https://github.com/bormilan/signerl/issues/43) is required only if Hex
+   is chosen and first needs a versioned xmlan Hex dependency.
 
 The current [Signerl test map](../test/TESTS.md) covers signing, verification,
 certificates, fixed time, tampering and independent fixtures. Required gates
