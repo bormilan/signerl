@@ -71,9 +71,12 @@ Key properties:
 
 ## How To Pick
 
-- Use the **certificate chain** if you want to demonstrate full PKI-style validation.
+- Use the **certificate chain** for leaf-certificate fixture scenarios. Signerl
+  does not perform chain-trust, validity-period or revocation validation.
 - Use **self-signed RSA** if you want the simplest possible demo with RSA.
-- Use **self-signed ECDSA** if you want to compare RSA vs ECDSA signatures.
+- Use **self-signed ECDSA** for legacy regression coverage. This path is outside
+  the supported 1.0 RSA profile until [#53](https://github.com/bormilan/signerl/issues/53)
+  fixes its XMLDSig wire format; a round trip is not interoperability evidence.
 
 ## Notes
 

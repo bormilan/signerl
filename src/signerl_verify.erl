@@ -68,6 +68,8 @@ verify_reference_digests(
                 false
         end
     else
+        {error, unsupported_hash} ->
+            {error, unsupported_hash};
         {error, cert_digest_mismatch} ->
             {error, cert_digest_mismatch};
         _ ->

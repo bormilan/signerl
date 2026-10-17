@@ -4,7 +4,8 @@ The maintainer confirmed on 17 October 2026 that XAdES signing-time and
 certificate properties stay in the 1.0 scope. This document records the selected
 profile and the work needed to enforce it. It does not claim that the unfinished
 checks below already pass. [Issue #64](https://github.com/bormilan/signerl/issues/64)
-remains open until the profile is implemented and validated.
+is complete as profile definition. The 0.3 milestone and implementation tasks
+below remain open until the selected behavior is implemented and validated.
 
 ## Selected profile
 
@@ -15,7 +16,7 @@ remains open until the profile is implemented and validated.
 | Signature method | RSA PKCS#1 v1.5 with SHA-256. The declared method must agree with the supplied key and actual operation. |
 | Digests | SHA-256 for both supported references. |
 | References | Exactly two: the whole document (`URI=""`) and the actual `xades:SignedProperties` element, with its required SignedProperties reference type. Unknown/additional references are rejected; no external dereferencing. |
-| Reference transforms | The document uses enveloped-signature removal followed by explicit C14N 1.1. SignedProperties uses explicit C14N 1.1. Transform order and parameters are validated. |
+| Reference transforms | New signatures use enveloped-signature removal followed by explicit C14N 1.1 for the document, and explicit C14N 1.1 for SignedProperties. Verification retains only the complete legacy pair as a compatibility case; both pairs require validated order/parameters and all ID/algorithm checks. See the API contract. |
 | SignedInfo | New signatures use C14N 1.1. Existing tested Exclusive C14N SignedInfo verification remains separate from reference transforms; changing one must not silently change the other. |
 | IDs and target | References resolve to unique actual IDs. `QualifyingProperties/@Target` identifies the containing signature. Missing, duplicate or mismatched relationships are rejected. |
 | XAdES | SignedProperties and SignedSignatureProperties remain, including SigningTime. Existing certificate properties remain when a certificate is supplied. |
@@ -27,6 +28,8 @@ These restrictions select a small application profile; they are not a claim to
 implement every XMLDSig or XAdES option. The existing ECDSA path is not removed
 by this decision, but ECDSA XMLDSig wire-format correctness remains
 [#53](https://github.com/bormilan/signerl/issues/53), outside the RSA MVP.
+The legacy path stays callable, without a new rejection gate in this contract
+pass, but is excluded from the supported 1.0 XMLDSig profile until #53 is fixed.
 
 The distinction between SignedInfo canonicalization and reference processing
 comes from [XML Signature processing](https://www.w3.org/TR/xmldsig-core1/#sec-ReferenceProcessingModel).
@@ -44,11 +47,13 @@ The exact two-reference and transform allowlists above are this project's profil
 Signing normally returns signed XML or `{error, Reason}`. Verification normally
 returns `true`, `false` for a cryptographic mismatch, or `{error, Reason}` for a
 rejected input/structure. Existing file errors retain `{error, {file_error, Reason}}`.
-This profile decision does not change those interfaces or approve a broad
-exception/error-policy redesign. Exact malformed-key/certificate exception and
-compatibility details must be reconciled in
-[#59](https://github.com/bormilan/signerl/issues/59), rather than claiming uniform
-handling that the current code does not provide.
+The [public API contract](api_contract.md) records supported inputs, specific
+returned errors and deliberate native failures for invalid low-level crypto
+material. `sha256` is the only supported hash; both operations return
+`{error, unsupported_hash}` for other hash atoms on otherwise valid inputs.
+Malformed supplied DER/OTP key terms can raise native errors; public arities and
+file/key conveniences remain. #59 tracks final alignment as correctness and
+ownership work proceeds.
 
 Given loaded RSA key terms and a DER certificate:
 
@@ -68,27 +73,37 @@ application or dependency-installation check.
 
 ## Implementation sequence and current gaps
 
-1. [#52](https://github.com/bormilan/signerl/issues/52): enforce every reference,
+1. [#59](https://github.com/bormilan/signerl/issues/59): the API contract records
+   the algorithm/failure/compatibility decisions before correctness changes and
+   refactoring. Optional semantic extensions in
+   [#37](https://github.com/bormilan/signerl/issues/37) are deferred beyond 1.0;
+   known-property structural fixes remain #55. Finish documentation against the
+   implemented behavior later in this milestone.
+2. [#52](https://github.com/bormilan/signerl/issues/52): enforce every reference,
    unique actual IDs/targets, declared algorithms/key agreement and transform
    chains. Current reference decoding can ignore extra references, IDs/targets
    are incompletely bound and method validation is only an allowlist. Generated
    references currently omit explicit canonicalization transforms; update them
    before treating the selected profile as complete. Existing implicit-reference
-   signatures need an explicit compatibility decision in this work.
-2. [#54](https://github.com/bormilan/signerl/issues/54): distinguish absent,
+   signatures retain only the complete legacy pair described in the API contract;
+   this must not preserve the existing reference/ID/algorithm acceptance gaps.
+3. [#54](https://github.com/bormilan/signerl/issues/54): distinguish absent,
    malformed and valid certificate metadata; complete key/certificate binding.
    A successful signature check alone does not establish chain trust, validity
    periods or revocation status.
-3. [#55](https://github.com/bormilan/signerl/issues/55): reject ambiguous or
+4. [#55](https://github.com/bormilan/signerl/issues/55): reject ambiguous or
    malformed known signed-property containers. Keep unknown-extension policy
-   separate from known-field validation. [#37](https://github.com/bormilan/signerl/issues/37)
-   must be reconciled with already merged structural validators and remaining
-   semantic work; it is not automatically complete.
-4. [#58](https://github.com/bormilan/signerl/issues/58): simplify ownership after
+   separate from known-field validation. PR #48 supplied structural readers;
+   remaining semantic extensions are explicitly deferred in #37, not completed.
+5. [#58](https://github.com/bormilan/signerl/issues/58): simplify ownership after
    correctness fixes, while keeping these XAdES features. The timestamp work in
    [#56](https://github.com/bormilan/signerl/issues/56) is already complete.
-5. Finish #64/#59 documentation against the implemented behavior and complete
+6. Finish #59 documentation against the implemented behavior, then complete
    release acceptance in [#65](https://github.com/bormilan/signerl/issues/65).
+   #65 confirms the supported RSA profile and ECDSA exclusion, release-branch
+   integration and the initial distribution choice. Hex packaging in
+   [#43](https://github.com/bormilan/signerl/issues/43) is required only if Hex
+   is chosen and first needs a versioned xmlan Hex dependency.
 
 The current [Signerl test map](../test/TESTS.md) covers signing, verification,
 certificates, fixed time, tampering and independent fixtures. Required gates

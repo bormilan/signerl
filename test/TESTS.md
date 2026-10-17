@@ -21,12 +21,17 @@ type aliases or installation contracts.
 | `signerl_xades_xml_test.erl` | 1 | XAdES lookup rejects a non-signature root. |
 | `signerl_cert_test.erl` | 1 | Exact issuer/serial DER against OTP ASN.1. |
 | `signerl_cert_helpers_test.erl` | 6 | Fixture paths and missing/malformed PEM failures. |
-| `signerl_api_SUITE.erl` | 70 | Public binary/file/key/certificate workflows, RSA/ECDSA, fixed time, content preservation, public input errors, tampering and independent signatures. |
+| `signerl_api_SUITE.erl` | 73 | Public binary/file/key/certificate workflows, RSA and legacy ECDSA, fixed time, content preservation, hash errors, native crypto-input failures, declaration handling, tampering and independent signatures. |
 
-Total: **150 EUnit + 70 Common Test = 220 cases**. Required coverage is **100%**
+Total: **150 EUnit + 73 Common Test = 223 cases**. Required coverage is **100%**
 of Signerl production modules. The independent xmlsec1 signatures stay in
 `examples/independent/`; `examples/payloads/` contains inputs used for actual
 sign/verify/tamper cases.
+
+The [API contract](../docs/api_contract.md) distinguishes returned input errors
+from deliberately native failures for malformed low-level crypto material. These
+are public Signerl behavior cases, not tests of OTP or xmlan internals. Legacy
+ECDSA round trips do not establish XMLDSig wire-format correctness (#53).
 
 ## Run the tests
 
