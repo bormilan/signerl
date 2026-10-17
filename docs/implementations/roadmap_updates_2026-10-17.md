@@ -1,5 +1,9 @@
 # Apply roadmap review — 17 October 2026
 
+This log records the roadmap/documentation commit. Subsequent public API
+contract work in the same PR is recorded in
+[the #59 implementation log](issue_59_api_contract_2026-10-17.md).
+
 ## Request and scope
 
 The maintainer approved applying the [roadmap review](../reviews/roadmap_review_2026-10-17.md).

@@ -19,8 +19,9 @@ is implemented; it is no longer a missing prerequisite.
 The public interfaces are `sign/3`, `sign/4`, `sign/5` and `verify/3`. `sign/5`
 allows controlled UTC time; other signing arities use the current UTC time.
 Certificate-less signing remains supported and still includes SignedProperties
-and SigningTime. Exact malformed-input and return/raise contracts remain
-[#59](https://github.com/bormilan/signerl/issues/59).
+and SigningTime. The [API contract](api_contract.md) records malformed-input and
+return/raise behavior; [#59](https://github.com/bormilan/signerl/issues/59) remains
+open for final alignment after correctness/ownership work.
 
 The property readers perform the following extraction/checks. Extraction alone
 does not imply semantic validation, complete cardinality enforcement or trust.
@@ -53,9 +54,11 @@ XAdES properties are structurally or semantically validated.
 - [#55](https://github.com/bormilan/signerl/issues/55): reject ambiguous or
   malformed known containers/fields, including optional-container lookup errors
   that currently become absence. Decide unknown-extension handling separately.
-- [#37](https://github.com/bormilan/signerl/issues/37) and #59: decide and document
-  the supported optional-property semantics; implement supported policy-digest,
-  role and referenced-object checks, or explicitly defer excluded semantics.
+- [#37](https://github.com/bormilan/signerl/issues/37): optional policy-material,
+  role-certification and URI/MIME/referenced-object semantic extensions are
+  deferred beyond 1.0. The MVP promises structural handling, with #55 responsible
+  for rejecting malformed known fields and ambiguous containers. Extraction is
+  not semantic validation; unknown extensions may be ignored semantically.
 - [#58](https://github.com/bormilan/signerl/issues/58): simplify signature/XAdES
   ownership after correctness fixes, while preserving the retained properties.
 - #59: finish accurate API/capability documentation after implementation.
