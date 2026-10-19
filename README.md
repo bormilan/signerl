@@ -1,8 +1,8 @@
 # SignErl
 
-SignerL is a small Erlang library for signing XML messages. It currently supports
-basic signing and verification over normalized XML. The project is early-stage
-and evolving, but active.
+Signerl is a small Erlang library for signing and verifying UTF-8 XML. The 1.0
+profile is enveloped RSA-SHA256 with XAdES SignedProperties, SigningTime and
+optional certificate properties. The project is in active development.
 
 ## Status
 
@@ -31,75 +31,59 @@ Use `xmlan`/`xmlan_c14n` for generic XML operations and `xmlan`'s public types.
 
 ## Quick Start
 
-```erlang
-% Sign from a binary message and a loaded key:
-{ok, SignedMessage} = case signerl:sign(RawMessage, sha256, PrivateKey) of
-    {error, invalid_prolog} -> {error, invalid_prolog};
-    SignedXml -> {ok, SignedXml}
-end.
-
-% Verify:
-true = signerl:verify(SignedMessage, sha256, PublicKey).
-```
-
-`sign/3` returns signed XML with:
-- `<ds:SignedInfo>` (deterministic internal profile)
-- `<ds:SignatureValue>` containing base64 signature bytes over `ds:SignedInfo`
-- `<ds:Object>/<xades:QualifyingProperties>/<xades:SignedProperties Id="SignedProperties-1">`
-- `<xades:QualifyingProperties Target="#Signature-1">`
-
-`SigningTime` is strict UTC in `YYYY-MM-DDThh:mm:ssZ` format, with real Gregorian
-calendar dates and years 0001–9999. Fractional seconds, offsets, and leap seconds
-are unsupported. Signing and verification reject malformed or impossible dates
-with `{error, invalid_signing_time}`.
-
-`sign/3` and `sign/4` capture the current UTC second once per call. For a controlled
-signing time, use `sign/5` with a timestamp binary and an optional DER certificate
-(`undefined` omits the certificate):
+With loaded RSA private/public keys:
 
 ```erlang
-Time = <<"2024-02-29T03:04:05Z">>,
-Signed = signerl:sign(RawMessage, sha256, PrivateKey, undefined, Time),
+Input = <<"<?xml version='1.0'?><invoice><amount>42.00</amount></invoice>">>,
+Signed = signerl:sign(Input, sha256, PrivateKey),
 true = signerl:verify(Signed, sha256, PublicKey).
 ```
 
-The same XML, RSA key, certificate, and fixed signing time produce identical bytes.
-Default calls made in different seconds can differ because signing time is signed
-metadata. XML normalization is deterministic; ECDSA signature generation is
-randomized, so its output must be checked by verification rather than byte equality.
-The lower-level signature builder also accepts the timestamp through
-`build_signature_element/5`. `signerl_utils:format_utc_timestamp/1` formats an
-already valid UTC `calendar:datetime()` without reading the clock.
+`sign/3` returns XML with SignedInfo, SignatureValue and XAdES SignedProperties.
+The signature covers canonicalized SignedInfo. `verify/3` checks reference digests before the
+cryptographic signature, using the supplied key. It normally returns `true`,
+`false` for a digest/signature mismatch, or `{error, Reason}` for a rejected
+input/structure. Error reasons are specific; there is no single
+`invalid_signature` result for every malformed signature.
 
-`verify/3` expects a signed XML message. It returns:
-- `true` when signature verification succeeds
-- `false` when signature bytes are present but do not match message/key
-- `{error, invalid_signature}` when signature structure/properties are missing or malformed
+Use `sign/4` to include a DER certificate. Use `sign/5` for a controlled UTC time;
+`undefined` omits the certificate in either arity:
 
-`verify/3` validates `ds:Reference` digest values (document + signed properties) before verifying
-`ds:SignatureValue`.
+```erlang
+Time = <<"2024-02-29T03:04:05Z">>,
+SignedWithTime = signerl:sign(Input, sha256, PrivateKey, undefined, Time),
+true = signerl:verify(SignedWithTime, sha256, PublicKey).
+```
 
-## Supported profile work
+`sign/3` and `sign/4` use the current UTC second. Time must be a real date in
+`YYYY-MM-DDThh:mm:ssZ`, with years 0001–9999; fractions, offsets and leap seconds
+are rejected with `{error, invalid_signing_time}`. The same supported RSA input,
+key, certificate and controlled time produce identical bytes.
 
-The 1.0 scope keeps **XAdES signed properties, signing time and certificate
-properties** with enveloped RSA-SHA256 signing. See the
-[selected profile and implementation sequence](docs/signing_profile.md) for the
-public API, required reference/algorithm checks and known work still open.
-The profile document distinguishes intended behavior from current capabilities;
-it does not claim complete XMLDSig/XAdES conformance.
+## Public API and supported profile
 
-## Signing input
+See the [public API contract](docs/api_contract.md) for inputs, file/key
+conveniences, normal errors and native exceptions. Only `sha256` is supported;
+other hash atoms return `{error, unsupported_hash}` for otherwise valid inputs.
+The legacy ECDSA path remains callable but is outside the supported 1.0 profile
+until [#53](https://github.com/bormilan/signerl/issues/53) fixes its XMLDSig format.
 
-Signerl accepts UTF-8 XML as a binary or file path. `sign/3`, `sign/4` and
-`sign/5` require an XML declaration at the start of the input; a missing or
-unsupported declaration returns `{error, invalid_prolog}`. Malformed XML returns
-`{error, invalid_xml}`. File loading failures return `{error, {file_error, Reason}}`.
+XML arguments are UTF-8 binaries or filename strings. Signing requires an XML
+declaration at the start; verification accepts a declaration or its absence.
+Malformed XML is rejected through xmlan. File read failures return
+`{error, {file_error, Reason}}`. Malformed supplied key/certificate material can
+raise native OTP errors; the API does not wrap every invalid argument.
 
-XML parsing, serialization, namespaces and canonicalization are handled by
-[xmlan](https://github.com/bormilan/xmlan). See its documentation for the supported
-XML format. Signerl's tests cover signing, verification, signed-content
-preservation, signature metadata, tampering and error propagation through its
-public APIs.
+XAdES signing-time and certificate properties stay in scope. The
+[selected profile and implementation sequence](docs/signing_profile.md) separates
+target behavior from unfinished reference, certificate and property checks.
+Successful signature verification is not certificate-chain trust, validity or
+revocation validation, and internal round trips do not establish full
+XMLDSig/XAdES interoperability. The tracked `priv/key.pem` is public test data.
+
+Generic XML parsing, serialization, namespaces and canonicalization are owned by
+[xmlan](https://github.com/bormilan/xmlan). Signerl tests its own signature
+behavior and public error propagation; it does not duplicate xmlan's tests.
 
 ## Development toolchain
 

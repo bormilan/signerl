@@ -51,6 +51,8 @@ groups() ->
         ]},
         {verify_fixture_error_group, [], [
             verify_missing_prolog_binary_returns_error,
+            verify_without_declaration,
+            invalid_key_material_raises,
             verify_invalid_prolog_file_returns_error,
             verify_returns_error_without_signature_element,
             verify_returns_error_without_signature_value,
@@ -77,6 +79,7 @@ groups() ->
         ]},
         {keyinfo_group, [], [
             sign_with_certificate_includes_keyinfo,
+            sign_invalid_certificate_der_raises,
             sign_without_certificate_omits_keyinfo,
             sign_with_certificate_roundtrip_rsa,
             sign_with_certificate_roundtrip_ecdsa,
@@ -269,7 +272,14 @@ sign_invalid_prolog_file_returns_error(Config) ->
 sign_returns_error_with_unsupported_hash(Config) ->
     RawMessage = ?config(raw_message, Config),
     Key = ?config(rsa_key, Config),
-    ?assertEqual({error, unsupported_hash}, signerl:sign(RawMessage, sha512, Key)).
+    Signed = signerl:sign(RawMessage, sha256, Key),
+    ?assertEqual(true, signerl:verify(Signed, sha256, ?config(rsa_public_key, Config))),
+    lists:foreach(
+        fun(Hash) ->
+            ?assertEqual({error, unsupported_hash}, signerl:sign(RawMessage, Hash, Key))
+        end,
+        [sha384, sha512]
+    ).
 
 sign_returns_error_with_unsupported_key(Config) ->
     RawMessage = ?config(raw_message, Config),
@@ -305,6 +315,28 @@ sign4_returns_file_error_with_missing_key_file(Config) ->
         {error, {file_error, enoent}},
         signerl:sign(RawMessage, sha256, "nonexistent_key.pem", <<"cert">>)
     ).
+
+verify_without_declaration(Config) ->
+    RawMessage = ?config(raw_message, Config),
+    Key = ?config(rsa_key, Config),
+    PublicKey = ?config(rsa_public_key, Config),
+    Signed = signerl:sign(RawMessage, sha256, Key),
+    ?assertEqual(true, signerl:verify(Signed, sha256, PublicKey)),
+    [_Declaration, WithoutDeclaration] = binary:split(Signed, <<"?>">>),
+    ?assertEqual(true, signerl:verify(WithoutDeclaration, sha256, PublicKey)).
+
+invalid_key_material_raises(Config) ->
+    RawMessage = ?config(raw_message, Config),
+    KeyPath = signerl_cert_helpers:signer_rsa_key_path(),
+    Signed = signerl:sign(RawMessage, sha256, KeyPath),
+    ?assertEqual(true, signerl:verify(Signed, sha256, KeyPath)),
+    InvalidPath = filename:join(?config(priv_dir, Config), "invalid-key-der.pem"),
+    Pem = public_key:pem_encode([{'RSAPrivateKey', <<"invalid DER">>, not_encrypted}]),
+    ok = file:write_file(InvalidPath, Pem),
+    %% Native error reasons vary across OTP versions; the public error class stays native.
+    ?assertException(error, _, signerl:sign(RawMessage, sha256, InvalidPath)),
+    ?assertException(error, _, signerl:verify(Signed, sha256, InvalidPath)),
+    ?assertException(error, _, signerl:verify(Signed, sha256, invalid_key)).
 
 verify_missing_prolog_binary_returns_error(Config) ->
     PublicKey = ?config(rsa_public_key, Config),
@@ -441,8 +473,12 @@ verify_returns_error_with_unsupported_hash(Config) ->
     RsaKey = ?config(rsa_key, Config),
     RawMessage = ?config(raw_message, Config),
     SignedMessage = signerl:sign(RawMessage, sha256, RsaKey),
-    ?assertEqual(
-        {error, invalid_signature_structure}, signerl:verify(SignedMessage, sha512, PublicKey)
+    ?assertEqual(true, signerl:verify(SignedMessage, sha256, PublicKey)),
+    lists:foreach(
+        fun(Hash) ->
+            ?assertEqual({error, unsupported_hash}, signerl:verify(SignedMessage, Hash, PublicKey))
+        end,
+        [sha384, sha512]
     ).
 
 verify_returns_file_error_with_missing_signed_message_file(Config) ->
@@ -518,6 +554,17 @@ verify_fails_with_wrong_keys(Config) ->
     test_helpers:parse_verified_message(EcdsaSignedMessage, ?config(ecdsa_public_key, Config)),
     % Wrong key type (RSA key against ECDSA signature) must fail verification.
     ?assertEqual(false, signerl:verify(EcdsaSignedMessage, sha256, WrongPublicKey)).
+
+sign_invalid_certificate_der_raises(Config) ->
+    RawMessage = ?config(raw_message, Config),
+    Key = ?config(rsa_key, Config),
+    PublicKey = ?config(rsa_public_key, Config),
+    CertDer = ?config(rsa_cert_der, Config),
+    Time = <<"2024-02-29T03:04:05Z">>,
+    Signed = signerl:sign(RawMessage, sha256, Key, CertDer, Time),
+    ?assertEqual(true, signerl:verify(Signed, sha256, PublicKey)),
+    ?assertException(error, _, signerl:sign(RawMessage, sha256, Key, <<"invalid DER">>)),
+    ?assertException(error, _, signerl:sign(RawMessage, sha256, Key, <<"invalid DER">>, Time)).
 
 sign_with_certificate_includes_keyinfo(Config) ->
     RawMessage = ?config(raw_message, Config),
