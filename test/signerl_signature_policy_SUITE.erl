@@ -299,8 +299,8 @@ signing_rejects_existing_signatures(Config) ->
     Signature = signature(Tree),
     lists:foreach(
         fun(Signed) ->
-            ?assertEqual(
-                {error, already_signed},
+            ?assertError(
+                already_signed,
                 signerl:sign(
                     xmlan:export(["<?xml version='1.0'?>"], Signed), sha256, ?config(key, Config)
                 )
@@ -320,8 +320,8 @@ signing_avoids_id_collisions(Config) ->
     {ok, {_, SigAttrs, _}} = xmlan:find_path([<<"ds:Signature">>], T),
     ?assertNotEqual({ok, ?SIGNATURE_ID}, xmlan:attr_value(<<"Id">>, SigAttrs)),
     Duplicate = <<"<?xml version='1.0'?><invoice Id='same'><amount Id='same'/></invoice>">>,
-    ?assertEqual(
-        {error, invalid_signature_structure}, signerl:sign(Duplicate, sha256, ?config(key, Config))
+    ?assertError(
+        invalid_signature_structure, signerl:sign(Duplicate, sha256, ?config(key, Config))
     ).
 
 signature_lookalikes_remain_content(Config) ->

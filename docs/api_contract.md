@@ -40,7 +40,7 @@ year 0001–9999. Offsets, fractions and leap seconds are rejected. `sign/3` and
 supported RSA input, key, certificate and controlled time produce identical
 output. Certificate-less calls still include SignedProperties and SigningTime.
 
-## Returned errors and native failures
+## Returned errors and exceptions
 
 | Condition, with other inputs valid | Public outcome |
 | --- | --- |
@@ -50,13 +50,17 @@ output. Certificate-less calls still include SignedProperties and SigningTime.
 | Rejected XML | `{error, invalid_xml}` or another xmlan parse error propagated unchanged. |
 | Unsupported hash atom | `{error, unsupported_hash}` in signing and verification. |
 | Unsupported signing key kind | `{error, unsupported_key}`. |
-| Signing input already contains any XMLDSig Signature | `{error, already_signed}`. |
-| Duplicate `Id`/`xml:id` values when signing | `{error, invalid_signature_structure}`. |
+| Signing input already contains any XMLDSig Signature | Raises `error:already_signed`. |
+| Duplicate `Id`/`xml:id` values when signing | Raises `error:invalid_signature_structure`. |
 | Additional/nested signatures or invalid reference IDs, target, algorithms or transform pair | `{error, invalid_signed_info}` or `{error, invalid_signature_structure}`. |
 | Invalid signing time | `{error, invalid_signing_time}`. |
 | Document/reference digest or cryptographic signature mismatch | `false`. |
 | Missing/malformed recognized signature structure | `{error, Reason}`, for example `missing_signature`, `missing_signature_value`, `invalid_base64`, `invalid_signed_info` or `invalid_signature_structure`. |
 | Certificate digest mismatch | `{error, cert_digest_mismatch}`. |
+
+Already-signed input and duplicate signing identities raise the explicit Signerl
+error reasons shown above. They abort signature construction and propagate to the
+caller; they are not returned error tuples.
 
 An otherwise valid but unrelated RSA key produces `false`. A supplied RSA/EC key
 whose algorithm disagrees with SignatureMethod produces
@@ -64,9 +68,10 @@ whose algorithm disagrees with SignatureMethod produces
 malformed DER supplied as a certificate argument, or malformed data inside a PEM
 entry may raise native Erlang/OTP errors. These low-level crypto inputs are the
 caller's responsibility; Signerl does not catch and rewrap every OTP failure.
-Unsupported argument types can also raise native errors. The exact native error
-reason/stack depends on OTP and is not a stable library error atom. The function
-specifications describe supported values and normal returns, not a guarantee
+Unsupported argument types can also raise native errors. For malformed crypto
+material, the native error reason/stack depends on OTP and is not a stable library
+error atom. The function specifications describe supported values and normal
+returns, not a guarantee
 that every invalid argument returns an error tuple.
 
 Do not depend on which error wins when several inputs are invalid. Public tests

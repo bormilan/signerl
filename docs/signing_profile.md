@@ -48,8 +48,8 @@ Signing normally returns signed XML or `{error, Reason}`. Verification normally
 returns `true`, `false` for a cryptographic mismatch, or `{error, Reason}` for a
 rejected input/structure. Existing file errors retain `{error, {file_error, Reason}}`.
 The [public API contract](api_contract.md) records supported inputs, specific
-returned errors and deliberate native failures for invalid low-level crypto
-material. `sha256` is the only supported hash; both operations return
+returned errors, explicit signing-policy exceptions and native failures for
+invalid low-level crypto material. `sha256` is the only supported hash; both operations return
 `{error, unsupported_hash}` for other hash atoms on otherwise valid inputs.
 Malformed supplied DER/OTP key terms can raise native errors; public arities and
 file/key conveniences remain. #59 tracks final alignment as correctness and

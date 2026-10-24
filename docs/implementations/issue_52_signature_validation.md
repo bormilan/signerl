@@ -38,7 +38,7 @@ Changed files and behavior:
   extra/missing/unknown references, IDs/targets, duplicate identities/containers,
   RSA/EC method mismatch, digest methods, hybrids/order/parameters, namespace
   and whitespace controls, placement, already-signed input and generated IDs.
-- Existing API tests now expect already_signed on a second signing call and a
+- Existing API tests now expect an already_signed error on a second signing call and a
   structure error for an RSA key against an ECDSA method; an unrelated RSA key
   remains false. The EUnit transform mutation helper accepts the new chain shape.
 - README, API contract, signing profile, property gap map and test responsibility
@@ -46,7 +46,7 @@ Changed files and behavior:
   Documentation updates are required because generated XML and rejection behavior
   change. No dependency, generic XML implementation or XML-only tests are added.
 
-Validation and review:
+Initial validation and review (commit 35f7d39):
 
 - Before implementation, the focused suite reported 9 failures / 1 pass. Legacy
   controls reproduced true for an additional unresolved reference, a missing
@@ -88,3 +88,28 @@ outside temporary storage under
 /Users/milanbor/projects/signerl/.recovery/issue-52-signature-validation/.
 The prior roadmap-sync audit note was stashed before switching to this branch,
 then restored; it remains a local audit artifact outside the issue #52 commit.
+
+## Review follow-up: explicit signing failures
+
+The maintainer requested actual errors instead of a maybe block propagating
+error tuples in signerl_signature. Removed that block and its feature directive.
+The signing_ids helper now returns the identity pair directly and raises
+error(already_signed) or error(invalid_signature_structure) for rejected signing
+input. These explicit reasons identify the failure without a nested badmatch.
+Existing returned errors for hash/key/time selection and verification retain
+their current handling; this change concerns the reviewed identity precondition.
+
+Updated public API assertions first: both focused policy cases failed because
+the prior implementation returned tuples instead of raising. The cases retain
+successful signing/verification controls and assert the exact error reasons.
+README, public API contract and signing profile document the chosen exceptions.
+Follow-up validation: the two focused cases pass after the change. Complete
+rebar3 test and final native rebar3 tall pass: 150 EUnit + 84 Common Test cases,
+all eight modules and total coverage 100%, no failures or skips. rebar3 as test
+cover, flint, Xref and Dialyzer pass. Reapplied the ferike review checklist;
+no blocking findings. Documentation links/fences and git diff --check pass.
+All six latest-head CI jobs must pass again after pushing this follow-up;
+their immutable run/commit evidence is saved in the follow-up recovery folder.
+
+Follow-up recovery copies and logs are stored under
+/Users/milanbor/projects/signerl/.recovery/issue-52-signature-validation/error-policy-review/.

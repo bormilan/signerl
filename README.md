@@ -77,7 +77,7 @@ raise native OTP errors; the API does not wrap every invalid argument.
 New signatures declare explicit C14N 1.1 reference transforms. Verification
 also accepts the complete legacy reference pair, with the same strict reference,
 ID/target, algorithm and signature-placement checks. Signing already-signed XML
-returns `{error, already_signed}`.
+raises `error:already_signed`.
 
 XAdES signing-time and certificate properties stay in scope. The
 [selected profile and implementation sequence](docs/signing_profile.md) separates

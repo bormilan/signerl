@@ -1,5 +1,4 @@
 -module(signerl_signature).
--feature(maybe_expr, enable).
 -include("signerl_dsig.hrl").
 
 -export([build_signature_element/4, build_signature_element/5]).
@@ -51,38 +50,38 @@ build_signature_element(_Message, _Hash, _Key, _CertDer, _SigningTime) ->
 build_signature_element_with_method_uri(
     Message, HashAlgorithm, Key, SignatureMethodUri, CertDer, SigningTime
 ) ->
-    maybe
-        {ok, SignatureId, PropertiesId} ?= signing_ids(Message),
-        {ok, SignatureElementWithoutValue, SignedInfo} =
-            construct_signature_without_value(
-                Message,
-                HashAlgorithm,
-                ?DSIG_DIGEST_SHA256_URI,
-                SignatureMethodUri,
-                CertDer,
-                SigningTime,
-                {SignatureId, PropertiesId}
-            ),
-        SignedInfoBytes = xmlan_c14n:canonicalize(SignedInfo),
-        SignatureBytes = public_key:sign(SignedInfoBytes, HashAlgorithm, Key),
-        SignatureValue = base64:encode(SignatureBytes),
-        SignatureElement =
-            add_signature_value(SignatureElementWithoutValue, binary_to_list(SignatureValue)),
-        {ok, SignatureElement}
-    end.
+    {SignatureId, PropertiesId} = signing_ids(Message),
+    {ok, SignatureElementWithoutValue, SignedInfo} =
+        construct_signature_without_value(
+            Message,
+            HashAlgorithm,
+            ?DSIG_DIGEST_SHA256_URI,
+            SignatureMethodUri,
+            CertDer,
+            SigningTime,
+            {SignatureId, PropertiesId}
+        ),
+    SignedInfoBytes = xmlan_c14n:canonicalize(SignedInfo),
+    SignatureBytes = public_key:sign(SignedInfoBytes, HashAlgorithm, Key),
+    SignatureValue = base64:encode(SignatureBytes),
+    SignatureElement =
+        add_signature_value(SignatureElementWithoutValue, binary_to_list(SignatureValue)),
+    {ok, SignatureElement}.
 
 signing_ids(Message) ->
     case signerl_dsig_utils:signature_inventory(Message) of
         {0, Ids} ->
             case lists:all(fun(Count) -> Count =:= 1 end, maps:values(Ids)) of
                 true ->
-                    {ok, available_id(?SIGNATURE_ID, Ids, 0),
-                        available_id(?SIGNED_PROPERTIES_ID, Ids, 0)};
+                    {
+                        available_id(?SIGNATURE_ID, Ids, 0),
+                        available_id(?SIGNED_PROPERTIES_ID, Ids, 0)
+                    };
                 false ->
-                    {error, invalid_signature_structure}
+                    error(invalid_signature_structure)
             end;
         _ ->
-            {error, already_signed}
+            error(already_signed)
     end.
 
 available_id(Base, Ids, Number) ->

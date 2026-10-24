@@ -361,7 +361,7 @@ verify_returns_error_without_signature_element(Config) ->
     ?assertEqual({error, missing_signature}, signerl:verify(UnsignedPath, sha256, PublicKey)),
     SignedMessage = signerl:sign(RawMessage, sha256, SignKey),
     test_helpers:parse_verified_message(SignedMessage, PublicKey),
-    ?assertEqual({error, already_signed}, signerl:sign(SignedMessage, sha256, SignKey)).
+    ?assertError(already_signed, signerl:sign(SignedMessage, sha256, SignKey)).
 
 verify_returns_error_without_signature_value(Config) ->
     PublicKey = ?config(rsa_public_key, Config),
