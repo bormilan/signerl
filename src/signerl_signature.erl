@@ -1,10 +1,11 @@
 -module(signerl_signature).
+-feature(maybe_expr, enable).
 -include("signerl_dsig.hrl").
 
 -export([build_signature_element/4, build_signature_element/5]).
 
 -spec build_signature_element(Message, HashAlgorithm, Key, CertDer) ->
-    {ok, xmlan:simplified_xml()} | {error, unsupported_hash | unsupported_key}
+    {ok, xmlan:simplified_xml()} | {error, atom()}
 when
     Message :: xmlan:simplified_xml(),
     HashAlgorithm :: atom(),
@@ -21,7 +22,7 @@ build_signature_element(Message, HashAlgorithm, Key, CertDer) ->
 
 -spec build_signature_element(Message, HashAlgorithm, Key, CertDer, SigningTime) ->
     {ok, xmlan:simplified_xml()}
-    | {error, unsupported_hash | unsupported_key | invalid_signing_time}
+    | {error, atom()}
 when
     Message :: xmlan:simplified_xml(),
     HashAlgorithm :: atom(),
@@ -50,21 +51,50 @@ build_signature_element(_Message, _Hash, _Key, _CertDer, _SigningTime) ->
 build_signature_element_with_method_uri(
     Message, HashAlgorithm, Key, SignatureMethodUri, CertDer, SigningTime
 ) ->
-    {ok, SignatureElementWithoutValue, SignedInfo} =
-        construct_signature_without_value(
-            Message,
-            HashAlgorithm,
-            ?DSIG_DIGEST_SHA256_URI,
-            SignatureMethodUri,
-            CertDer,
-            SigningTime
-        ),
-    SignedInfoBytes = xmlan_c14n:canonicalize(SignedInfo),
-    SignatureBytes = public_key:sign(SignedInfoBytes, HashAlgorithm, Key),
-    SignatureValue = base64:encode(SignatureBytes),
-    SignatureElement =
-        add_signature_value(SignatureElementWithoutValue, binary_to_list(SignatureValue)),
-    {ok, SignatureElement}.
+    maybe
+        {ok, SignatureId, PropertiesId} ?= signing_ids(Message),
+        {ok, SignatureElementWithoutValue, SignedInfo} =
+            construct_signature_without_value(
+                Message,
+                HashAlgorithm,
+                ?DSIG_DIGEST_SHA256_URI,
+                SignatureMethodUri,
+                CertDer,
+                SigningTime,
+                {SignatureId, PropertiesId}
+            ),
+        SignedInfoBytes = xmlan_c14n:canonicalize(SignedInfo),
+        SignatureBytes = public_key:sign(SignedInfoBytes, HashAlgorithm, Key),
+        SignatureValue = base64:encode(SignatureBytes),
+        SignatureElement =
+            add_signature_value(SignatureElementWithoutValue, binary_to_list(SignatureValue)),
+        {ok, SignatureElement}
+    end.
+
+signing_ids(Message) ->
+    case signerl_dsig_utils:signature_inventory(Message) of
+        {0, Ids} ->
+            case lists:all(fun(Count) -> Count =:= 1 end, maps:values(Ids)) of
+                true ->
+                    {ok, available_id(?SIGNATURE_ID, Ids, 0),
+                        available_id(?SIGNED_PROPERTIES_ID, Ids, 0)};
+                false ->
+                    {error, invalid_signature_structure}
+            end;
+        _ ->
+            {error, already_signed}
+    end.
+
+available_id(Base, Ids, Number) ->
+    Candidate =
+        case Number of
+            0 -> Base;
+            _ -> Base ++ "-" ++ integer_to_list(Number)
+        end,
+    case maps:is_key(Candidate, Ids) of
+        true -> available_id(Base, Ids, Number + 1);
+        false -> Candidate
+    end.
 
 construct_signature_without_value(
     {_, MessageAttrs, _} = Message,
@@ -72,10 +102,17 @@ construct_signature_without_value(
     DigestMethodUri,
     SignatureMethodUri,
     CertDer,
-    SigningTime
+    SigningTime,
+    {SignatureId, PropertiesId}
 ) ->
-    SignedProperties = signed_properties(SigningTime, HashAlgorithm, DigestMethodUri, CertDer),
-    SignatureAttrs = [{<<"xmlns:ds">>, ?DSIG_NAMESPACE_URI}, {<<"Id">>, ?SIGNATURE_ID}],
+    SignedProperties = signed_properties(
+        SigningTime,
+        HashAlgorithm,
+        DigestMethodUri,
+        CertDer,
+        PropertiesId
+    ),
+    SignatureAttrs = [{<<"xmlns:ds">>, ?DSIG_NAMESPACE_URI}, {<<"Id">>, SignatureId}],
     SignatureNs = xmlan:namespace_context(
         SignatureAttrs, xmlan:namespace_context(MessageAttrs, #{})
     ),
@@ -87,12 +124,13 @@ construct_signature_without_value(
         xmlan:with_namespace_context(SignedProperties, PropertiesNs),
         HashAlgorithm,
         DigestMethodUri,
-        SignatureMethodUri
+        SignatureMethodUri,
+        PropertiesId
     ),
     KeyInfoElement = key_info(CertDer),
     SignatureElement =
         {<<"ds:Signature">>, SignatureAttrs,
-            [SignedInfo] ++ KeyInfoElement ++ [signature_object(SignedProperties)]},
+            [SignedInfo] ++ KeyInfoElement ++ [signature_object(SignedProperties, SignatureId)]},
     % Sign the subtree in its actual document context; serialize the original tree.
     {ok, SignatureElement, xmlan:with_namespace_context(SignedInfo, SignatureNs)}.
 
@@ -106,7 +144,9 @@ key_info(CertDer) when is_binary(CertDer) ->
         ]}
     ].
 
-signed_info(Message, SignedProperties, HashAlgorithm, DigestMethodUri, SignatureMethodUri) ->
+signed_info(
+    Message, SignedProperties, HashAlgorithm, DigestMethodUri, SignatureMethodUri, PropertiesId
+) ->
     MessageDigest = signerl_dsig_utils:digest_base64(
         HashAlgorithm, xmlan_c14n:canonicalize(Message)
     ),
@@ -124,21 +164,28 @@ signed_info(Message, SignedProperties, HashAlgorithm, DigestMethodUri, Signature
         reference(
             [{<<"URI">>, ""}],
             [
-                {<<"ds:Transforms">>, [], [
-                    {<<"ds:Transform">>,
-                        [{<<"Algorithm">>, ?DSIG_ENVELOPED_SIGNATURE_TRANSFORM_URI}], []}
-                ]},
+                transforms([?DSIG_ENVELOPED_SIGNATURE_TRANSFORM_URI, ?DSIG_C14N11_ALGO_URI]),
                 DigestMethodElement,
                 MessageDigestElement
             ]
         ),
         reference(
             [
-                {<<"URI">>, "#" ++ ?SIGNED_PROPERTIES_ID},
+                {<<"URI">>, "#" ++ PropertiesId},
                 {<<"Type">>, ?XADES_SIGNED_PROPERTIES_TYPE_URI}
             ],
-            [DigestMethodElement, SignedPropertiesDigestElement]
+            [
+                transforms([?DSIG_C14N11_ALGO_URI]),
+                DigestMethodElement,
+                SignedPropertiesDigestElement
+            ]
         )
+    ]}.
+
+transforms(Algorithms) ->
+    {<<"ds:Transforms">>, [], [
+        {<<"ds:Transform">>, [{<<"Algorithm">>, Algorithm}], []}
+     || Algorithm <- Algorithms
     ]}.
 
 digest_method_element(DigestMethodUri) ->
@@ -155,20 +202,20 @@ add_signature_value({<<"ds:Signature">>, Attrs, Content}, SignatureValue) ->
         | Rest
     ]}.
 
-signature_object(SignedProperties) ->
+signature_object(SignedProperties, SignatureId) ->
     {<<"ds:Object">>, [], [
         {<<"xades:QualifyingProperties">>,
             [
                 {<<"xmlns:xades">>, ?XADES_NAMESPACE_URI},
-                {<<"Target">>, "#" ++ ?SIGNATURE_ID}
+                {<<"Target">>, "#" ++ SignatureId}
             ],
             [SignedProperties]}
     ]}.
 
-signed_properties(SigningTime, HashAlgorithm, DigestMethodUri, CertDer) ->
+signed_properties(SigningTime, HashAlgorithm, DigestMethodUri, CertDer, PropertiesId) ->
     SigningTimeElement = {<<"xades:SigningTime">>, [], [binary_to_list(SigningTime)]},
     CertElements = signing_certificate_v2_elements(HashAlgorithm, DigestMethodUri, CertDer),
-    {<<"xades:SignedProperties">>, [{<<"Id">>, ?SIGNED_PROPERTIES_ID}], [
+    {<<"xades:SignedProperties">>, [{<<"Id">>, PropertiesId}], [
         {<<"xades:SignedSignatureProperties">>, [], [SigningTimeElement | CertElements]}
     ]}.
 

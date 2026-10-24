@@ -1,9 +1,9 @@
 # Public signing and verification contract
 
-This describes the public API and the decisions that guide the remaining 0.3
-work. The [selected profile](signing_profile.md) separates its target checks from
-implementation still tracked in #52/#54/#55. This contract does not claim those
-unfinished checks already pass.
+This describes the public API and the remaining 0.3 decisions. The
+[selected profile](signing_profile.md) separates the implemented signature
+reference/identity/algorithm checks (#52) from certificate/property enforcement
+still tracked in #54/#55.
 
 ## Operations and inputs
 
@@ -50,12 +50,17 @@ output. Certificate-less calls still include SignedProperties and SigningTime.
 | Rejected XML | `{error, invalid_xml}` or another xmlan parse error propagated unchanged. |
 | Unsupported hash atom | `{error, unsupported_hash}` in signing and verification. |
 | Unsupported signing key kind | `{error, unsupported_key}`. |
+| Signing input already contains any XMLDSig Signature | `{error, already_signed}`. |
+| Duplicate `Id`/`xml:id` values when signing | `{error, invalid_signature_structure}`. |
+| Additional/nested signatures or invalid reference IDs, target, algorithms or transform pair | `{error, invalid_signed_info}` or `{error, invalid_signature_structure}`. |
 | Invalid signing time | `{error, invalid_signing_time}`. |
 | Document/reference digest or cryptographic signature mismatch | `false`. |
 | Missing/malformed recognized signature structure | `{error, Reason}`, for example `missing_signature`, `missing_signature_value`, `invalid_base64`, `invalid_signed_info` or `invalid_signature_structure`. |
 | Certificate digest mismatch | `{error, cert_digest_mismatch}`. |
 
-An otherwise valid but unrelated RSA key produces `false`. Invalid OTP key terms,
+An otherwise valid but unrelated RSA key produces `false`. A supplied RSA/EC key
+whose algorithm disagrees with SignatureMethod produces
+`{error, invalid_signature_structure}`. Invalid OTP key terms,
 malformed DER supplied as a certificate argument, or malformed data inside a PEM
 entry may raise native Erlang/OTP errors. These low-level crypto inputs are the
 caller's responsibility; Signerl does not catch and rewrap every OTP failure.
@@ -71,18 +76,33 @@ contract rather than silently translate exceptions.
 
 ## Compatibility and retained XAdES decisions
 
-These decisions constrain follow-up implementation; they do not mark it complete.
+Reference rules are implemented in #52; certificate and known-property decisions
+still constrain the follow-up tasks.
 
-- **Reference compatibility (#52):** generate explicit C14N 1.1 reference
-  transforms for new signatures. Preserve verification of the previous fixed
-  reference pair as a narrow compatibility case: document transforms contain
+- **Reference compatibility (#52):** new signatures declare document transforms
+  `[enveloped-signature, c14n11]` and SignedProperties transforms `[c14n11]`.
+  Verification preserves the previous complete reference pair as a narrow
+  compatibility case: document transforms contain
   enveloped-signature removal only, and SignedProperties has no Transforms.
   That legacy case retains the project's existing implicit C14N 1.1 processing;
   it is not general support for omitted transforms or all XMLDSig defaults.
-  Accept only the complete new pair or complete legacy pair, not arbitrary
-  mixtures/extra transforms. In either case, enforce every reference, unique
-  actual IDs/targets, declared algorithms and signature placement/count. Legacy
-  compatibility must not preserve acceptance of malformed signatures.
+  Only the complete new pair or complete legacy pair is accepted; mixtures,
+  extra/reordered transforms, duplicate/empty Transforms containers and transform
+  parameters are rejected. Whitespace and namespace declarations are permitted.
+  SignedInfo separately supports C14N 1.1 or parameterless Exclusive C14N.
+  Exactly two references are required: `URI=""` with no Type, and `URI="#actual-id"`
+  with the required SignedProperties Type. Reference order may vary; external,
+  unknown and additional references are rejected without dereferencing them.
+  Signature/@Id and SignedProperties/@Id must be nonempty, unique document-wide,
+  and agree with QualifyingProperties/@Target and the properties reference.
+  Unqualified `Id` and `xml:id` values share the collision checks. Only one
+  XMLDSig Signature is allowed, directly under the document element; signing
+  rejects any existing Signature at any depth. Lookalikes in other namespaces
+  remain ordinary signed content. Generated IDs use the usual names when free,
+  or a deterministic numeric suffix when payload IDs reserve those names.
+  SHA-256 digest methods and the signature method must agree with the actual
+  hash/key operation in both formats; legacy compatibility has no validation
+  exemption.
 - **Certificate binding (#54):** the retained certificate-bearing profile pairs
   a valid embedded X509Certificate with SigningCertificateV2. Reject malformed,
   duplicate, missing or one-sided certificate metadata rather than report

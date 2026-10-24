@@ -361,10 +361,7 @@ verify_returns_error_without_signature_element(Config) ->
     ?assertEqual({error, missing_signature}, signerl:verify(UnsignedPath, sha256, PublicKey)),
     SignedMessage = signerl:sign(RawMessage, sha256, SignKey),
     test_helpers:parse_verified_message(SignedMessage, PublicKey),
-    DoubleSignedMessage = signerl:sign(SignedMessage, sha256, SignKey),
-    ?assertEqual(
-        {error, missing_signature}, signerl:verify(DoubleSignedMessage, sha256, PublicKey)
-    ).
+    ?assertEqual({error, already_signed}, signerl:sign(SignedMessage, sha256, SignKey)).
 
 verify_returns_error_without_signature_value(Config) ->
     PublicKey = ?config(rsa_public_key, Config),
@@ -553,7 +550,10 @@ verify_fails_with_wrong_keys(Config) ->
     EcdsaSignedMessage = signerl:sign(RawMessage, sha256, EcdsaKey),
     test_helpers:parse_verified_message(EcdsaSignedMessage, ?config(ecdsa_public_key, Config)),
     % Wrong key type (RSA key against ECDSA signature) must fail verification.
-    ?assertEqual(false, signerl:verify(EcdsaSignedMessage, sha256, WrongPublicKey)).
+    ?assertEqual(
+        {error, invalid_signature_structure},
+        signerl:verify(EcdsaSignedMessage, sha256, WrongPublicKey)
+    ).
 
 sign_invalid_certificate_der_raises(Config) ->
     RawMessage = ?config(raw_message, Config),

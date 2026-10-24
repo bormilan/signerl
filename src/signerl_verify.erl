@@ -2,24 +2,28 @@
 -feature(maybe_expr, enable).
 -include("signerl_dsig.hrl").
 
--export([extract_signature_data/1, verify_reference_digests/2, c14n_mode/1]).
+-export([extract_signature_data/1, verify_reference_digests/2, c14n_mode/1, verify_signature/3]).
 
 -spec extract_signature_data(Message) -> Result when
     Message :: xmlan:simplified_xml(),
     Result :: {ok, map()} | {error, atom()}.
-extract_signature_data({Tag, Attrs, Content}) ->
+extract_signature_data({Tag, Attrs, Content} = Message) ->
     ParentNs = xmlan:namespace_context(Attrs, #{}),
     {SignatureElements, UnsignedContent} = lists:partition(
         fun(Element) -> signerl_dsig_utils:is_signature_element(Element, ParentNs) end, Content
     ),
-    case SignatureElements of
-        [SignatureElement] ->
+    {Count, Ids} = signerl_dsig_utils:signature_inventory(Message),
+    case {SignatureElements, Count} of
+        {[SignatureElement], 1} ->
             decode_signature_data(
                 xmlan:with_namespace_context(SignatureElement, ParentNs),
-                {Tag, Attrs, UnsignedContent}
+                {Tag, Attrs, UnsignedContent},
+                Ids
             );
+        {[], 0} ->
+            {error, missing_signature};
         _ ->
-            {error, missing_signature}
+            {error, invalid_signature_structure}
     end.
 
 -spec verify_reference_digests(SignatureData, HashAlgorithm) -> Result when
@@ -37,7 +41,8 @@ verify_reference_digests(
                 digest_value := SignedPropertiesDigestValue
             } = SignedPropertiesReference
         } = References,
-        key_info := KeyInfo
+        key_info := KeyInfo,
+        id_counts := Ids
     },
     HashAlgorithm
 ) ->
@@ -45,14 +50,13 @@ verify_reference_digests(
         {ok, DigestMethodUri} ?= digest_method_uri(HashAlgorithm),
         SignatureMethodUris = [?DSIG_SIG_RSA_SHA256_URI, ?DSIG_SIG_ECDSA_SHA256_URI],
         ok ?= validate_signed_info_algorithms(References, SignatureMethodUris),
+        ok ?= validate_reference_pair(DocumentReference, SignedPropertiesReference),
+        {ok, SignedPropertiesElement} ?=
+            resolve_signed_properties(SignatureElement, SignedPropertiesReference, Ids),
         ok ?= validate_document_reference(DocumentReference, DigestMethodUri),
         ok ?= validate_signed_properties_reference(SignedPropertiesReference, DigestMethodUri),
         ok ?= verify_cert_digest(SignedProperties, KeyInfo, HashAlgorithm),
-        {ok, SignedPropertiesElement} ?=
-            signerl_xades_xml:find_signed_properties_element(SignatureElement),
-        DocumentPayload = xmlan_c14n:canonicalize(
-            signerl_dsig_utils:remove_signature_elements(UnsignedMessage)
-        ),
+        DocumentPayload = xmlan_c14n:canonicalize(UnsignedMessage),
         SignedPropertiesPayload = xmlan_c14n:canonicalize(SignedPropertiesElement),
         DocumentDigest = crypto:hash(HashAlgorithm, DocumentPayload),
         SignedPropertiesDigest = crypto:hash(HashAlgorithm, SignedPropertiesPayload),
@@ -78,7 +82,7 @@ verify_reference_digests(
 verify_reference_digests(_, _) ->
     {error, invalid_signature_structure}.
 
-decode_signature_data(SignatureElement, UnsignedMessage) ->
+decode_signature_data(SignatureElement, UnsignedMessage, Ids) ->
     maybe
         {ok, SignatureBytes} ?= signature_value(SignatureElement),
         {ok, SignedProperties} ?= signerl_signed_properties:extract(SignatureElement),
@@ -92,7 +96,8 @@ decode_signature_data(SignatureElement, UnsignedMessage) ->
             signature_element => SignatureElement,
             signed_info_element => SignedInfoElement,
             references => References,
-            key_info => KeyInfo
+            key_info => KeyInfo,
+            id_counts => Ids
         }}
     end.
 
@@ -118,13 +123,9 @@ signed_info_element(SignatureElement) ->
 
 signed_info_references(SignedInfoElement) ->
     maybe
-        {ok, {_, C14NAttrs, _}} ?=
-            xmlan:find_path([?DSIG_NAME(<<"CanonicalizationMethod">>)], SignedInfoElement),
-        {ok, C14NAlgorithm} ?= xmlan:attr_value(<<"Algorithm">>, C14NAttrs),
-        {ok, {_, SignatureMethodAttrs, _}} ?=
-            xmlan:find_path([?DSIG_NAME(<<"SignatureMethod">>)], SignedInfoElement),
+        {ok, C14NAlgorithm} ?= method_algorithm(<<"CanonicalizationMethod">>, SignedInfoElement),
         {ok, SignatureMethodAlgorithm} ?=
-            xmlan:attr_value(<<"Algorithm">>, SignatureMethodAttrs),
+            method_algorithm(<<"SignatureMethod">>, SignedInfoElement),
         ReferenceElements = xmlan:find_children(
             ?DSIG_NAME(<<"Reference">>), SignedInfoElement
         ),
@@ -141,7 +142,7 @@ signed_info_references(SignedInfoElement) ->
             {error, invalid_signed_info}
     end.
 
-decode_reference_elements(ReferenceElements) ->
+decode_reference_elements([_, _] = ReferenceElements) ->
     DocumentReferences =
         [
             Reference
@@ -152,7 +153,8 @@ decode_reference_elements(ReferenceElements) ->
         [
             Reference
          || Reference = {_, Attrs, _} <- ReferenceElements,
-            xmlan:attr_value(<<"URI">>, Attrs) =:= {ok, "#" ++ ?SIGNED_PROPERTIES_ID}
+            {ok, [$# | Id]} <- [xmlan:attr_value(<<"URI">>, Attrs)],
+            Id =/= []
         ],
     case {DocumentReferences, SignedPropertiesReferences} of
         {[DocumentReferenceElement], [SignedPropertiesReferenceElement]} ->
@@ -164,16 +166,15 @@ decode_reference_elements(ReferenceElements) ->
             end;
         _ ->
             {error, invalid_reference}
-    end.
+    end;
+decode_reference_elements(_) ->
+    {error, invalid_reference}.
 
 decode_reference({_, Attrs, _} = ReferenceElement) ->
     maybe
         {ok, Uri} ?= xmlan:attr_value(<<"URI">>, Attrs),
-        {ok, TransformUris} ?= transform_uris(ReferenceElement),
-        {ok, DigestMethodElement} ?=
-            xmlan:find_path([?DSIG_NAME(<<"DigestMethod">>)], ReferenceElement),
-        {ok, DigestMethodUri} ?=
-            xmlan:attr_value(<<"Algorithm">>, element(2, DigestMethodElement)),
+        {ok, TransformUris, TransformsPresent} ?= transform_uris(ReferenceElement),
+        {ok, DigestMethodUri} ?= method_algorithm(<<"DigestMethod">>, ReferenceElement),
         {ok, DigestValueElement} ?=
             xmlan:find_path([?DSIG_NAME(<<"DigestValue">>)], ReferenceElement),
         {ok, DigestValueText} ?= xmlan:single_text(DigestValueElement),
@@ -182,6 +183,7 @@ decode_reference({_, Attrs, _} = ReferenceElement) ->
             uri => Uri,
             type => xmlan:attr_value_or_undefined(<<"Type">>, Attrs),
             transforms => TransformUris,
+            transforms_present => TransformsPresent,
             digest_method => DigestMethodUri,
             digest_value => DigestValue
         }}
@@ -191,27 +193,116 @@ decode_reference({_, Attrs, _} = ReferenceElement) ->
     end.
 
 transform_uris(ReferenceElement) ->
-    case xmlan:find_path([?DSIG_NAME(<<"Transforms">>)], ReferenceElement) of
-        {ok, {_, Attrs, TransformElements}} ->
-            decode_transform_uris(TransformElements, xmlan:namespace_context(Attrs, #{}), []);
-        {error, not_found} ->
-            {ok, []}
+    case xmlan:find_children(?DSIG_NAME(<<"Transforms">>), ReferenceElement) of
+        [{_, Attrs, TransformElements}] ->
+            maybe
+                true ?= only_attributes([], Attrs),
+                {ok, Uris} ?=
+                    decode_transform_uris(
+                        TransformElements,
+                        xmlan:namespace_context(Attrs, #{}),
+                        []
+                    ),
+                {ok, Uris, true}
+            else
+                _ -> {error, invalid_reference}
+            end;
+        [] ->
+            {ok, [], false};
+        _ ->
+            {error, invalid_reference}
     end.
 
 decode_transform_uris([], _ParentNs, Acc) ->
     {ok, lists:reverse(Acc)};
-decode_transform_uris([{Name, Attrs, []} = Element | Rest], ParentNs, Acc) when is_binary(Name) ->
-    case xmlan:expanded_name(Element, ParentNs) of
-        ?DSIG_NAME(<<"Transform">>) ->
-            case xmlan:attr_value(<<"Algorithm">>, Attrs) of
-                {ok, Algorithm} -> decode_transform_uris(Rest, ParentNs, [Algorithm | Acc]);
-                {error, _} = Err -> Err
-            end;
-        _ ->
-            {error, invalid_reference}
+decode_transform_uris([{Name, Attrs, Children} = Element | Rest], ParentNs, Acc) when
+    is_binary(Name)
+->
+    maybe
+        ?DSIG_NAME(<<"Transform">>) ?= xmlan:expanded_name(Element, ParentNs),
+        true ?= only_attributes([<<"Algorithm">>], Attrs),
+        true ?= whitespace_only(Children),
+        {ok, Algorithm} ?= xmlan:attr_value(<<"Algorithm">>, Attrs),
+        decode_transform_uris(Rest, ParentNs, [Algorithm | Acc])
+    else
+        _ -> {error, invalid_reference}
     end;
-decode_transform_uris([_Other | _Rest], _ParentNs, _Acc) ->
+decode_transform_uris([Text | Rest], ParentNs, Acc) ->
+    case whitespace_only([Text]) of
+        true -> decode_transform_uris(Rest, ParentNs, Acc);
+        false -> {error, invalid_reference}
+    end.
+
+method_algorithm(Name, Parent) ->
+    maybe
+        {ok, {_, Attrs, Content}} ?= xmlan:find_path([?DSIG_NAME(Name)], Parent),
+        true ?= only_attributes([<<"Algorithm">>], Attrs),
+        true ?= whitespace_only(Content),
+        xmlan:attr_value(<<"Algorithm">>, Attrs)
+    else
+        _ -> {error, unsupported_algorithm}
+    end.
+
+only_attributes(Allowed, Attrs) ->
+    lists:all(
+        fun
+            ({<<"xmlns">>, _}) -> true;
+            ({<<"xmlns:", _/binary>>, _}) -> true;
+            ({Name, _}) -> lists:member(Name, Allowed)
+        end,
+        Attrs
+    ).
+
+whitespace_only(Content) ->
+    lists:all(
+        fun
+            (Text) when is_list(Text); is_binary(Text) ->
+                lists:all(
+                    fun(Char) -> lists:member(Char, " \t\r\n") end,
+                    unicode:characters_to_list(Text)
+                );
+            (_) ->
+                false
+        end,
+        Content
+    ).
+
+validate_reference_pair(
+    #{transforms := [?DSIG_ENVELOPED_SIGNATURE_TRANSFORM_URI, ?DSIG_C14N11_ALGO_URI]},
+    #{transforms := [?DSIG_C14N11_ALGO_URI]}
+) ->
+    ok;
+validate_reference_pair(
+    #{transforms := [?DSIG_ENVELOPED_SIGNATURE_TRANSFORM_URI]},
+    #{transforms := [], transforms_present := false}
+) ->
+    ok;
+validate_reference_pair(_, _) ->
     {error, invalid_reference}.
+
+resolve_signed_properties({_, SignatureAttrs, _} = Signature, #{uri := Uri}, Ids) ->
+    maybe
+        true ?= lists:all(fun(Count) -> Count =:= 1 end, maps:values(Ids)),
+        {ok, SignatureId} ?= xmlan:attr_value(<<"Id">>, SignatureAttrs),
+        true ?= SignatureId =/= [],
+        1 ?= maps:get(SignatureId, Ids, 0),
+        {ok, {_, QualifyingAttrs, _} = Qualifying} ?=
+            xmlan:find_path(
+                [?DSIG_NAME(<<"Object">>), ?XADES_NAME(<<"QualifyingProperties">>)], Signature
+            ),
+        {ok, "#" ++ SignatureId} ?= xmlan:attr_value(<<"Target">>, QualifyingAttrs),
+        {ok, {_, PropertiesAttrs, _} = Properties} ?=
+            xmlan:find_path(
+                [?XADES_NAME(<<"SignedProperties">>)], Qualifying
+            ),
+        {ok, PropertiesId} ?= xmlan:attr_value(<<"Id">>, PropertiesAttrs),
+        true ?= PropertiesId =/= [],
+        1 ?= maps:get(PropertiesId, Ids, 0),
+        true ?= Uri =:= "#" ++ PropertiesId,
+        {ok, Properties}
+    else
+        _ -> {error, invalid_reference}
+    end.
 
 validate_signed_info_algorithms(References, SignatureMethodUris) ->
     maybe
@@ -232,7 +323,7 @@ is_supported_c14n(_) -> false.
 validate_document_reference(Reference, DigestMethodUri) ->
     maybe
         {ok, ""} ?= maps:find(uri, Reference),
-        {ok, [?DSIG_ENVELOPED_SIGNATURE_TRANSFORM_URI]} ?= maps:find(transforms, Reference),
+        {ok, undefined} ?= maps:find(type, Reference),
         {ok, DigestMethodUri} ?= maps:find(digest_method, Reference),
         ok
     else
@@ -242,9 +333,7 @@ validate_document_reference(Reference, DigestMethodUri) ->
 
 validate_signed_properties_reference(Reference, DigestMethodUri) ->
     maybe
-        {ok, "#" ++ ?SIGNED_PROPERTIES_ID} ?= maps:find(uri, Reference),
         {ok, ?XADES_SIGNED_PROPERTIES_TYPE_URI} ?= maps:find(type, Reference),
-        {ok, []} ?= maps:find(transforms, Reference),
         {ok, DigestMethodUri} ?= maps:find(digest_method, Reference),
         ok
     else
@@ -284,6 +373,32 @@ c14n_mode(#{references := #{c14n_algorithm := ?DSIG_EXC_C14N_ALGO_URI}}) ->
     exc_c14n;
 c14n_mode(_) ->
     c14n11.
+
+-spec verify_signature(map(), atom(), public_key:public_key() | public_key:private_key()) ->
+    boolean() | {error, invalid_signature_structure}.
+verify_signature(
+    #{
+        references := #{signature_algorithm := Algorithm},
+        signed_info_element := SignedInfo,
+        signature_bytes := SignatureBytes
+    } = Data,
+    Hash,
+    Key
+) ->
+    case verification_method_uri(Key) of
+        Algorithm ->
+            Bytes = xmlan_c14n:canonicalize(SignedInfo, c14n_mode(Data)),
+            public_key:verify(Bytes, Hash, SignatureBytes, Key);
+        _ ->
+            {error, invalid_signature_structure}
+    end.
+
+verification_method_uri({'RSAPublicKey', _, _}) ->
+    ?DSIG_SIG_RSA_SHA256_URI;
+verification_method_uri(Key) when is_tuple(Key), element(1, Key) =:= 'RSAPrivateKey' ->
+    ?DSIG_SIG_RSA_SHA256_URI;
+verification_method_uri({{'ECPoint', _}, _}) ->
+    ?DSIG_SIG_ECDSA_SHA256_URI.
 
 extract_key_info(SignatureElement) ->
     case xmlan:find_path([?DSIG_NAME(<<"KeyInfo">>)], SignatureElement) of
