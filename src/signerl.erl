@@ -87,12 +87,8 @@ verify(SignedMessage, HashAlgorithm, Key) when is_binary(SignedMessage) ->
     maybe
         {ok, ParsedMessage} ?= xmlan:parse_binary(SignedMessage),
         {ok, SignatureData} ?= signerl_verify:extract_signature_data(ParsedMessage),
-        {ok, SignatureBytes} ?= maps:find(signature_bytes, SignatureData),
-        {ok, SignedInfoElement} ?= maps:find(signed_info_element, SignatureData),
         true ?= signerl_verify:verify_reference_digests(SignatureData, HashAlgorithm),
-        C14NMode = signerl_verify:c14n_mode(SignatureData),
-        SignedInfoBytes = xmlan_c14n:canonicalize(SignedInfoElement, C14NMode),
-        public_key:verify(SignedInfoBytes, HashAlgorithm, SignatureBytes, Key)
+        signerl_verify:verify_signature(SignatureData, HashAlgorithm, Key)
     else
         false ->
             false;

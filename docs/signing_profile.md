@@ -2,8 +2,8 @@
 
 The maintainer confirmed on 17 October 2026 that XAdES signing-time and
 certificate properties stay in the 1.0 scope. This document records the selected
-profile and the work needed to enforce it. It does not claim that the unfinished
-checks below already pass. [Issue #64](https://github.com/bormilan/signerl/issues/64)
+profile, the reference/identity/algorithm enforcement completed in #52 and the
+certificate/property checks still unfinished below. [Issue #64](https://github.com/bormilan/signerl/issues/64)
 is complete as profile definition. The 0.3 milestone and implementation tasks
 below remain open until the selected behavior is implemented and validated.
 
@@ -48,8 +48,8 @@ Signing normally returns signed XML or `{error, Reason}`. Verification normally
 returns `true`, `false` for a cryptographic mismatch, or `{error, Reason}` for a
 rejected input/structure. Existing file errors retain `{error, {file_error, Reason}}`.
 The [public API contract](api_contract.md) records supported inputs, specific
-returned errors and deliberate native failures for invalid low-level crypto
-material. `sha256` is the only supported hash; both operations return
+returned errors, explicit signing-policy exceptions and native failures for
+invalid low-level crypto material. `sha256` is the only supported hash; both operations return
 `{error, unsupported_hash}` for other hash atoms on otherwise valid inputs.
 Malformed supplied DER/OTP key terms can raise native errors; public arities and
 file/key conveniences remain. #59 tracks final alignment as correctness and
@@ -81,12 +81,11 @@ application or dependency-installation check.
    implemented behavior later in this milestone.
 2. [#52](https://github.com/bormilan/signerl/issues/52): enforce every reference,
    unique actual IDs/targets, declared algorithms/key agreement and transform
-   chains. Current reference decoding can ignore extra references, IDs/targets
-   are incompletely bound and method validation is only an allowlist. Generated
-   references currently omit explicit canonicalization transforms; update them
-   before treating the selected profile as complete. Existing implicit-reference
-   signatures retain only the complete legacy pair described in the API contract;
-   this must not preserve the existing reference/ID/algorithm acceptance gaps.
+   chains: implemented. New output declares explicit C14N 1.1 for both references;
+   existing implicit-reference signatures retain only the complete legacy pair
+   described in the API contract. Both formats enforce the same reference,
+   identity/target, method/key and placement checks. The full selected profile
+   still needs the certificate/property work below.
 3. [#54](https://github.com/bormilan/signerl/issues/54): distinguish absent,
    malformed and valid certificate metadata; complete key/certificate binding.
    A successful signature check alone does not establish chain trust, validity
