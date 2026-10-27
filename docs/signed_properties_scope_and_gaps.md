@@ -27,14 +27,18 @@ and SigningTime. The [API contract](api_contract.md) records malformed-input and
 return/raise behavior; [#59](https://github.com/bormilan/signerl/issues/59) remains
 open for final alignment after correctness/ownership work.
 
+#54 validates the paired certificate metadata and signature/key binding. Successful
+verification does not establish certificate-chain trust, validity periods or
+revocation status.
+
 The property readers perform the following extraction/checks. Extraction alone
 does not imply semantic validation, complete cardinality enforcement or trust.
 
 | Property | Current boundary |
 | --- | --- |
 | SigningTime | Required; validates UTC format and real calendar dates, completed in #56. |
-| SigningCertificate | Presence marker; not a full certificate-property validator. |
-| SigningCertificateV2 | Extracts certificate digest and optional issuer metadata; full malformed/missing metadata and certificate/key binding remain #54. |
+| SigningCertificate | Extraction presence marker; alone it cannot satisfy the certificate-bearing profile. |
+| SigningCertificateV2 | Requires the embedded certificate/V2 pair, rejects malformed/duplicate fields, checks digest and optional issuer/serial, and binds the certificate key to the signature (#54). Both absent is certificate-less signing. |
 | SignaturePolicyIdentifier | Reads implied or explicit policy identifier/digest data; does not establish that policy material matches the declared digest. |
 | SignatureProductionPlace | Extracts recognized text fields; malformed/duplicate field treatment needs #55. |
 | SignerRole | Extracts claimed/certified role text; does not prove certified-role validity. |
@@ -47,10 +51,6 @@ XAdES properties are structurally or semantically validated.
 
 ## Remaining ownership
 
-- [#54](https://github.com/bormilan/signerl/issues/54): distinguish absent,
-  malformed and valid certificate metadata and enforce the chosen binding
-  contract. Successful signature verification does not establish certificate
-  chain trust, validity periods or revocation status.
 - [#55](https://github.com/bormilan/signerl/issues/55): reject ambiguous or
   malformed known containers/fields, including optional-container lookup errors
   that currently become absence. Decide unknown-extension handling separately.

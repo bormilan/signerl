@@ -2,8 +2,8 @@
 
 The maintainer confirmed on 17 October 2026 that XAdES signing-time and
 certificate properties stay in the 1.0 scope. This document records the selected
-profile, the reference/identity/algorithm enforcement completed in #52 and the
-certificate/property checks still unfinished below. [Issue #64](https://github.com/bormilan/signerl/issues/64)
+profile, the reference/identity/algorithm and certificate-binding enforcement
+completed in #52/#54, and the known-property checks still unfinished below. [Issue #64](https://github.com/bormilan/signerl/issues/64)
 is complete as profile definition. The 0.3 milestone and implementation tasks
 below remain open until the selected behavior is implemented and validated.
 
@@ -22,7 +22,7 @@ below remain open until the selected behavior is implemented and validated.
 | XAdES | SignedProperties and SignedSignatureProperties remain, including SigningTime. Existing certificate properties remain when a certificate is supplied. |
 | Time | A valid UTC timestamp; callers may supply controlled time with `sign/5`. The signing time is covered by the SignedProperties digest. |
 | Keys and files | Retain caller-supplied key terms, PEM key paths, binary XML and XML file paths. Verification uses the caller's supplied verification key. |
-| Certificates | Retain optional certificate input, embedded X509Certificate and SigningCertificateV2 digest/issuer metadata. Present malformed metadata must not silently disable checks. Certificate binding is completed in #54. |
+| Certificates | Optional matching certificate input; one embedded X509Certificate paired with SigningCertificateV2. Validate DER, digest, optional issuer/serial and key binding; reject malformed, duplicate or one-sided metadata. Implemented in #54. |
 
 These restrictions select a small application profile; they are not a claim to
 implement every XMLDSig or XAdES option. The existing ECDSA path is not removed
@@ -85,11 +85,12 @@ application or dependency-installation check.
    existing implicit-reference signatures retain only the complete legacy pair
    described in the API contract. Both formats enforce the same reference,
    identity/target, method/key and placement checks. The full selected profile
-   still needs the certificate/property work below.
+   still needs the known-property work below.
 3. [#54](https://github.com/bormilan/signerl/issues/54): distinguish absent,
-   malformed and valid certificate metadata; complete key/certificate binding.
-   A successful signature check alone does not establish chain trust, validity
-   periods or revocation status.
+   malformed and valid certificate metadata and enforce key/certificate binding:
+   implemented. Optional issuer/serial data is checked when present. Both metadata
+   components absent remains certificate-less signing. A successful binding check
+   does not establish chain trust, validity periods or revocation status.
 4. [#55](https://github.com/bormilan/signerl/issues/55): reject ambiguous or
    malformed known signed-property containers. Keep unknown-extension policy
    separate from known-field validation. PR #48 supplied structural readers;

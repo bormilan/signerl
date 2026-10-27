@@ -2,8 +2,8 @@
 
 This describes the public API and the remaining 0.3 decisions. The
 [selected profile](signing_profile.md) separates the implemented signature
-reference/identity/algorithm checks (#52) from certificate/property enforcement
-still tracked in #54/#55.
+reference/identity/algorithm checks (#52) and certificate binding (#54) from
+known-property enforcement still tracked in #55.
 
 ## Operations and inputs
 
@@ -56,10 +56,16 @@ output. Certificate-less calls still include SignedProperties and SigningTime.
 | Invalid signing time | `{error, invalid_signing_time}`. |
 | Document/reference digest or cryptographic signature mismatch | `false`. |
 | Missing/malformed recognized signature structure | `{error, Reason}`, for example `missing_signature`, `missing_signature_value`, `invalid_base64`, `invalid_signed_info` or `invalid_signature_structure`. |
-| Certificate digest mismatch | `{error, cert_digest_mismatch}`. |
+| Supplied signing certificate does not match the signing key/operation | Raises `error:certificate_key_mismatch`. |
+| Present KeyInfo has missing/duplicate X509Data/certificate fields, invalid base64, or the certificate/V2 pair is incomplete | `{error, invalid_certificate_metadata}`. |
+| Embedded certificate DER or public key is invalid/unsupported | `{error, invalid_certificate}`. |
+| Malformed/duplicate SigningCertificateV2 fields | `{error, invalid_signing_certificate_v2}` or `{error, duplicate_property}`. |
+| Certificate digest or digest method mismatch | `{error, cert_digest_mismatch}`. |
+| Present issuer/serial metadata does not match the embedded certificate | `{error, cert_issuer_mismatch}`. |
+| Embedded certificate key does not verify the otherwise valid signature | `{error, certificate_key_mismatch}`. |
 
-Already-signed input and duplicate signing identities raise the explicit Signerl
-error reasons shown above. They abort signature construction and propagate to the
+Already-signed input, duplicate signing identities and a mismatched supplied
+signing certificate raise the explicit Signerl error reasons shown above. They abort signature construction and propagate to the
 caller; they are not returned error tuples.
 
 An otherwise valid but unrelated RSA key produces `false`. A supplied RSA/EC key
@@ -81,8 +87,8 @@ contract rather than silently translate exceptions.
 
 ## Compatibility and retained XAdES decisions
 
-Reference rules are implemented in #52; certificate and known-property decisions
-still constrain the follow-up tasks.
+Reference rules (#52) and certificate binding (#54) are implemented. Known-property
+decisions still constrain #55.
 
 - **Reference compatibility (#52):** new signatures declare document transforms
   `[enveloped-signature, c14n11]` and SignedProperties transforms `[c14n11]`.
@@ -108,14 +114,27 @@ still constrain the follow-up tasks.
   SHA-256 digest methods and the signature method must agree with the actual
   hash/key operation in both formats; legacy compatibility has no validation
   exemption.
-- **Certificate binding (#54):** the retained certificate-bearing profile pairs
-  a valid embedded X509Certificate with SigningCertificateV2. Reject malformed,
-  duplicate, missing or one-sided certificate metadata rather than report
-  incomplete binding as success; check digest/issuer metadata and correspondence
-  with the supplied signing/verification key. Both absent is the valid
-  certificate-less path. Current permissive behavior is a known gap, not this
-  target guarantee. No certificate-chain trust, validity-period or revocation
-  decision follows from `true`.
+- **Certificate binding (#54):** certificate-bearing signatures require exactly
+  one embedded X509Certificate in one X509Data/KeyInfo, paired with exactly one
+  SigningCertificateV2/Cert. KeyInfo and X509Data accept only their selected child
+  plus formatting whitespace; extra key fields or nested certificate containers
+  are rejected. Present malformed, duplicate or one-sided metadata is
+  rejected. The embedded value must be a complete DER certificate, with no ignored
+  trailing bytes, containing an rsaEncryption or id-ecPublicKey key for the
+  selected operation; restricted RSA-PSS keys are rejected for PKCS#1 signatures.
+  Its SHA-256 digest
+  must match the signed property. IssuerSerialV2 is optional; when present it must
+  decode and exactly match the DER issuer/directoryName and serial from that
+  certificate. Malformed or duplicate issuer data is not treated as absence.
+  The signature is verified with both the caller's key and the certificate key;
+  declaring a method alone does not establish key binding. Signing also checks
+  the produced signature against the supplied certificate and raises an explicit
+  error on mismatch. An unrelated caller RSA key still returns `false`.
+  Both metadata components absent is the valid certificate-less path. The legacy
+  SigningCertificate marker alone cannot substitute for the required pair.
+  Invalid embedded DER/key errors become certificate errors; invalid caller
+  key/DER inputs retain the native-failure policy above. Successful verification
+  does not establish certificate-chain trust, validity periods or revocation.
 - **Optional properties (#37/#55):** 1.0 promises supported structural handling,
   not policy-material digest verification, certified-role certification or full
   URI/MIME/referenced-object semantics. Those semantic extensions are deferred

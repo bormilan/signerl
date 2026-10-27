@@ -30,3 +30,8 @@
 % Expanded element names: namespace URI, local name (prefix-independent).
 -define(DSIG_NAME(Local), {<<?DSIG_NAMESPACE_URI>>, Local}).
 -define(XADES_NAME(Local), {<<?XADES_NAMESPACE_URI>>, Local}).
+
+% SubjectPublicKeyInfo algorithms used for certificate/key binding.
+-define(DSIG_RSA_KEY_OID, {1, 2, 840, 113549, 1, 1, 1}).
+-define(DSIG_RSA_PSS_KEY_OID, {1, 2, 840, 113549, 1, 1, 10}).
+-define(DSIG_EC_KEY_OID, {1, 2, 840, 10045, 2, 1}).
