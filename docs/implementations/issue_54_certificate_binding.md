@@ -98,3 +98,14 @@ Recovery snapshots, source copies, diffs and command logs are kept outside tempo
 storage at /Users/milanbor/projects/signerl/.recovery/issue-54-certificate-binding/.
 The local roadmap-sync audit note was stashed before switching branches and
 restored; it is retained outside the issue #54 commit.
+
+## CI compatibility correction
+
+The first matrix run (40468371625, head 5e7f7ec) reproduced an OTP 26/27 compile
+failure: ECPoint is not defined by their narrower OTP-PUB-KEY.hrl. The local
+OTP 28 header layout had allowed that reference. Use the documented public
+public_key.hrl header, which supplies the public-key records across supported
+OTP releases. No gate or test is disabled. After correction, native test,
+flint, Dialyzer and final tall pass again: 150 EUnit + 97 CT, all eight
+modules/total coverage 100%, no failures/skips. All six latest-head CI jobs must
+pass again after pushing; immutable evidence is retained in recovery storage.

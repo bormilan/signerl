@@ -1,6 +1,6 @@
 -module(signerl_cert).
 
--include_lib("public_key/include/OTP-PUB-KEY.hrl").
+-include_lib("public_key/include/public_key.hrl").
 
 -include("signerl_dsig.hrl").
 
