@@ -74,9 +74,14 @@ Malformed XML is rejected through xmlan. File read failures return
 `{error, {file_error, Reason}}`. Malformed supplied key/certificate material can
 raise native OTP errors; the API does not wrap every invalid argument.
 
+New signatures declare explicit C14N 1.1 reference transforms. Verification
+also accepts the complete legacy reference pair, with the same strict reference,
+ID/target, algorithm and signature-placement checks. Signing already-signed XML
+raises `error:already_signed`.
+
 XAdES signing-time and certificate properties stay in scope. The
 [selected profile and implementation sequence](docs/signing_profile.md) separates
-target behavior from unfinished reference, certificate and property checks.
+implemented reference rules from unfinished certificate and property checks.
 Successful signature verification is not certificate-chain trust, validity or
 revocation validation, and internal round trips do not establish full
 XMLDSig/XAdES interoperability. The tracked `priv/key.pem` is public test data.

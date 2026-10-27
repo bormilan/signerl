@@ -14,7 +14,11 @@ certificate also emits SigningCertificateV2 and embedded certificate material.
 The document and SignedProperties have reference digests, and the cryptographic
 signature covers canonicalized SignedInfo. Generic parsing, namespaces,
 serialization and C14N 1.1/Exclusive C14N are provided by xmlan. Canonicalization
-is implemented; it is no longer a missing prerequisite.
+is implemented; it is no longer a missing prerequisite. #52 enforces exactly two
+references, actual unique IDs/targets, declared methods/key agreement and a
+single direct-child signature. New reference chains declare C14N 1.1 explicitly;
+the complete legacy pair remains supported. SignedInfo canonicalization remains
+separate from reference processing. See the API contract for the exact rules.
 
 The public interfaces are `sign/3`, `sign/4`, `sign/5` and `verify/3`. `sign/5`
 allows controlled UTC time; other signing arities use the current UTC time.
@@ -43,10 +47,6 @@ XAdES properties are structurally or semantically validated.
 
 ## Remaining ownership
 
-- [#52](https://github.com/bormilan/signerl/issues/52): exact references, unique
-  actual IDs/targets, declared method/key agreement, signature placement/count,
-  explicit reference transforms and legacy compatibility. SignedInfo
-  canonicalization and reference transform processing are separate concerns.
 - [#54](https://github.com/bormilan/signerl/issues/54): distinguish absent,
   malformed and valid certificate metadata and enforce the chosen binding
   contract. Successful signature verification does not establish certificate

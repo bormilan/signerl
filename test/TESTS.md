@@ -22,8 +22,9 @@ type aliases or installation contracts.
 | `signerl_cert_test.erl` | 1 | Exact issuer/serial DER against OTP ASN.1. |
 | `signerl_cert_helpers_test.erl` | 6 | Fixture paths and missing/malformed PEM failures. |
 | `signerl_api_SUITE.erl` | 73 | Public binary/file/key/certificate workflows, RSA and legacy ECDSA, fixed time, content preservation, hash errors, native crypto-input failures, declaration handling, tampering and independent signatures. |
+| `signerl_signature_policy_SUITE.erl` | 11 | Public reference count/targets, actual IDs, method/key agreement, explicit/legacy transform pairs and parameters, placement, already-signed rejection and generated ID collisions. |
 
-Total: **150 EUnit + 73 Common Test = 223 cases**. Required coverage is **100%**
+Total: **150 EUnit + 84 Common Test = 234 cases**. Required coverage is **100%**
 of Signerl production modules. The independent xmlsec1 signatures stay in
 `examples/independent/`; `examples/payloads/` contains inputs used for actual
 sign/verify/tamper cases.
@@ -60,6 +61,7 @@ Focused examples:
 rebar3 eunit --module signerl_dsig_utils_test
 rebar3 eunit --module signerl_verify_test
 rebar3 ct --suite test/signerl_api_SUITE
+rebar3 ct --suite test/signerl_signature_policy_SUITE
 ```
 
 ## Existing build caches after the suite moves
@@ -189,5 +191,12 @@ for the clean/warm checks and lint failure probes.
 - File workflow tests write outputs only to CT's temporary directory. No test
   overwrites a tracked XML fixture.
 
-Public signing/verification behavior is unchanged. Clock behavior is #56;
+The policy suite refreshes document/properties digests and re-signs SignedInfo
+with OTP after each mutation, independently of Signerl's signature decoding.
+Each rejected structure has a passing cryptographic signature check; positive
+controls cover both complete reference formats, custom actual IDs and Exclusive
+C14N SignedInfo. It tests Signerl's signature policy, not xmlan internals.
+
+#52 tightens malformed-signature rejection and generates explicit reference
+transforms while preserving the complete legacy pair. Clock behavior is #56;
 bidirectional Python/Java interoperability CI remains post-1.0 work in #40.

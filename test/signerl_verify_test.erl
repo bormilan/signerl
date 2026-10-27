@@ -510,7 +510,7 @@ replace_document_reference_transform_algorithm(Signature, Algorithm) ->
     with_document_reference(
         Signature,
         fun({<<"ds:Reference">>, DocAttrs, [Transforms, DigestMethod, DigestValue]}) ->
-            {<<"ds:Transforms">>, TransformsAttrs, [{<<"ds:Transform">>, _TransformAttrs, []}]} =
+            {<<"ds:Transforms">>, TransformsAttrs, _ExistingTransforms} =
                 Transforms,
             {<<"ds:Reference">>, DocAttrs, [
                 {<<"ds:Transforms">>, TransformsAttrs, [
