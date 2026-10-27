@@ -63,10 +63,26 @@ build_signature_element_with_method_uri(
         ),
     SignedInfoBytes = xmlan_c14n:canonicalize(SignedInfo),
     SignatureBytes = public_key:sign(SignedInfoBytes, HashAlgorithm, Key),
+    ok = validate_certificate_key(
+        CertDer,
+        SignatureMethodUri,
+        SignedInfoBytes,
+        HashAlgorithm,
+        SignatureBytes
+    ),
     SignatureValue = base64:encode(SignatureBytes),
     SignatureElement =
         add_signature_value(SignatureElementWithoutValue, binary_to_list(SignatureValue)),
     {ok, SignatureElement}.
+
+validate_certificate_key(undefined, _Method, _Bytes, _Hash, _Signature) ->
+    ok;
+validate_certificate_key(CertDer, Method, Bytes, Hash, Signature) ->
+    Certificate = signerl_cert:certificate_info(CertDer),
+    case signerl_cert:verify_signature(Certificate, Method, Bytes, Hash, Signature) of
+        true -> ok;
+        false -> error(certificate_key_mismatch)
+    end.
 
 signing_ids(Message) ->
     case signerl_dsig_utils:signature_inventory(Message) of

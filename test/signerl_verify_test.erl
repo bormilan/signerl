@@ -294,7 +294,7 @@ c14n_mode_returns_exc_for_exc_c14n_algorithm_test() ->
     SigDataC14N11 = #{references => #{c14n_algorithm => "http://www.w3.org/2006/12/xml-c14n11"}},
     ?assertEqual(c14n11, signerl_verify:c14n_mode(SigDataC14N11)).
 
-extract_x509_certificate_returns_undefined_for_invalid_cert_test() ->
+extract_x509_certificate_rejects_invalid_cert_test() ->
     %% Sign a message with certificate, then corrupt the cert to test error paths.
     MessagePath = signerl_utils:file_path("test/examples/base/books.xml"),
     {ok, RawMessage} = file:read_file(MessagePath),
@@ -311,14 +311,18 @@ extract_x509_certificate_returns_undefined_for_invalid_cert_test() ->
     ]),
     ?assertNotEqual(Parsed, CorruptedStructure),
     {ok, ParsedStructure} = xmlan:parse_binary(xmlan:export([], CorruptedStructure)),
-    {ok, #{key_info := KeyInfo1}} = signerl_verify:extract_signature_data(ParsedStructure),
-    ?assertEqual(undefined, KeyInfo1),
+    ?assertEqual(
+        {error, invalid_certificate_metadata},
+        signerl_verify:extract_signature_data(ParsedStructure)
+    ),
     %% Test 2: Corrupt cert to invalid base64 (single list child → decode error)
     CorruptedBase64 = corrupt_x509_certificate(Parsed, ["!!!not-base64!!!"]),
     ?assertNotEqual(Parsed, CorruptedBase64),
     {ok, ParsedBase64} = xmlan:parse_binary(xmlan:export([], CorruptedBase64)),
-    {ok, #{key_info := KeyInfo2}} = signerl_verify:extract_signature_data(ParsedBase64),
-    ?assertEqual(undefined, KeyInfo2).
+    ?assertEqual(
+        {error, invalid_certificate_metadata},
+        signerl_verify:extract_signature_data(ParsedBase64)
+    ).
 
 certificate_namespace_test_() ->
     {setup, fun certificate_namespace_fixture/0, fun({Signed, CertDer}) ->
@@ -341,8 +345,10 @@ certificate_namespace_test_() ->
          || {Label, Xml, Expected} <- [
                 {"certificate under alternate DS names", Alias, #{x509_certificate => CertDer}},
                 {"certificate under default DS namespace", Default, #{x509_certificate => CertDer}},
-                {"X509Data in wrong namespace is ignored", WrongData, undefined},
-                {"X509Certificate in wrong namespace is ignored", WrongCertificate, undefined}
+                {"X509Data in wrong namespace cannot supply a certificate", WrongData,
+                    {error, invalid_certificate_metadata}},
+                {"X509Certificate in wrong namespace cannot supply a certificate", WrongCertificate,
+                    {error, invalid_certificate_metadata}}
             ]
         ]
     end}.
@@ -401,8 +407,10 @@ certificate_namespace_fixture() ->
 
 extracted_key_info(Xml) ->
     {ok, Parsed} = xmlan:parse_binary(Xml),
-    {ok, #{key_info := KeyInfo}} = signerl_verify:extract_signature_data(Parsed),
-    KeyInfo.
+    case signerl_verify:extract_signature_data(Parsed) of
+        {ok, #{key_info := KeyInfo}} -> maps:with([x509_certificate], KeyInfo);
+        {error, _} = Error -> Error
+    end.
 
 signature_fixture() ->
     PublicKey = signerl_cert_helpers:rsa_public_key_from_cert(
