@@ -3,8 +3,8 @@
 The maintainer confirmed on 17 October 2026 that XAdES signing-time and
 certificate properties stay in the 1.0 scope. This document records the selected
 profile, the reference/identity/algorithm and certificate-binding enforcement
-completed in #52/#54, and the known-property checks still unfinished below. [Issue #64](https://github.com/bormilan/signerl/issues/64)
-is complete as profile definition. The 0.3 milestone and implementation tasks
+completed in #52/#54, and the known-property structural checks implemented in #55.
+[Issue #64](https://github.com/bormilan/signerl/issues/64) is complete as profile definition. The 0.3 milestone and implementation tasks
 below remain open until the selected behavior is implemented and validated.
 
 ## Selected profile
@@ -19,7 +19,7 @@ below remain open until the selected behavior is implemented and validated.
 | Reference transforms | New signatures use enveloped-signature removal followed by explicit C14N 1.1 for the document, and explicit C14N 1.1 for SignedProperties. Verification retains only the complete legacy pair as a compatibility case; both pairs require validated order/parameters and all ID/algorithm checks. See the API contract. |
 | SignedInfo | New signatures use C14N 1.1. Existing tested Exclusive C14N SignedInfo verification remains separate from reference transforms; changing one must not silently change the other. |
 | IDs and target | References resolve to unique actual IDs. `QualifyingProperties/@Target` identifies the containing signature. Missing, duplicate or mismatched relationships are rejected. |
-| XAdES | SignedProperties and SignedSignatureProperties remain, including SigningTime. Existing certificate properties remain when a certificate is supplied. |
+| XAdES | SignedProperties and unique SignedSignatureProperties remain, including SigningTime. Optional SignedDataObjectProperties is unique. Known singleton fields reject duplicates and malformed present values; recognized repeatable items remain supported (#55). Existing certificate properties remain when a certificate is supplied. |
 | Time | A valid UTC timestamp; callers may supply controlled time with `sign/5`. The signing time is covered by the SignedProperties digest. |
 | Keys and files | Retain caller-supplied key terms, PEM key paths, binary XML and XML file paths. Verification uses the caller's supplied verification key. |
 | Certificates | Optional matching certificate input; one embedded X509Certificate paired with SigningCertificateV2. Validate DER, digest, optional issuer/serial and key binding; reject malformed, duplicate or one-sided metadata. Implemented in #54. |
@@ -77,24 +77,31 @@ application or dependency-installation check.
    the algorithm/failure/compatibility decisions before correctness changes and
    refactoring. Optional semantic extensions in
    [#37](https://github.com/bormilan/signerl/issues/37) are deferred beyond 1.0;
-   known-property structural fixes remain #55. Finish documentation against the
-   implemented behavior later in this milestone.
+   known-property structural checks are implemented in #55. Finish documentation
+   against the implemented behavior later in this milestone.
 2. [#52](https://github.com/bormilan/signerl/issues/52): enforce every reference,
    unique actual IDs/targets, declared algorithms/key agreement and transform
    chains: implemented. New output declares explicit C14N 1.1 for both references;
    existing implicit-reference signatures retain only the complete legacy pair
    described in the API contract. Both formats enforce the same reference,
-   identity/target, method/key and placement checks. The full selected profile
-   still needs the known-property work below.
+   identity/target, method/key and placement checks.
 3. [#54](https://github.com/bormilan/signerl/issues/54): distinguish absent,
    malformed and valid certificate metadata and enforce key/certificate binding:
    implemented. Optional issuer/serial data is checked when present. Both metadata
    components absent remains certificate-less signing. A successful binding check
    does not establish chain trust, validity periods or revocation status.
-4. [#55](https://github.com/bormilan/signerl/issues/55): reject ambiguous or
-   malformed known signed-property containers. Keep unknown-extension policy
-   separate from known-field validation. PR #48 supplied structural readers;
-   remaining semantic extensions are explicitly deferred in #37, not completed.
+4. [#55](https://github.com/bormilan/signerl/issues/55): known-property structural
+   handling is implemented. Implied/explicit policy choices are exclusive; optional
+   known fields are validated when present. Roles use the supported text-only
+   subset. Commitments require an identifier and either all signed objects or
+   specific reference items. Nested ObjectIdentifier/documentation fields are
+   checked structurally. Repeatable format, commitment, role and reference items
+   remain supported. Unknown/wrong-namespace extensions are ignored semantically,
+   while their signed bytes remain protected. The existing ObjectReference-only
+   DataObjectFormat remains accepted at the structural reader boundary; this is
+   not full schema validation. Legacy SigningCertificate remains presence-only
+   under #54. PR #48 supplied the original readers; semantic extensions remain
+   deferred in #37. See the [property scope](signed_properties_scope_and_gaps.md).
 5. [#58](https://github.com/bormilan/signerl/issues/58): simplify ownership after
    correctness fixes, while keeping these XAdES features. The timestamp work in
    [#56](https://github.com/bormilan/signerl/issues/56) is already complete.

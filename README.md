@@ -82,8 +82,8 @@ signing key raises `error:certificate_key_mismatch`.
 
 XAdES signing-time and certificate properties stay in scope. The
 [selected profile and implementation sequence](docs/signing_profile.md) separates
-implemented reference and certificate-binding rules from unfinished known-property
-checks. Certificate-bearing signatures require both valid embedded certificate
+implemented reference, certificate-binding and known-property structural rules
+from deferred optional semantics. Certificate-bearing signatures require both valid embedded certificate
 and SigningCertificateV2 metadata, with matching digest, optional issuer/serial
 and signature key.
 Successful signature verification is not certificate-chain trust, validity or

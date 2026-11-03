@@ -14,7 +14,7 @@ type aliases or installation contracts.
 | File | Cases | Responsibility |
 | --- | ---: | --- |
 | `signerl_dsig_utils_test.erl` | 10 | Signature identity, inherited namespace context, enveloped-signature removal and lookalike preservation. |
-| `signerl_signed_properties_test.erl` | 72 | XAdES property extraction and malformed signed-property values. |
+| `signerl_signed_properties_test.erl` | 91 | XAdES property extraction, singleton fields, malformed known values, identifier documentation and binary-text boundaries. |
 | `signerl_utils_test.erl` | 25 | UTC dates, leap-year boundaries and fixed datetime formatting. |
 | `signerl_signature_test.erl` | 5 | RSA/ECDSA signature construction. |
 | `signerl_verify_test.erl` | 30 | Signature extraction, references, algorithm routing and malformed signatures. |
@@ -24,8 +24,9 @@ type aliases or installation contracts.
 | `signerl_api_SUITE.erl` | 73 | Public binary/file/key/certificate workflows, RSA and legacy ECDSA, fixed time, content preservation, hash errors, native crypto-input failures, declaration handling, tampering and independent signatures. |
 | `signerl_signature_policy_SUITE.erl` | 11 | Public reference count/targets, actual IDs, method/key agreement, explicit/legacy transform pairs and parameters, placement, already-signed rejection and generated ID collisions. |
 | `signerl_certificate_binding_SUITE.erl` | 13 | Certificate/key binding, missing/malformed/duplicate metadata, digest/issuer checks, malformed DER/keys and certificate-less controls. |
+| `signerl_property_policy_SUITE.erl` | 20 | Public XAdES container/field cardinality, malformed known fields, policy/scope choices, identifier documentation, Unicode values, extension and repetition controls. |
 
-Total: **150 EUnit + 97 Common Test = 247 cases**. Required coverage is **100%**
+Total: **169 EUnit + 117 Common Test = 286 cases**. Required coverage is **100%**
 of Signerl production modules. The independent xmlsec1 signatures stay in
 `examples/independent/`; `examples/payloads/` contains inputs used for actual
 sign/verify/tamper cases.
@@ -64,6 +65,7 @@ rebar3 eunit --module signerl_verify_test
 rebar3 ct --suite test/signerl_api_SUITE
 rebar3 ct --suite test/signerl_signature_policy_SUITE
 rebar3 ct --suite test/signerl_certificate_binding_SUITE
+rebar3 ct --suite test/signerl_property_policy_SUITE
 ```
 
 ## Existing build caches after the suite moves
@@ -193,7 +195,7 @@ for the clean/warm checks and lint failure probes.
 - File workflow tests write outputs only to CT's temporary directory. No test
   overwrites a tracked XML fixture.
 
-Both policy suites refresh document/properties digests and re-sign SignedInfo
+All three policy suites refresh document/properties digests and re-sign SignedInfo
 with OTP after each mutation, independently of Signerl's signature decoding.
 Each rejected structure has a passing cryptographic signature check; positive
 controls cover both complete reference formats, custom actual IDs and Exclusive
@@ -209,3 +211,9 @@ including certificate swaps with refreshed certificate/property digests and
 valid signature bytes. Caller key/DER exceptions stay native; only crypto errors
 from untrusted embedded certificate data become certificate errors. Trust-chain,
 validity-period and revocation checks remain outside the boolean verifier.
+
+#55 rejects duplicate optional containers rather than treating lookup ambiguity as
+absence. Known singleton fields and policy/scope choices have public re-signing
+regressions; repeatable fields, unknown extensions and namespace lookalikes retain
+positive controls. Unicode property text remains supported; non-whitespace
+container text returns a structure error. Optional semantic checks remain #37.
