@@ -100,9 +100,9 @@ validate_signed_data_object_properties({error, _} = Error, _Acc) ->
 validate_signed_data_object_properties({ok, Element}, Acc) ->
     {?XADES_NAME(<<"SignedDataObjectProperties">>), _, Content} =
         xmlan:expanded_names(Element),
-    maybe
-        {ok, Elements} ?= property_elements(Content),
-        validate_data_object_elements(Elements, Acc)
+    case property_elements(Content) of
+        {ok, Elements} -> validate_data_object_elements(Elements, Acc);
+        {error, _} = Error -> Error
     end.
 
 validate_data_object_elements([], Acc) ->
@@ -189,26 +189,26 @@ extract_issuer_serial_v2(Content) ->
 %%--- SignaturePolicyIdentifier ---
 
 validate_signature_policy_identifier(Content) ->
-    maybe
-        {ok, Fields} ?= property_elements(Content),
-        case
-            {
-                elements(?XADES_NAME(<<"SignaturePolicyImplied">>), Fields),
-                elements(?XADES_NAME(<<"SignaturePolicyId">>), Fields)
-            }
-        of
-            {[{_, _, Implied}], []} ->
-                case empty_content(Implied) of
-                    true -> {ok, #{type => implied}};
-                    false -> {error, invalid_signature_policy_identifier}
-                end;
-            {[], [{_, _, PolicyContent}]} ->
-                parse_signature_policy_id(PolicyContent);
-            _ ->
-                {error, invalid_signature_policy_identifier}
-        end
-    else
-        _ -> {error, invalid_signature_policy_identifier}
+    case property_elements(Content) of
+        {ok, Fields} ->
+            case
+                {
+                    elements(?XADES_NAME(<<"SignaturePolicyImplied">>), Fields),
+                    elements(?XADES_NAME(<<"SignaturePolicyId">>), Fields)
+                }
+            of
+                {[{_, _, Implied}], []} ->
+                    case empty_content(Implied) of
+                        true -> {ok, #{type => implied}};
+                        false -> {error, invalid_signature_policy_identifier}
+                    end;
+                {[], [{_, _, PolicyContent}]} ->
+                    parse_signature_policy_id(PolicyContent);
+                _ ->
+                    {error, invalid_signature_policy_identifier}
+            end;
+        {error, _} ->
+            {error, invalid_signature_policy_identifier}
     end.
 
 parse_signature_policy_id(Content) ->
@@ -411,9 +411,9 @@ validate_documentation_references(Content) ->
     end.
 
 extract_text_fields(Content, Names) ->
-    maybe
-        {ok, Fields} ?= property_elements(Content),
-        extract_text_fields(Fields, Names, #{})
+    case property_elements(Content) of
+        {ok, Fields} -> extract_text_fields(Fields, Names, #{});
+        {error, _} = Error -> Error
     end.
 
 extract_text_fields([], _Names, Acc) ->

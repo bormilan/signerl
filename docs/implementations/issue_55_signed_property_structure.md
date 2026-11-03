@@ -78,3 +78,23 @@ Persistent source worktree:
 Recovery copies, tracked diff and command logs:
 `/Users/milanbor/projects/signerl/.recovery/issue-55-property-validation/`.
 The pre-existing untracked roadmap audit remains local and outside this PR.
+
+## PR review follow-up: single-assertion control flow
+
+The review on PR #98 requested `case` instead of `maybe` for a single assertion.
+`validate_signed_data_object_properties/2`,
+`validate_signature_policy_identifier/1` and `extract_text_fields/2` now use
+explicit cases. The first and third preserve container errors unchanged; policy
+validation keeps its existing property-specific error mapping. Blocks with
+multiple assertions remain unchanged.
+
+This changes control flow only. Existing focused regressions already cover the
+success, missing/duplicate-container, malformed-container and policy-error paths;
+no artificial tests or public documentation changes are needed. The focused
+91-case unit module and 20-case public suite pass. Full native tests retain
+169 EUnit + 117 Common Test cases and 100% coverage. Coverage, flint and Dialyzer
+pass on OTP 28.4.2 / rebar3 3.25.1. Final native tall also passes, including all
+286 tests, 100% coverage, formatting/lint, Xref and Dialyzer, with no skips.
+The results and the six latest-head CI job audits are preserved with the
+`review-case-*` validation logs and recovery copies in the recovery directory
+listed above. The focused review found no blocking findings.
