@@ -31,34 +31,46 @@ open for final alignment after correctness/ownership work.
 verification does not establish certificate-chain trust, validity periods or
 revocation status.
 
-The property readers perform the following extraction/checks. Extraction alone
-does not imply semantic validation, complete cardinality enforcement or trust.
+The property readers enforce the supported structure below. Extraction alone
+does not imply semantic validation, complete XAdES schema validation or trust.
 
 | Property | Current boundary |
 | --- | --- |
 | SigningTime | Required; validates UTC format and real calendar dates, completed in #56. |
-| SigningCertificate | Extraction presence marker; alone it cannot satisfy the certificate-bearing profile. |
+| SigningCertificate | Unique presence marker; its contents are not semantically validated, and alone it cannot satisfy the certificate-bearing profile. |
 | SigningCertificateV2 | Requires the embedded certificate/V2 pair, rejects malformed/duplicate fields, checks digest and optional issuer/serial, and binds the certificate key to the signature (#54). Both absent is certificate-less signing. |
-| SignaturePolicyIdentifier | Reads implied or explicit policy identifier/digest data; does not establish that policy material matches the declared digest. |
-| SignatureProductionPlace | Extracts recognized text fields; malformed/duplicate field treatment needs #55. |
-| SignerRole | Extracts claimed/certified role text; does not prove certified-role validity. |
-| DataObjectFormat | Requires ObjectReference during extraction and reads optional text; reference/MIME semantics remain #37. |
-| CommitmentTypeIndication | Extracts identifier and supported scope/reference text; semantic validation remains #37. |
+| SignaturePolicyIdentifier | Exactly one implied or explicit choice. The explicit form requires unique identifier/digest fields; this does not establish that policy material matches the digest. |
+| SignatureProductionPlace | Optional, unique City/StateOrProvince/PostalCode/CountryName text fields; malformed present fields are rejected. |
+| SignerRole | Unique ClaimedRoles/CertifiedRoles containers with one or more text-only items when present; at least one kind is required. Does not prove certified-role validity. |
+| DataObjectFormat | Repeatable; requires the ObjectReference attribute and checks optional text/ObjectIdentifier fields. The existing ObjectReference-only form is accepted at this structural reader boundary, without claiming full schema validation. Reference/MIME semantics remain #37. |
+| CommitmentTypeIndication | Repeatable; requires an identifier and either one empty AllSignedDataObjects marker or one or more text ObjectReference items, never both. Semantic validation remains #37. |
 
-PR #48 supplied structural readers/validators for optional properties. They are
-not unconditional placeholders, and their presence does not establish that all
-XAdES properties are structurally or semantically validated.
+PR #48 supplied structural readers/validators for optional properties; #55
+enforces their supported cardinalities and malformed-field handling.
+SignedSignatureProperties is required and unique. SignedDataObjectProperties is
+optional and unique; duplicate optional containers are errors, not absence.
+Recognized singleton properties and fields reject duplicates. Property containers
+accept element children and formatting whitespace, not other text. A present
+text field must contain text only; malformed optional fields are rejected rather
+than dropped.
+
+The shared ObjectIdentifier structure used by policy/commitment identifiers and
+optional format metadata requires one Identifier and allows one Description.
+Optional DocumentationReferences is unique and requires one or more text
+DocumentationReference items. Role items, documentation items, scope references,
+DataObjectFormat and CommitmentTypeIndication remain repeatable. Unknown elements
+and elements in other namespaces do not count as recognized fields; they are
+ignored semantically but remain covered by the signed bytes. These are supported
+structural checks, not general XAdES schema or extension validation.
 
 ## Remaining ownership
 
-- [#55](https://github.com/bormilan/signerl/issues/55): reject ambiguous or
-  malformed known containers/fields, including optional-container lookup errors
-  that currently become absence. Decide unknown-extension handling separately.
 - [#37](https://github.com/bormilan/signerl/issues/37): optional policy-material,
   role-certification and URI/MIME/referenced-object semantic extensions are
-  deferred beyond 1.0. The MVP promises structural handling, with #55 responsible
-  for rejecting malformed known fields and ambiguous containers. Extraction is
-  not semantic validation; unknown extensions may be ignored semantically.
+  deferred beyond 1.0. The MVP promises the structural handling implemented in
+  #55. The legacy SigningCertificate marker remains presence-only under #54;
+  this change adds no certificate semantics. Extraction is not semantic
+  validation; unknown extensions are ignored semantically.
 - [#58](https://github.com/bormilan/signerl/issues/58): simplify signature/XAdES
   ownership after correctness fixes, while preserving the retained properties.
 - #59: finish accurate API/capability documentation after implementation.

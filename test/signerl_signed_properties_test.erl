@@ -62,6 +62,21 @@ extract_ignores_wrong_namespace_nested_fields_test() ->
         signerl_signed_properties:extract(sig_element([CertWithDecoy, Place]))
     ).
 
+extract_checks_binary_property_container_whitespace_test() ->
+    ?assertEqual(
+        {ok, #{signing_time => <<"2026-01-01T00:00:00Z">>}},
+        signerl_signed_properties:extract(sig_element([<<" \t\r\n">>]))
+    ),
+    lists:foreach(
+        fun(Text) ->
+            ?assertEqual(
+                {error, invalid_signed_properties},
+                signerl_signed_properties:extract(sig_element([Text]))
+            )
+        end,
+        [<<"é"/utf8>>, <<160/utf8>>]
+    ).
+
 %% Signing Time
 
 extract_accepts_binary_signing_time_test() ->
@@ -318,14 +333,15 @@ extract_returns_error_with_non_text_policy_identifier_test() ->
         signerl_signed_properties:extract(SignatureElement)
     ).
 
-extract_ignores_non_text_policy_description_test() ->
+extract_rejects_non_text_policy_description_test() ->
     PolicyElement = explicit_policy_element([
         {<<"xades:Description">>, [], [12345]}
     ]),
     SignatureElement = sig_element([PolicyElement]),
-    {ok, Props} = signerl_signed_properties:extract(SignatureElement),
-    Policy = maps:get(signature_policy_identifier, Props),
-    ?assertNot(maps:is_key(description, Policy)).
+    ?assertEqual(
+        {error, invalid_signature_policy_identifier},
+        signerl_signed_properties:extract(SignatureElement)
+    ).
 
 extract_accepts_binary_policy_description_test() ->
     PolicyElement = explicit_policy_element([
@@ -392,7 +408,7 @@ extract_accepts_binary_production_place_test() ->
         maps:get(signature_production_place, Props)
     ).
 
-extract_skips_non_text_place_fields_test() ->
+extract_rejects_non_text_place_fields_test() ->
     Place =
         {<<"xades:SignatureProductionPlace">>, [], [
             {<<"xades:City">>, [], ["Budapest"]},
@@ -400,25 +416,29 @@ extract_skips_non_text_place_fields_test() ->
             {<<"xades:CountryName">>, [], [[65, {invalid}]]}
         ]},
     SignatureElement = sig_element([Place]),
-    {ok, Props} = signerl_signed_properties:extract(SignatureElement),
-    ?assertEqual(#{city => <<"Budapest">>}, maps:get(signature_production_place, Props)).
+    ?assertEqual(
+        {error, invalid_signature_production_place},
+        signerl_signed_properties:extract(SignatureElement)
+    ).
 
-extract_skips_non_byte_list_place_fields_test() ->
+extract_rejects_non_byte_list_place_fields_test() ->
     Place =
         {<<"xades:SignatureProductionPlace">>, [], [
             {<<"xades:City">>, [], [[65, {invalid}]]},
             {<<"xades:StateOrProvince">>, [], [42]}
         ]},
     SignatureElement = sig_element([Place]),
-    {ok, Props} = signerl_signed_properties:extract(SignatureElement),
-    ?assertEqual(#{}, maps:get(signature_production_place, Props)).
+    ?assertEqual(
+        {error, invalid_signature_production_place},
+        signerl_signed_properties:extract(SignatureElement)
+    ).
 
 extract_skips_unknown_place_elements_test() ->
     Place =
         {<<"xades:SignatureProductionPlace">>, [], [
             {<<"xades:City">>, [], ["Vienna"]},
             {<<"xades:UnknownField">>, [], ["ignored"]},
-            "text node ignored"
+            " \n\t"
         ]},
     SignatureElement = sig_element([Place]),
     {ok, Props} = signerl_signed_properties:extract(SignatureElement),
@@ -461,7 +481,7 @@ extract_accepts_both_role_types_test() ->
         maps:get(signer_role, Props)
     ).
 
-extract_skips_non_text_role_items_test() ->
+extract_rejects_non_text_role_items_test() ->
     Role =
         {<<"xades:SignerRole">>, [], [
             {<<"xades:ClaimedRoles">>, [], [
@@ -471,8 +491,10 @@ extract_skips_non_text_role_items_test() ->
             ]}
         ]},
     SignatureElement = sig_element([Role]),
-    {ok, Props} = signerl_signed_properties:extract(SignatureElement),
-    ?assertEqual(#{claimed_roles => [<<"Valid">>]}, maps:get(signer_role, Props)).
+    ?assertEqual(
+        {error, invalid_signer_role},
+        signerl_signed_properties:extract(SignatureElement)
+    ).
 
 extract_skips_non_matching_role_items_test() ->
     Role =
@@ -514,6 +536,8 @@ extract_accepts_data_object_format_with_mime_type_test() ->
         maps:get(data_object_formats, Props)
     ).
 
+%% The supported structural boundary preserves ObjectReference-only formats;
+%% reference/MIME meaning and complete XAdES conformance remain outside it.
 extract_accepts_data_object_format_minimal_test() ->
     Format = data_object_format_element("#Ref-1", []),
     SignatureElement = sig_element_with_data_obj([], [Format]),
@@ -550,7 +574,7 @@ extract_accepts_data_object_format_with_all_fields_test() ->
     ?assertEqual(<<"application/xml">>, maps:get(mime_type, F)),
     ?assertEqual(<<"UTF-8">>, maps:get(encoding, F)).
 
-extract_skips_non_text_format_fields_test() ->
+extract_rejects_non_text_format_fields_test() ->
     Format =
         {<<"xades:DataObjectFormat">>, [{<<"ObjectReference">>, "#Ref-1"}], [
             {<<"xades:MimeType">>, [], [12345]},
@@ -558,11 +582,10 @@ extract_skips_non_text_format_fields_test() ->
             {<<"xades:Encoding">>, [], ["UTF-8"]}
         ]},
     SignatureElement = sig_element_with_data_obj([], [Format]),
-    {ok, Props} = signerl_signed_properties:extract(SignatureElement),
-    [F] = maps:get(data_object_formats, Props),
-    ?assertEqual(<<"UTF-8">>, maps:get(encoding, F)),
-    ?assertNot(maps:is_key(mime_type, F)),
-    ?assertNot(maps:is_key(description, F)).
+    ?assertEqual(
+        {error, invalid_data_object_format},
+        signerl_signed_properties:extract(SignatureElement)
+    ).
 
 extract_ignores_unknown_data_object_elements_test() ->
     Format =
@@ -597,19 +620,19 @@ extract_accepts_commitment_type_with_references_test() ->
     [C] = maps:get(commitment_type_indications, Props),
     ?assertEqual({references, ["#Ref-1", "#Ref-2"]}, maps:get(scope, C)).
 
-extract_accepts_commitment_type_minimal_test() ->
+extract_rejects_commitment_type_without_scope_test() ->
     Commitment = commitment_type_element(
         "http://uri.etsi.org/01903/v1.2.2#ProofOfOrigin", none
     ),
     SignatureElement = sig_element_with_data_obj([], [Commitment]),
-    {ok, Props} = signerl_signed_properties:extract(SignatureElement),
-    [C] = maps:get(commitment_type_indications, Props),
-    ?assertEqual(<<"http://uri.etsi.org/01903/v1.2.2#ProofOfOrigin">>, maps:get(identifier, C)),
-    ?assertNot(maps:is_key(scope, C)).
+    ?assertEqual(
+        {error, invalid_commitment_type_indication},
+        signerl_signed_properties:extract(SignatureElement)
+    ).
 
 extract_accepts_multiple_commitment_types_test() ->
     C1 = commitment_type_element("http://example.com/origin", all),
-    C2 = commitment_type_element("http://example.com/approval", none),
+    C2 = commitment_type_element("http://example.com/approval", {references, ["#Ref-2"]}),
     SignatureElement = sig_element_with_data_obj([], [C1, C2]),
     {ok, Props} = signerl_signed_properties:extract(SignatureElement),
     ?assertEqual(2, length(maps:get(commitment_type_indications, Props))).
@@ -637,6 +660,101 @@ extract_returns_error_with_missing_commitment_identifier_text_test() ->
         {error, invalid_commitment_type_indication},
         signerl_signed_properties:extract(SignatureElement)
     ).
+
+%% Recognized nested fields must fail rather than disappear during extraction.
+
+extract_rejects_duplicate_optional_text_fields_test_() ->
+    Description = {<<"xades:Description">>, [], ["Description"]},
+    Encoding = {<<"xades:Encoding">>, [], ["UTF-8"]},
+    Format =
+        {<<"xades:DataObjectFormat">>, [{<<"ObjectReference">>, "#Ref-1"}], [
+            Encoding, Encoding
+        ]},
+    [
+        {Name,
+            ?_assertEqual(
+                {error, Error}, signerl_signed_properties:extract(Signature)
+            )}
+     || {Name, Signature, Error} <- [
+            {"policy description",
+                sig_element([explicit_policy_element([Description, Description])]),
+                invalid_signature_policy_identifier},
+            {"place city", sig_element([production_place_element([{city, "A"}, {city, "B"}])]),
+                invalid_signature_production_place},
+            {"format encoding", sig_element_with_data_obj([], [Format]), invalid_data_object_format}
+        ]
+    ].
+
+extract_rejects_malformed_object_identifier_children_test_() ->
+    [
+        {
+            PropertyName ++ ": " ++ CaseName,
+            ?_assertEqual(
+                {error, Error},
+                signerl_signed_properties:extract(Wrap(Fields))
+            )
+        }
+     || {PropertyName, Wrap, Error} <- object_identifier_wrappers(),
+        {CaseName, Fields} <- [
+            {"nested description", [
+                {<<"xades:Description">>, [], [{<<"xades:Nested">>, [], []}]}
+            ]},
+            {"empty documentation container", [
+                {<<"xades:DocumentationReferences">>, [], []}
+            ]},
+            {"malformed documentation reference", [
+                {<<"xades:DocumentationReferences">>, [], [
+                    {<<"xades:DocumentationReference">>, [], [12345]}
+                ]}
+            ]},
+            {"duplicate documentation containers", [
+                documentation_references_element(), documentation_references_element()
+            ]}
+        ]
+    ].
+
+extract_accepts_known_object_identifier_documentation_test_() ->
+    [
+        {Name,
+            ?_assertMatch(
+                {ok, _},
+                signerl_signed_properties:extract(Wrap([documentation_references_element()]))
+            )}
+     || {Name, Wrap, _Error} <- object_identifier_wrappers()
+    ].
+
+object_identifier_wrappers() ->
+    [
+        {"policy", fun(Fields) -> sig_element([explicit_policy_element(Fields)]) end,
+            invalid_signature_policy_identifier},
+        {"commitment",
+            fun(Fields) ->
+                {Tag, Attrs, [{IdTag, IdAttrs, IdContent} | Scope]} =
+                    commitment_type_element("urn:commitment", all),
+                sig_element_with_data_obj([], [
+                    {Tag, Attrs, [{IdTag, IdAttrs, IdContent ++ Fields} | Scope]}
+                ])
+            end,
+            invalid_commitment_type_indication},
+        {"format",
+            fun(Fields) ->
+                ObjectIdentifier =
+                    {<<"xades:ObjectIdentifier">>, [], [
+                        {<<"xades:Identifier">>, [], ["urn:format"]} | Fields
+                    ]},
+                Format =
+                    {<<"xades:DataObjectFormat">>, [{<<"ObjectReference">>, "#Ref-1"}], [
+                        ObjectIdentifier
+                    ]},
+                sig_element_with_data_obj([], [Format])
+            end,
+            invalid_data_object_format}
+    ].
+
+documentation_references_element() ->
+    {<<"xades:DocumentationReferences">>, [], [
+        {<<"xades:DocumentationReference">>, [], ["urn:documentation"]}
+    ]}.
 
 %% General
 
@@ -694,9 +812,9 @@ extract_ignores_unknown_data_object_property_types_test() ->
     {ok, Props} = signerl_signed_properties:extract(SignatureElement),
     ?assertEqual(1, length(maps:get(data_object_formats, Props))).
 
-extract_ignores_non_tuple_data_object_elements_test() ->
+extract_ignores_whitespace_data_object_elements_test() ->
     Format = data_object_format_element("#Ref-1", [{mime_type, "text/plain"}]),
-    SignatureElement = sig_element_with_data_obj([], ["text node", Format]),
+    SignatureElement = sig_element_with_data_obj([], [" \n\t", Format]),
     {ok, Props} = signerl_signed_properties:extract(SignatureElement),
     ?assertEqual(1, length(maps:get(data_object_formats, Props))).
 

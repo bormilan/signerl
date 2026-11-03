@@ -2,8 +2,8 @@
 
 This describes the public API and the remaining 0.3 decisions. The
 [selected profile](signing_profile.md) separates the implemented signature
-reference/identity/algorithm checks (#52) and certificate binding (#54) from
-known-property enforcement still tracked in #55.
+reference/identity/algorithm checks (#52), certificate binding (#54) and
+known-property structural checks (#55) from deferred semantic extensions.
 
 ## Operations and inputs
 
@@ -59,7 +59,10 @@ output. Certificate-less calls still include SignedProperties and SigningTime.
 | Supplied signing certificate does not match the signing key/operation | Raises `error:certificate_key_mismatch`. |
 | Present KeyInfo has missing/duplicate X509Data/certificate fields, invalid base64, or the certificate/V2 pair is incomplete | `{error, invalid_certificate_metadata}`. |
 | Embedded certificate DER or public key is invalid/unsupported | `{error, invalid_certificate}`. |
+| Duplicate SignedSignatureProperties/SignedDataObjectProperties container or singleton property under SignedSignatureProperties | `{error, duplicate_property}`. |
+| Non-whitespace text in a recognized property container | `{error, invalid_signed_properties}` or the enclosing property's validation error. |
 | Malformed/duplicate SigningCertificateV2 fields | `{error, invalid_signing_certificate_v2}` or `{error, duplicate_property}`. |
+| Malformed known optional property fields | `{error, invalid_signature_policy_identifier}`, `{error, invalid_signature_production_place}`, `{error, invalid_signer_role}`, `{error, invalid_data_object_format}` or `{error, invalid_commitment_type_indication}`. |
 | Certificate digest or digest method mismatch | `{error, cert_digest_mismatch}`. |
 | Present issuer/serial metadata does not match the embedded certificate | `{error, cert_issuer_mismatch}`. |
 | Embedded certificate key does not verify the otherwise valid signature | `{error, certificate_key_mismatch}`. |
@@ -87,8 +90,8 @@ contract rather than silently translate exceptions.
 
 ## Compatibility and retained XAdES decisions
 
-Reference rules (#52) and certificate binding (#54) are implemented. Known-property
-decisions still constrain #55.
+Reference rules (#52), certificate binding (#54) and known-property structural
+checks (#55) are implemented.
 
 - **Reference compatibility (#52):** new signatures declare document transforms
   `[enveloped-signature, c14n11]` and SignedProperties transforms `[c14n11]`.
@@ -135,12 +138,30 @@ decisions still constrain #55.
   Invalid embedded DER/key errors become certificate errors; invalid caller
   key/DER inputs retain the native-failure policy above. Successful verification
   does not establish certificate-chain trust, validity periods or revocation.
-- **Optional properties (#37/#55):** 1.0 promises supported structural handling,
-  not policy-material digest verification, certified-role certification or full
-  URI/MIME/referenced-object semantics. Those semantic extensions are deferred
-  beyond 1.0. #55 must reject malformed/ambiguous known containers and fields;
-  unknown extensions may be ignored semantically while remaining part of the
-  signed bytes. Neither extraction nor a presence marker proves semantic checks.
+- **Known-property structure (#55):** SignedSignatureProperties is required and
+  unique; SignedDataObjectProperties is optional and unique. Recognized singleton
+  properties and fields reject duplicates, and malformed optional fields do not
+  become absence. Property containers accept element children and formatting
+  whitespace. SignaturePolicyIdentifier requires exactly one implied or explicit
+  policy choice; the explicit form requires identifier and digest fields.
+  Production-place fields are optional text values. SignerRole supports text-only
+  claimed/certified roles, with unique containers and one or more items in each
+  present container. DataObjectFormat requires ObjectReference; its recognized
+  optional text and ObjectIdentifier fields are checked when present. The
+  existing ObjectReference-only form remains accepted at this structural reader
+  boundary; this is not full XAdES schema validation. CommitmentTypeIndication
+  requires an identifier and either one empty AllSignedDataObjects marker or
+  one or more text ObjectReference items, never both. Shared ObjectIdentifier
+  structures require an identifier, allow an optional description and check
+  optional DocumentationReferences with one or more text items. Data-object
+  formats, commitments, role items and documentation/reference items remain
+  repeatable. Unknown elements and lookalikes in other namespaces are ignored
+  semantically while remaining part of the signed bytes.
+- **Optional semantics (#37):** policy-material digest verification, certified-role
+  certification and full URI/MIME/referenced-object semantics remain deferred
+  beyond 1.0. Structural extraction does not establish these checks. The legacy
+  SigningCertificate property retains its presence-only meaning; #55 adds no
+  certificate semantics beyond #54.
 
 XAdES SignedProperties, SigningTime and the existing certificate properties stay.
 The legacy SigningCertificate presence marker alone is not proof of certificate
