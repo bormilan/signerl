@@ -160,33 +160,48 @@ validate_signing_certificate_v2(_) ->
 validate_cert_element(Content) ->
     maybe
         {ok, CertDigest} ?= extract_cert_digest(Content),
-        IssuerSerial = extract_issuer_serial_v2(Content),
+        {ok, IssuerSerial} ?= extract_issuer_serial_v2(Content),
         {ok, maps:merge(CertDigest, IssuerSerial)}
     end.
 
 extract_cert_digest(Content) ->
-    case lists:keyfind(?XADES_NAME(<<"CertDigest">>), 1, Content) of
-        {?XADES_NAME(<<"CertDigest">>), _, DigestContent} ->
+    case find_unique_certificate_element(?XADES_NAME(<<"CertDigest">>), Content) of
+        {ok, {_, _, DigestContent}} ->
             validate_cert_digest(DigestContent);
-        false ->
+        _ ->
             {error, invalid_signing_certificate_v2}
     end.
 
-validate_cert_digest(DigestContent) ->
-    case extract_digest(DigestContent) of
-        {ok, _} = Ok -> Ok;
-        error -> {error, invalid_signing_certificate_v2}
+validate_cert_digest(Content) ->
+    maybe
+        {ok, {_, Attrs, []}} ?=
+            find_unique_certificate_element(?DSIG_NAME(<<"DigestMethod">>), Content),
+        {ok, Method} ?= xmlan:attr_value(<<"Algorithm">>, Attrs),
+        {ok, {_, _, [Text]}} ?=
+            find_unique_certificate_element(?DSIG_NAME(<<"DigestValue">>), Content),
+        {ok, Digest} ?= decode_base64_text(Text),
+        {ok, #{digest_method => Method, digest_value => Digest}}
+    else
+        _ -> {error, invalid_signing_certificate_v2}
     end.
 
 extract_issuer_serial_v2(Content) ->
-    case lists:keyfind(?XADES_NAME(<<"IssuerSerialV2">>), 1, Content) of
-        {?XADES_NAME(<<"IssuerSerialV2">>), _, [IssuerSerialText]} ->
-            case decode_base64_text(IssuerSerialText) of
-                {ok, IssuerSerialDer} -> #{issuer_serial_v2 => IssuerSerialDer};
-                {error, _} -> #{}
+    case [E || E = {?XADES_NAME(<<"IssuerSerialV2">>), _, _} <- Content] of
+        [] ->
+            {ok, #{}};
+        [{_, _, [Text]}] ->
+            case decode_base64_text(Text) of
+                {ok, Der} -> {ok, #{issuer_serial_v2 => Der}};
+                _ -> {error, invalid_signing_certificate_v2}
             end;
         _ ->
-            #{}
+            {error, invalid_signing_certificate_v2}
+    end.
+
+find_unique_certificate_element(Tag, Content) ->
+    case [E || E = {Name, _, _} <- Content, Name =:= Tag] of
+        [Element] -> {ok, Element};
+        _ -> {error, invalid_signing_certificate_v2}
     end.
 
 %%--- SignaturePolicyIdentifier ---

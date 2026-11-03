@@ -18,10 +18,13 @@
     load_private_key/1,
     leaf_key/0,
     signer_rsa_key/0,
-    signer_ecdsa_key/0
+    signer_ecdsa_key/0,
+    replace_certificate_key/2,
+    replace_certificate_algorithm/1
 ]).
 
 -include_lib("public_key/include/OTP-PUB-KEY.hrl").
+-include("signerl_dsig.hrl").
 
 path(RelPath) ->
     filename:join([code:priv_dir(signerl), "certs", RelPath]).
@@ -90,3 +93,28 @@ cert_der(CertPath) ->
         {'Certificate', Der, not_encrypted} -> Der;
         _ -> error({invalid_certificate_fixture, CertPath})
     end.
+
+%% Change certificate key bytes while keeping the surrounding ASN.1 valid.
+%% The certificate's issuer signature is deliberately not regenerated: Signerl
+%% validates signature/key binding, not certificate chain trust.
+replace_certificate_key(CertDer, EncodedKey) ->
+    rewrite_certificate_spki(CertDer, fun(Spki) ->
+        Spki#'SubjectPublicKeyInfo'{subjectPublicKey = EncodedKey}
+    end).
+
+replace_certificate_algorithm(CertDer) ->
+    rewrite_certificate_spki(CertDer, fun(Spki) ->
+        % RSA-PSS restricts this key to a different signature scheme.
+        Algorithm = #'AlgorithmIdentifier'{
+            algorithm = ?DSIG_RSA_PSS_KEY_OID,
+            parameters = asn1_NOVALUE
+        },
+        Spki#'SubjectPublicKeyInfo'{algorithm = Algorithm}
+    end).
+
+rewrite_certificate_spki(CertDer, Fun) ->
+    Cert = public_key:pkix_decode_cert(CertDer, plain),
+    Tbs = Cert#'Certificate'.tbsCertificate,
+    Spki = Tbs#'TBSCertificate'.subjectPublicKeyInfo,
+    ChangedTbs = Tbs#'TBSCertificate'{subjectPublicKeyInfo = Fun(Spki)},
+    public_key:der_encode('Certificate', Cert#'Certificate'{tbsCertificate = ChangedTbs}).

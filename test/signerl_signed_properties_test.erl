@@ -204,7 +204,7 @@ extract_accepts_binary_digest_value_test() ->
     ?assertEqual(crypto:hash(sha256, <<"test">>), maps:get(digest_value, CertV2Props)),
     ?assertEqual(<<"fake-issuer-serial">>, maps:get(issuer_serial_v2, CertV2Props)).
 
-extract_ignores_invalid_base64_issuer_serial_v2_test() ->
+extract_rejects_invalid_base64_issuer_serial_v2_test() ->
     DigestB64 = binary_to_list(base64:encode(crypto:hash(sha256, <<"test">>))),
     CertV2 =
         {<<"xades:SigningCertificateV2">>, [], [
@@ -214,9 +214,10 @@ extract_ignores_invalid_base64_issuer_serial_v2_test() ->
             ]}
         ]},
     SignatureElement = signature_with_cert_v2(CertV2),
-    {ok, Props} = signerl_signed_properties:extract(SignatureElement),
-    CertV2Props = maps:get(signing_certificate_v2, Props),
-    ?assertNot(maps:is_key(issuer_serial_v2, CertV2Props)).
+    ?assertEqual(
+        {error, invalid_signing_certificate_v2},
+        signerl_signed_properties:extract(SignatureElement)
+    ).
 
 %% Signature Policy
 

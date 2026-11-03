@@ -23,8 +23,9 @@ type aliases or installation contracts.
 | `signerl_cert_helpers_test.erl` | 6 | Fixture paths and missing/malformed PEM failures. |
 | `signerl_api_SUITE.erl` | 73 | Public binary/file/key/certificate workflows, RSA and legacy ECDSA, fixed time, content preservation, hash errors, native crypto-input failures, declaration handling, tampering and independent signatures. |
 | `signerl_signature_policy_SUITE.erl` | 11 | Public reference count/targets, actual IDs, method/key agreement, explicit/legacy transform pairs and parameters, placement, already-signed rejection and generated ID collisions. |
+| `signerl_certificate_binding_SUITE.erl` | 13 | Certificate/key binding, missing/malformed/duplicate metadata, digest/issuer checks, malformed DER/keys and certificate-less controls. |
 
-Total: **150 EUnit + 84 Common Test = 234 cases**. Required coverage is **100%**
+Total: **150 EUnit + 97 Common Test = 247 cases**. Required coverage is **100%**
 of Signerl production modules. The independent xmlsec1 signatures stay in
 `examples/independent/`; `examples/payloads/` contains inputs used for actual
 sign/verify/tamper cases.
@@ -62,6 +63,7 @@ rebar3 eunit --module signerl_dsig_utils_test
 rebar3 eunit --module signerl_verify_test
 rebar3 ct --suite test/signerl_api_SUITE
 rebar3 ct --suite test/signerl_signature_policy_SUITE
+rebar3 ct --suite test/signerl_certificate_binding_SUITE
 ```
 
 ## Existing build caches after the suite moves
@@ -171,8 +173,8 @@ for the clean/warm checks and lint failure probes.
 - Load keys/certificates once per relevant CT group. When both DER and the public
   key are needed, decode the loaded DER with `rsa_public_key/1` or
   `ecdsa_public_key/1` rather than reading the same certificate again.
-- `test_helpers.erl` owns small XML builders and the baseline/replacement
-  assertions introduced in #57. Its minimal signature wrappers are suitable for
+- `test_helpers.erl` owns small XML builders, baseline/replacement assertions,
+  and the shared stack-based signature mutation/direct OTP re-signing controls. Its minimal signature wrappers are suitable for
   extraction tests only. Sign a real document before end-to-end tampering.
 - Keep mutation helpers next to their tests. Preserve literal XML for prologs,
   namespaces, encodings, whitespace, and self-closing syntax; use small builders
@@ -191,7 +193,7 @@ for the clean/warm checks and lint failure probes.
 - File workflow tests write outputs only to CT's temporary directory. No test
   overwrites a tracked XML fixture.
 
-The policy suite refreshes document/properties digests and re-signs SignedInfo
+Both policy suites refresh document/properties digests and re-sign SignedInfo
 with OTP after each mutation, independently of Signerl's signature decoding.
 Each rejected structure has a passing cryptographic signature check; positive
 controls cover both complete reference formats, custom actual IDs and Exclusive
@@ -200,3 +202,10 @@ C14N SignedInfo. It tests Signerl's signature policy, not xmlan internals.
 #52 tightens malformed-signature rejection and generates explicit reference
 transforms while preserving the complete legacy pair. Clock behavior is #56;
 bidirectional Python/Java interoperability CI remains post-1.0 work in #40.
+
+#54 distinguishes absent/malformed/valid certificate metadata. The certificate
+suite retains a passing certificate-bearing control before rejection mutations,
+including certificate swaps with refreshed certificate/property digests and
+valid signature bytes. Caller key/DER exceptions stay native; only crypto errors
+from untrusted embedded certificate data become certificate errors. Trust-chain,
+validity-period and revocation checks remain outside the boolean verifier.

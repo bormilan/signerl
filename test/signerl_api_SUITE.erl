@@ -91,7 +91,7 @@ groups() ->
             sign_without_certificate_omits_signing_certificate_v2,
             sign_with_certificate_extracts_cert_digest,
             verify_fails_with_tampered_cert_digest,
-            verify_succeeds_with_cert_v2_but_no_keyinfo_cert,
+            verify_rejects_cert_v2_without_keyinfo_cert,
             verify_fails_with_mismatched_cert_digest_method
         ]},
         {interop_smoke_group, [], [
@@ -694,7 +694,7 @@ verify_fails_with_tampered_cert_digest(Config) ->
         signerl:verify(TamperedMessage, sha256, RsaPublicKey)
     ).
 
-verify_succeeds_with_cert_v2_but_no_keyinfo_cert(Config) ->
+verify_rejects_cert_v2_without_keyinfo_cert(Config) ->
     RawMessage = ?config(raw_message, Config),
     RsaKey = ?config(rsa_key, Config),
     RsaCertDer = ?config(rsa_cert_der, Config),
@@ -702,10 +702,13 @@ verify_succeeds_with_cert_v2_but_no_keyinfo_cert(Config) ->
     SignedMessage = signerl:sign(RawMessage, sha256, RsaKey, RsaCertDer),
     test_helpers:parse_verified_message(SignedMessage, RsaPublicKey),
     %% Remove the X509Certificate element from KeyInfo while keeping
-    %% SigningCertificateV2 — verify should still succeed
+    %% SigningCertificateV2 — one-sided certificate metadata must be rejected.
     StrippedMessage = strip_keyinfo_certificate(SignedMessage),
     ?assertNotEqual(SignedMessage, StrippedMessage),
-    ?assertEqual(true, signerl:verify(StrippedMessage, sha256, RsaPublicKey)).
+    ?assertEqual(
+        {error, invalid_certificate_metadata},
+        signerl:verify(StrippedMessage, sha256, RsaPublicKey)
+    ).
 
 verify_fails_with_mismatched_cert_digest_method(Config) ->
     RawMessage = ?config(raw_message, Config),

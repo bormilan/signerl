@@ -46,7 +46,7 @@ cryptographic signature, using the supplied key. It normally returns `true`,
 input/structure. Error reasons are specific; there is no single
 `invalid_signature` result for every malformed signature.
 
-Use `sign/4` to include a DER certificate. Use `sign/5` for a controlled UTC time;
+Use `sign/4` to include a DER certificate matching the signing key. Use `sign/5` for a controlled UTC time;
 `undefined` omits the certificate in either arity:
 
 ```erlang
@@ -77,11 +77,15 @@ raise native OTP errors; the API does not wrap every invalid argument.
 New signatures declare explicit C14N 1.1 reference transforms. Verification
 also accepts the complete legacy reference pair, with the same strict reference,
 ID/target, algorithm and signature-placement checks. Signing already-signed XML
-raises `error:already_signed`.
+raises `error:already_signed`. A supplied certificate that does not match the
+signing key raises `error:certificate_key_mismatch`.
 
 XAdES signing-time and certificate properties stay in scope. The
 [selected profile and implementation sequence](docs/signing_profile.md) separates
-implemented reference rules from unfinished certificate and property checks.
+implemented reference and certificate-binding rules from unfinished known-property
+checks. Certificate-bearing signatures require both valid embedded certificate
+and SigningCertificateV2 metadata, with matching digest, optional issuer/serial
+and signature key.
 Successful signature verification is not certificate-chain trust, validity or
 revocation validation, and internal round trips do not establish full
 XMLDSig/XAdES interoperability. The tracked `priv/key.pem` is public test data.

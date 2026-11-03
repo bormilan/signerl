@@ -75,23 +75,27 @@ actual_ids_and_targets(Config) ->
             Renamed = rename_ids(Tree),
             Mutations = [
                 {missing_signature_id,
-                    update(Tree, <<"ds:Signature">>, fun(E) -> remove_attr(E, <<"Id">>) end)},
+                    test_helpers:update_xml(Tree, <<"ds:Signature">>, fun(E) ->
+                        remove_attr(E, <<"Id">>)
+                    end)},
                 {empty_signature_id,
-                    update(Tree, <<"ds:Signature">>, fun(E) -> set_attr(E, <<"Id">>, "") end)},
+                    test_helpers:update_xml(Tree, <<"ds:Signature">>, fun(E) ->
+                        set_attr(E, <<"Id">>, "")
+                    end)},
                 {missing_properties_id,
-                    update(Tree, <<"xades:SignedProperties">>, fun(E) ->
+                    test_helpers:update_xml(Tree, <<"xades:SignedProperties">>, fun(E) ->
                         remove_attr(E, <<"Id">>)
                     end)},
                 {wrong_properties_id,
-                    update(Tree, <<"xades:SignedProperties">>, fun(E) ->
+                    test_helpers:update_xml(Tree, <<"xades:SignedProperties">>, fun(E) ->
                         set_attr(E, <<"Id">>, "other-properties")
                     end)},
                 {missing_target,
-                    update(Tree, <<"xades:QualifyingProperties">>, fun(E) ->
+                    test_helpers:update_xml(Tree, <<"xades:QualifyingProperties">>, fun(E) ->
                         remove_attr(E, <<"Target">>)
                     end)},
                 {wrong_target,
-                    update(Tree, <<"xades:QualifyingProperties">>, fun(E) ->
+                    test_helpers:update_xml(Tree, <<"xades:QualifyingProperties">>, fun(E) ->
                         set_attr(E, <<"Target">>, "#missing")
                     end)},
                 {duplicate_signature_id,
@@ -102,11 +106,11 @@ actual_ids_and_targets(Config) ->
                     add_payload(Tree, {<<"record">>, [{<<"xml:id">>, ?SIGNED_PROPERTIES_ID}], []})},
                 {duplicate_payload_id, duplicate_payload_id(Tree)},
                 {ambiguous_properties,
-                    update(Tree, <<"xades:QualifyingProperties">>, fun({N, A, C}) ->
-                        {N, A, C ++ C}
-                    end)},
+                    test_helpers:update_xml(
+                        Tree, <<"xades:QualifyingProperties">>, fun duplicate_contents/1
+                    )},
                 {ambiguous_target,
-                    update(Tree, <<"ds:Object">>, fun({N, A, C}) -> {N, A, C ++ C} end)}
+                    test_helpers:update_xml(Tree, <<"ds:Object">>, fun duplicate_contents/1)}
             ],
             lists:foreach(
                 fun({Label, Changed}) -> assert_rejected(Label, Changed, Config) end, Mutations
@@ -121,16 +125,16 @@ declared_methods(Config) ->
         [Doc, Props] = references(Tree),
         [
             {rsa_declared_ecdsa,
-                update(Tree, <<"ds:SignatureMethod">>, fun(E) ->
+                test_helpers:update_xml(Tree, <<"ds:SignatureMethod">>, fun(E) ->
                     set_attr(E, <<"Algorithm">>, ?DSIG_SIG_ECDSA_SHA256_URI)
                 end)},
             {rsa_declared_sha512,
-                update(Tree, <<"ds:SignatureMethod">>, fun(E) ->
+                test_helpers:update_xml(Tree, <<"ds:SignatureMethod">>, fun(E) ->
                     set_attr(E, <<"Algorithm">>, ?DSIG_SIG_RSA_SHA512_URI)
                 end)},
             {document_digest_method,
                 set_references(Tree, [
-                    update(Doc, <<"ds:DigestMethod">>, fun(E) ->
+                    test_helpers:update_xml(Doc, <<"ds:DigestMethod">>, fun(E) ->
                         set_attr(E, <<"Algorithm">>, ?DSIG_DIGEST_SHA512_URI)
                     end),
                     Props
@@ -138,7 +142,7 @@ declared_methods(Config) ->
             {properties_digest_method,
                 set_references(Tree, [
                     Doc,
-                    update(Props, <<"ds:DigestMethod">>, fun(E) ->
+                    test_helpers:update_xml(Props, <<"ds:DigestMethod">>, fun(E) ->
                         set_attr(E, <<"Algorithm">>, ?DSIG_DIGEST_SHA1_URI)
                     end)
                 ])}
@@ -151,7 +155,7 @@ declared_methods(Config) ->
     EcSigned = signerl:sign(?config(raw, Config), sha256, EcKey),
     EcTree = test_helpers:parse_verified_message(EcSigned, EcPublic),
     EcConfig = [{key, EcKey}, {public_key, EcPublic} | Config],
-    Changed = update(EcTree, <<"ds:SignatureMethod">>, fun(E) ->
+    Changed = test_helpers:update_xml(EcTree, <<"ds:SignatureMethod">>, fun(E) ->
         set_attr(E, <<"Algorithm">>, ?DSIG_SIG_RSA_SHA256_URI)
     end),
     assert_rejected(ecdsa_declared_rsa, Changed, EcConfig),
@@ -170,7 +174,7 @@ transform_pairs(Config) ->
     %% Exclusive C14N SignedInfo works with either reference pair.
     lists:foreach(
         fun(T) ->
-            Exc = update(T, <<"ds:CanonicalizationMethod">>, fun(E) ->
+            Exc = test_helpers:update_xml(T, <<"ds:CanonicalizationMethod">>, fun(E) ->
                 set_attr(E, <<"Algorithm">>, ?DSIG_EXC_C14N_ALGO_URI)
             end),
             assert_accepted(Exc, Config),
@@ -212,21 +216,21 @@ transform_parameters(Config) ->
         [
             {transform_parameter_attribute,
                 set_references(Tree, [
-                    update(Doc, <<"ds:Transform">>, fun(E) ->
+                    test_helpers:update_xml(Doc, <<"ds:Transform">>, fun(E) ->
                         set_attr(E, <<"Unexpected">>, "value")
                     end),
                     Props
                 ])},
             {transform_parameter_child,
                 set_references(Tree, [
-                    update(Doc, <<"ds:Transform">>, fun({N, A, _}) ->
+                    test_helpers:update_xml(Doc, <<"ds:Transform">>, fun({N, A, _}) ->
                         {N, A, [{<<"ds:XPath">>, [], ["."]}]}
                     end),
                     Props
                 ])},
             {transforms_parameter,
                 set_references(Tree, [
-                    update(Doc, <<"ds:Transforms">>, fun(E) ->
+                    test_helpers:update_xml(Doc, <<"ds:Transforms">>, fun(E) ->
                         set_attr(E, <<"Unexpected">>, "value")
                     end),
                     Props
@@ -237,15 +241,17 @@ transform_parameters(Config) ->
                 set_references(Tree, [duplicate_child(Doc, <<"ds:DigestMethod">>), Props])},
             {digest_parameter,
                 set_references(Tree, [
-                    update(Doc, <<"ds:DigestMethod">>, fun({N, A, _}) -> {N, A, ["invalid"]} end),
+                    test_helpers:update_xml(Doc, <<"ds:DigestMethod">>, fun({N, A, _}) ->
+                        {N, A, ["invalid"]}
+                    end),
                     Props
                 ])},
             {c14n_parameter,
-                update(Tree, <<"ds:CanonicalizationMethod">>, fun(E) ->
+                test_helpers:update_xml(Tree, <<"ds:CanonicalizationMethod">>, fun(E) ->
                     set_attr(E, <<"Unexpected">>, "value")
                 end)},
             {signature_parameter,
-                update(Tree, <<"ds:SignatureMethod">>, fun({N, A, _}) ->
+                test_helpers:update_xml(Tree, <<"ds:SignatureMethod">>, fun({N, A, _}) ->
                     {N, A, [{<<"ds:HMACOutputLength">>, [], ["8"]}]}
                 end)}
         ]
@@ -255,15 +261,15 @@ formatted_transform_controls(Config) ->
     lists:foreach(
         fun(Mode) ->
             Tree = pair(?config(parsed, Config), Mode),
-            Spaced = update(Tree, <<"ds:Transforms">>, fun({N, A, C}) ->
+            Spaced = test_helpers:update_xml(Tree, <<"ds:Transforms">>, fun({N, A, C}) ->
                 {N, A, ["\n  " | C] ++ ["\n"]}
             end),
-            Alias = update(Spaced, <<"ds:Transform">>, fun({_, A, _}) ->
+            Alias = test_helpers:update_xml(Spaced, <<"ds:Transform">>, fun({_, A, _}) ->
                 {<<"local:Transform">>, [{<<"xmlns:local">>, ?DSIG_NAMESPACE_URI} | A], [" \t\r\n"]}
             end),
             assert_accepted(Alias, Config),
             %% Non-whitespace text is a parameter, not formatting.
-            Bad = update(Spaced, <<"ds:Transforms">>, fun({N, A, C}) ->
+            Bad = test_helpers:update_xml(Spaced, <<"ds:Transforms">>, fun({N, A, C}) ->
                 {N, A, ["unexpected" | C]}
             end),
             assert_rejected(non_whitespace_transform_content, Bad, Config)
@@ -281,7 +287,7 @@ signature_placement(Config) ->
         {nested_only, {Root, Attrs, Payload ++ [{<<"wrapper">>, [], [Signature]}]}},
         {nested_extra, add_payload(Tree, {<<"wrapper">>, [], [Signature]})},
         {inside_signature,
-            update(Tree, <<"ds:Object">>, fun({N, A, C}) ->
+            test_helpers:update_xml(Tree, <<"ds:Object">>, fun({N, A, C}) ->
                 {N, A, C ++ [{<<"ds:Signature">>, [], []}]}
             end)},
         {root_signature, Signature}
@@ -346,12 +352,12 @@ foreach_pair(Config, Cases) ->
     ).
 
 assert_accepted(Tree, Config) ->
-    Signed = refresh(Tree, Config),
+    Signed = test_helpers:refresh_signature(Tree, Config),
     test_helpers:parse_verified_message(Signed, ?config(public_key, Config)).
 
 assert_rejected(Label, Tree, Config) ->
     ?assertNotEqual(?config(parsed, Config), Tree),
-    Signed = refresh(Tree, Config),
+    Signed = test_helpers:refresh_signature(Tree, Config),
     assert_public_rejected(Label, Signed, Config).
 
 assert_public_rejected(Label, Signed, Config) ->
@@ -367,46 +373,6 @@ signed_info(Tree) ->
         [?DSIG_NAME(<<"Signature">>), ?DSIG_NAME(<<"SignedInfo">>)], Tree
     ),
     SignedInfo.
-
-%% Mutations use xmlan's public tree APIs. Refresh digests and sign SignedInfo
-%% directly with OTP, independently of Signerl's validation/extraction code.
-refresh(Tree, Config) ->
-    {ok, Signature} = xmlan:find_path([<<"ds:Signature">>], Tree),
-    {ok, Object} = xmlan:find_path([?DSIG_NAME(<<"Object">>)], Signature),
-    {_, _, Qualifiers} = Object,
-    Qualifier = hd([E || E = {<<"xades:QualifyingProperties">>, _, _} <- Qualifiers]),
-    {_, QAttrs, PropertiesChildren} = Qualifier,
-    Properties = hd([E || E = {<<"xades:SignedProperties">>, _, _} <- PropertiesChildren]),
-    ContextProperties = xmlan:with_namespace_context(
-        Properties,
-        xmlan:namespace_context(QAttrs, xmlan:namespace_context(element(2, Signature), #{}))
-    ),
-    Unsigned = signerl_dsig_utils:remove_signature_elements(Tree),
-    DocDigest = base64:encode(crypto:hash(sha256, xmlan_c14n:canonicalize(Unsigned))),
-    PropsDigest = base64:encode(crypto:hash(sha256, xmlan_c14n:canonicalize(ContextProperties))),
-    WithDigests = update(Tree, <<"ds:Reference">>, fun({_, A, _} = Ref) ->
-        Value =
-            case xmlan:attr_value(<<"URI">>, A) of
-                {ok, ""} -> DocDigest;
-                _ -> PropsDigest
-            end,
-        update(Ref, <<"ds:DigestValue">>, fun({DN, DA, _}) -> {DN, DA, [Value]} end)
-    end),
-    SI = signed_info(WithDigests),
-    {ok, {_, CAttrs, _}} = xmlan:find_path([?DSIG_NAME(<<"CanonicalizationMethod">>)], SI),
-    Mode =
-        case xmlan:attr_value(<<"Algorithm">>, CAttrs) of
-            {ok, ?DSIG_EXC_C14N_ALGO_URI} -> exc_c14n;
-            _ -> c14n11
-        end,
-    Bytes = xmlan_c14n:canonicalize(SI, Mode),
-    Value = public_key:sign(Bytes, sha256, ?config(key, Config)),
-    %% Prove the cryptographic check succeeds even for each rejected structure.
-    ?assertEqual(true, public_key:verify(Bytes, sha256, Value, ?config(public_key, Config))),
-    Signed = update(WithDigests, <<"ds:SignatureValue">>, fun({N, A, _}) ->
-        {N, A, [base64:encode(Value)]}
-    end),
-    xmlan:export([], Signed).
 
 pair(Tree, Mode) ->
     [Doc, Props] = references(Tree),
@@ -428,7 +394,7 @@ references(Tree) ->
     [E || E = {<<"ds:Reference">>, _, _} <- Children].
 
 set_references(Tree, Refs) ->
-    update(Tree, <<"ds:SignedInfo">>, fun({N, A, C}) ->
+    test_helpers:update_xml(Tree, <<"ds:SignedInfo">>, fun({N, A, C}) ->
         {N, A, [E || E = {Tag, _, _} <- C, Tag =/= <<"ds:Reference">>] ++ Refs}
     end).
 
@@ -460,11 +426,13 @@ algorithms(Ref) ->
     end.
 
 rename_ids(Tree) ->
-    T1 = update(Tree, <<"ds:Signature">>, fun(E) -> set_attr(E, <<"Id">>, "signature-custom") end),
-    T2 = update(T1, <<"xades:QualifyingProperties">>, fun(E) ->
+    T1 = test_helpers:update_xml(Tree, <<"ds:Signature">>, fun(E) ->
+        set_attr(E, <<"Id">>, "signature-custom")
+    end),
+    T2 = test_helpers:update_xml(T1, <<"xades:QualifyingProperties">>, fun(E) ->
         set_attr(E, <<"Target">>, "#signature-custom")
     end),
-    T3 = update(T2, <<"xades:SignedProperties">>, fun(E) ->
+    T3 = test_helpers:update_xml(T2, <<"xades:SignedProperties">>, fun(E) ->
         set_attr(E, <<"Id">>, "properties-custom")
     end),
     [Doc, Props] = references(T3),
@@ -479,20 +447,4 @@ remove_attr({N, A, C}, Name) -> {N, lists:keydelete(Name, 1, A), C}.
 add_payload({N, A, C}, Child) -> {N, A, [Child | C]}.
 duplicate_child({N, A, C}, Tag) -> {N, A, C ++ [lists:keyfind(Tag, 1, C)]}.
 
-update(Tree, Target, Fun) ->
-    update([Tree], [], [], Target, Fun).
-
-update([], [], [Tree], _Target, _Fun) ->
-    Tree;
-update([], [{Tag, Attrs, Rest, Acc} | Stack], Children, Target, Fun) ->
-    Element = {Tag, Attrs, lists:reverse(Children)},
-    Updated =
-        case Tag of
-            Target -> Fun(Element);
-            _ -> Element
-        end,
-    update(Rest, Stack, [Updated | Acc], Target, Fun);
-update([{Tag, Attrs, Children} | Rest], Stack, Acc, Target, Fun) ->
-    update(Children, [{Tag, Attrs, Rest, Acc} | Stack], [], Target, Fun);
-update([Text | Rest], Stack, Acc, Target, Fun) ->
-    update(Rest, Stack, [Text | Acc], Target, Fun).
+duplicate_contents({N, A, C}) -> {N, A, C ++ C}.

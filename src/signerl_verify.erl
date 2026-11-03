@@ -76,6 +76,10 @@ verify_reference_digests(
             {error, unsupported_hash};
         {error, cert_digest_mismatch} ->
             {error, cert_digest_mismatch};
+        {error, cert_issuer_mismatch} ->
+            {error, cert_issuer_mismatch};
+        {error, invalid_certificate_metadata} ->
+            {error, invalid_certificate_metadata};
         _ ->
             {error, invalid_signature_structure}
     end;
@@ -88,7 +92,7 @@ decode_signature_data(SignatureElement, UnsignedMessage, Ids) ->
         {ok, SignedProperties} ?= signerl_signed_properties:extract(SignatureElement),
         {ok, SignedInfoElement} ?= signed_info_element(SignatureElement),
         {ok, References} ?= signed_info_references(SignedInfoElement),
-        KeyInfo = extract_key_info(SignatureElement),
+        {ok, KeyInfo} ?= extract_key_info(SignatureElement),
         {ok, #{
             signature_bytes => SignatureBytes,
             unsigned_message => UnsignedMessage,
@@ -375,12 +379,13 @@ c14n_mode(_) ->
     c14n11.
 
 -spec verify_signature(map(), atom(), public_key:public_key() | public_key:private_key()) ->
-    boolean() | {error, invalid_signature_structure}.
+    boolean() | {error, atom()}.
 verify_signature(
     #{
         references := #{signature_algorithm := Algorithm},
         signed_info_element := SignedInfo,
-        signature_bytes := SignatureBytes
+        signature_bytes := SignatureBytes,
+        key_info := KeyInfo
     } = Data,
     Hash,
     Key
@@ -388,9 +393,24 @@ verify_signature(
     case verification_method_uri(Key) of
         Algorithm ->
             Bytes = xmlan_c14n:canonicalize(SignedInfo, c14n_mode(Data)),
-            public_key:verify(Bytes, Hash, SignatureBytes, Key);
+            case public_key:verify(Bytes, Hash, SignatureBytes, Key) of
+                true -> verify_certificate_key(KeyInfo, Algorithm, Bytes, Hash, SignatureBytes);
+                false -> false
+            end;
         _ ->
             {error, invalid_signature_structure}
+    end.
+
+verify_certificate_key(undefined, _Method, _Bytes, _Hash, _Signature) ->
+    true;
+verify_certificate_key(Certificate, Method, Bytes, Hash, Signature) ->
+    % Only the key decoded from embedded XML is inside this boundary.
+    % Caller-supplied key errors still propagate from public_key:verify above.
+    try signerl_cert:verify_signature(Certificate, Method, Bytes, Hash, Signature) of
+        true -> true;
+        false -> {error, certificate_key_mismatch}
+    catch
+        error:_ -> {error, invalid_certificate}
     end.
 
 verification_method_uri({'RSAPublicKey', _, _}) ->
@@ -401,46 +421,69 @@ verification_method_uri({{'ECPoint', _}, _}) ->
     ?DSIG_SIG_ECDSA_SHA256_URI.
 
 extract_key_info(SignatureElement) ->
-    case xmlan:find_path([?DSIG_NAME(<<"KeyInfo">>)], SignatureElement) of
-        {ok, KeyInfoElement} ->
-            extract_x509_certificate(KeyInfoElement);
-        {error, not_found} ->
-            undefined
+    case xmlan:find_children(?DSIG_NAME(<<"KeyInfo">>), SignatureElement) of
+        [] -> {ok, undefined};
+        [KeyInfo] -> extract_x509_certificate(KeyInfo);
+        _ -> {error, invalid_certificate_metadata}
     end.
 
-extract_x509_certificate(KeyInfoElement) ->
+extract_x509_certificate(KeyInfo) ->
     maybe
-        {ok, {_, _, [CertB64]}} ?=
-            xmlan:find_path(
-                [?DSIG_NAME(<<"X509Data">>), ?DSIG_NAME(<<"X509Certificate">>)], KeyInfoElement
-            ),
-        true ?= is_list(CertB64),
-        {ok, CertDer} ?= decode_base64_binary(list_to_binary(CertB64)),
-        #{x509_certificate => CertDer}
+        {ok, Data} ?= certificate_child(?DSIG_NAME(<<"X509Data">>), KeyInfo),
+        {ok, Element} ?= certificate_child(?DSIG_NAME(<<"X509Certificate">>), Data),
+        {ok, CertB64} ?= xmlan:single_text(Element),
+        {ok, CertDer} ?= decode_base64_binary(CertB64),
+        decode_embedded_certificate(CertDer)
     else
-        _ -> undefined
+        _ -> {error, invalid_certificate_metadata}
     end.
 
-verify_cert_digest(
-    #{
-        signing_certificate_v2 := #{
-            digest_method := DigestMethodUri, digest_value := ExpectedDigest
-        }
-    },
-    #{x509_certificate := CertDer},
-    HashAlgorithm
+certificate_child(Name, {_, Attrs, Content} = Parent) ->
+    Ns = xmlan:namespace_context(Attrs, #{}),
+    ValidContent = lists:all(
+        fun
+            ({_, _, _} = Element) -> xmlan:expanded_name(Element, Ns) =:= Name;
+            (Text) -> whitespace_only([Text])
+        end,
+        Content
+    ),
+    case {xmlan:find_children(Name, Parent), ValidContent} of
+        {[Child], true} -> {ok, Child};
+        _ -> {error, invalid_certificate_metadata}
+    end.
+
+decode_embedded_certificate(CertDer) ->
+    try
+        {ok, signerl_cert:certificate_info(CertDer)}
+    catch
+        error:_ -> {error, invalid_certificate}
+    end.
+
+verify_cert_digest(Properties, Certificate, Hash) ->
+    case {maps:find(signing_certificate_v2, Properties), Certificate} of
+        {error, undefined} ->
+            case maps:is_key(signing_certificate, Properties) of
+                false -> ok;
+                true -> {error, invalid_certificate_metadata}
+            end;
+        {{ok, CertProperty}, #{x509_certificate := Der, issuer_serial_v2 := Issuer}} ->
+            verify_certificate_property(CertProperty, Der, Issuer, Hash);
+        _ ->
+            {error, invalid_certificate_metadata}
+    end.
+
+verify_certificate_property(
+    #{digest_method := Method, digest_value := Digest} = Property,
+    Der,
+    Issuer,
+    Hash
 ) ->
-    case digest_method_uri(HashAlgorithm) of
-        {ok, DigestMethodUri} ->
-            ActualDigest = crypto:hash(HashAlgorithm, CertDer),
-            case ActualDigest =:= ExpectedDigest of
-                true -> ok;
-                false -> {error, cert_digest_mismatch}
+    case {digest_method_uri(Hash), crypto:hash(Hash, Der) =:= Digest} of
+        {{ok, Method}, true} ->
+            case maps:get(issuer_serial_v2, Property, Issuer) of
+                Issuer -> ok;
+                _ -> {error, cert_issuer_mismatch}
             end;
         _ ->
             {error, cert_digest_mismatch}
-    end;
-verify_cert_digest(#{signing_certificate_v2 := _}, undefined, _HashAlgorithm) ->
-    ok;
-verify_cert_digest(_SignedProperties, _KeyInfo, _HashAlgorithm) ->
-    ok.
+    end.
